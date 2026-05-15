@@ -1,0 +1,29 @@
+# Tooling cache
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Build artifacts
+build/
+dist/
+*.whl
+
+# Local environment
+.venv/
+.env
+.env.*
+
+# Editor
+.idea/
+.vscode/
+
+# Data outputs
+data/
+runs/
+*.jsonl
