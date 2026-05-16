@@ -1,35 +1,52 @@
+<p align="center">
+  <img src="images/362d5160ecde885f.png" alt="Agent Learning — Native reinforcement learning for AI agents" width="640" style="max-width:100%; height:auto;" />
+</p>
+
 # azure-agents-learning-sdk
 
-Native reinforcement learning SDK for AI agents. Replaces the
-`agent-lightning` LLM fine-tuning loop with an in-process learner
-that optimizes a small, interpretable policy over discrete agent
+Native reinforcement learning SDK for AI agents. An in-process
+learner optimizes a small, interpretable policy over discrete agent
 configuration choices (prompt variants, retrieval-k, tool selection
 strategies, …) using Azure AI Evaluation judge metrics as the reward
 signal.
 
-## Why native?
+## How it works
 
-`agent-lightning` shipped agent improvement as **LLM weight
-fine-tuning**, which requires Azure OpenAI fine-tune jobs, GPU
-infrastructure, and an opaque update cycle. The native SDK takes a
-different approach:
+The SDK improves agents without LLM weight fine-tuning. There are no
+GPU fine-tune jobs and no opaque update cycles — just three pieces
+that run in your existing Python process:
 
 1. The **policy** is a softmax distribution over `N` discrete
    actions (e.g., "use prompt template A", "use template B"). It
    lives in Python and updates in milliseconds.
+
+   <img src="images/0f85e08d0c47cd01.png" alt="Policy selects one of N discrete actions" width="360" style="max-width:100%; height:auto;" />
+
 2. Each episode is **judged** by three Azure AI Evaluation
    evaluators — `IntentResolutionEvaluator`, `TaskAdherenceEvaluator`,
    and `TaskCompletionEvaluator` — whose scores are combined into a
    single scalar reward.
+
+   <img src="images/bba49cdaa8d8387a.png" alt="Three judge evaluators feed a single scalar reward" width="360" style="max-width:100%; height:auto;" />
+
 3. A **REINFORCE-with-baseline** learner updates the policy logits
    directly from logged episodes. Updates are tiny gradient steps
    that run on CPU and persist immediately to Cosmos DB.
 
-The result is the same lineage and audit trail that `agent-lightning`
-provided (episodes, rewards, runs, deployments) without the cost or
-operational burden of LLM fine-tuning.
+   <img src="images/cc970c453583c982.png" alt="Policy quality improves with every batch of episodes" width="360" style="max-width:100%; height:auto;" />
+
+Every episode, reward, run, and deployment is captured in Cosmos DB,
+giving you a complete lineage and audit trail of how the policy
+evolved over time.
 
 ## Architecture
+
+<p align="center">
+  <img src="images/86caebedfa1e2ab5.png" alt="Architecture: Orchestrator turn → Cosmos DB → LearningRunner" width="520" style="max-width:100%; height:auto;" />
+</p>
+
+<details>
+<summary>Text diagram (same flow, plain ASCII)</summary>
 
 ```
 ┌──────────────────────────────────────────────────────────┐
@@ -50,14 +67,25 @@ operational burden of LLM fine-tuning.
 │  ┌─────────────────────────────────────────────────────┐ │
 │  │ LearningRunner.run_offline_batch(agent_id)          │ │
 │  │   ┌─ evaluate (3 judges)                            │ │
-│  │   ├─ shape (weighted sum + penalties → reward)       │ │
-│  │   ├─ persist per-metric + aggregate rewards          │ │
-│  │   └─ ReinforceLearner.update(policy, episodes)       │ │
+│  │   ├─ shape (weighted sum + penalties → reward)      │ │
+│  │   ├─ persist per-metric + aggregate rewards         │ │
+│  │   └─ ReinforceLearner.update(policy, episodes)      │ │
 │  └─────────────────────────────────────────────────────┘ │
 └──────────────────────────────────────────────────────────┘
 ```
 
+</details>
+
 ## Install
+
+Released versions are published to PyPI:
+<https://pypi.org/project/azure-agents-learning-sdk/>.
+
+```bash
+pip install azure-agents-learning-sdk
+```
+
+For local development against a checkout of this repository:
 
 ```bash
 pip install -e .
@@ -107,7 +135,8 @@ ctx = capture.start(
     action_id=decision.action.id,
     action_logprob=decision.logprob,
 )
-# … run your agent, then call capture.end(ctx, assistant_output="…")
+# … run your agent, then call:
+capture.end(ctx, assistant_output="…")
 
 # Periodically (cron, manual, event-driven)
 runner = LearningRunner(policy=policy)
@@ -130,7 +159,7 @@ src/agent_learning/
 ├── config.py           # Env-driven configuration
 ├── capture.py          # Episode capture hook
 ├── storage/            # LearningStore (Cosmos + in-memory)
-├── metrics/            # IntentResolution/TaskAdherence/TaskCompletion judges
+├── metrics/            # IntentResolution/TaskAdherence/TaskCompletion
 ├── rewards/            # Shaping + writer
 ├── policy/             # SoftmaxPolicy
 ├── learners/           # REINFORCE
