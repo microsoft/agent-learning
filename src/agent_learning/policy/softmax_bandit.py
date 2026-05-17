@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import math
 import random
-from typing import Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 import numpy as np
 
@@ -103,7 +103,11 @@ class SoftmaxPolicy(Policy):
         probs = exp / denom
         return probs.tolist()
 
-    def choose(self) -> Decision:
+    def choose(self, state: Optional[Any] = None) -> Decision:
+        # ``state`` is accepted for interface compatibility with
+        # contextual policies and is intentionally ignored: this is a
+        # marginal softmax that conditions only on its stored logits.
+        del state
         probs = self.probabilities()
         idx = self._weighted_sample(probs)
         chosen = self._snapshot.actions[idx]

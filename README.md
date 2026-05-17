@@ -27,7 +27,7 @@ that run in your existing Python process:
    and `TaskCompletionEvaluator` — whose scores are combined into a
    single scalar reward.
 
-   <img src="images/bba49cdaa8d8387a.png" alt="Three judge evaluators feed a single scalar reward" width="360" style="max-width:100%; height:auto;" />
+   <img src="images/246d112f995b785a.png" alt="Three judge evaluators feed a single scalar reward" width="360" style="max-width:100%; height:auto;" />
 
 3. A **REINFORCE-with-baseline** learner updates the policy logits
    directly from logged episodes. Updates are tiny gradient steps
@@ -99,7 +99,7 @@ important ones are:
 | Variable | Purpose | Default |
 | --- | --- | --- |
 | `AGENT_LEARNING_COSMOS_ENDPOINT` | Cosmos DB account URL (enables persistence) | unset |
-| `AGENT_LEARNING_COSMOS_DATABASE` | Database name | `dq-rl` |
+| `AGENT_LEARNING_COSMOS_DATABASE` | Database name | `dq_rl` |
 | `AGENT_LEARNING_JUDGE_ENDPOINT` | Azure OpenAI endpoint used by the judge | unset |
 | `AGENT_LEARNING_JUDGE_DEPLOYMENT` | Judge deployment name | unset |
 | `AGENT_LEARNING_W_INTENT` | Weight for intent-resolution reward | `0.4` |

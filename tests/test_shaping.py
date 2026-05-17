@@ -83,3 +83,76 @@ def test_latency_penalty_applied() -> None:
     shaped = shaper.shape([], latency_ms=2000)
     assert abs(shaped.value + 0.2) < 1e-9
     assert shaped.penalties[0][0] == "latency"
+
+
+# ---------------------------------------------------------------------------
+# Measure-routing reward + hallucinated-member penalty (\u00a75.2 of design doc)
+# ---------------------------------------------------------------------------
+
+
+def _zero_weighted_cfg(**overrides) -> ShapingConfig:
+    return ShapingConfig(
+        intent_resolution_weight=0.0,
+        task_adherence_weight=0.0,
+        task_completion_weight=0.0,
+        latency_penalty_threshold_ms=10_000_000,
+        latency_penalty_value=0.0,
+        **overrides,
+    )
+
+
+def test_routing_correct_adds_positive_reward() -> None:
+    cfg = _zero_weighted_cfg(route_correct_reward=0.2, route_wrong_penalty=-0.3)
+    shaper = RewardShaper(cfg)
+    shaped = shaper.shape([], routing_correct=True)
+    assert abs(shaped.value - 0.2) < 1e-9
+    assert any(p[0] == "route_correct" for p in shaped.penalties)
+
+
+def test_routing_wrong_adds_negative_penalty() -> None:
+    cfg = _zero_weighted_cfg(route_correct_reward=0.2, route_wrong_penalty=-0.3)
+    shaper = RewardShaper(cfg)
+    shaped = shaper.shape([], routing_correct=False)
+    assert abs(shaped.value + 0.3) < 1e-9
+    assert any(p[0] == "route_wrong" for p in shaped.penalties)
+
+
+def test_routing_none_is_neutral() -> None:
+    cfg = _zero_weighted_cfg(route_correct_reward=0.2, route_wrong_penalty=-0.3)
+    shaper = RewardShaper(cfg)
+    shaped = shaper.shape([], routing_correct=None)
+    assert abs(shaped.value) < 1e-9
+    assert all(p[0] not in ("route_correct", "route_wrong") for p in shaped.penalties)
+
+
+def test_hallucinated_member_adds_penalty() -> None:
+    cfg = _zero_weighted_cfg(hallucinated_member_penalty=-0.25)
+    shaper = RewardShaper(cfg)
+    shaped = shaper.shape([], hallucinated_member=True)
+    assert abs(shaped.value + 0.25) < 1e-9
+    assert any(p[0] == "hallucinated_member" for p in shaped.penalties)
+
+
+def test_reward_is_clamped_to_unit_range() -> None:
+    cfg = ShapingConfig(
+        intent_resolution_weight=0.10,
+        task_adherence_weight=0.20,
+        task_completion_weight=0.50,
+        route_correct_reward=0.20,
+        route_wrong_penalty=-0.30,
+        hallucinated_member_penalty=-0.25,
+        latency_penalty_threshold_ms=10_000_000,
+        latency_penalty_value=0.0,
+    )
+    shaper = RewardShaper(cfg)
+    # Push everything negative simultaneously \u2192 raw sum < -1, must clamp to -1.
+    shaped = shaper.shape(
+        [
+            _result(MetricName.INTENT_RESOLUTION, 0.0),
+            _result(MetricName.TASK_ADHERENCE, 0.0),
+            _result(MetricName.TASK_COMPLETION, 0.0),
+        ],
+        routing_correct=False,
+        hallucinated_member=True,
+    )
+    assert shaped.value == -1.0

@@ -64,7 +64,7 @@ from .metrics import (
     default_metrics,
     evaluate_all,
 )
-from .policy import Policy, SoftmaxPolicy
+from .policy import ContextualSoftmaxPolicy, Policy, SoftmaxPolicy
 from .rewards import RewardShaper, RewardWriter, shape_episode_reward
 from .storage import CosmosStore, InMemoryStore, LearningStore, get_default_store
 from .training import LearningRunner
@@ -85,6 +85,7 @@ __all__ = [
     "Action",
     "CaptureConfig",
     "CaptureContext",
+    "ContextualSoftmaxPolicy",
     "CosmosConfig",
     "CosmosStore",
     "Episode",

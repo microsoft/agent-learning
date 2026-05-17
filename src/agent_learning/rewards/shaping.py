@@ -46,7 +46,25 @@ class RewardShaper:
         results: Iterable[MetricResult],
         *,
         latency_ms: Optional[int] = None,
+        routing_correct: Optional[bool] = None,
+        hallucinated_member: bool = False,
     ) -> ShapedReward:
+        """Combine judges + behavioural signals into a single scalar.
+
+        Args:
+            results: Per-judge metric outputs.
+            latency_ms: Episode latency in milliseconds; if above the
+                configured threshold the latency penalty is applied.
+            routing_correct: ``True`` if the orchestrator routed the
+                question to one of the cohort's selected measure ids
+                (→ add ``route_correct_reward``); ``False`` if it picked
+                a measure not in the cohort (→ add
+                ``route_wrong_penalty``, which is negative). ``None``
+                disables the term entirely (no signal either way).
+            hallucinated_member: ``True`` if the rendered answer
+                mentions a member id not in the supplied cohort
+                (→ add ``hallucinated_member_penalty``).
+        """
         weights = {
             MetricName.INTENT_RESOLUTION: self._config.intent_resolution_weight,
             MetricName.TASK_ADHERENCE: self._config.task_adherence_weight,
@@ -72,6 +90,19 @@ class RewardShaper:
         ):
             total += self._config.latency_penalty_value
             penalties.append(("latency", latency_ms, self._config.latency_penalty_value))
+
+        if routing_correct is True:
+            total += self._config.route_correct_reward
+            penalties.append(("route_correct", True, self._config.route_correct_reward))
+        elif routing_correct is False:
+            total += self._config.route_wrong_penalty
+            penalties.append(("route_wrong", False, self._config.route_wrong_penalty))
+
+        if hallucinated_member:
+            total += self._config.hallucinated_member_penalty
+            penalties.append(
+                ("hallucinated_member", True, self._config.hallucinated_member_penalty)
+            )
 
         clamped = max(-1.0, min(1.0, total))
         return ShapedReward(value=clamped, metric_contributions=contributions, penalties=penalties)

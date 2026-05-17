@@ -49,7 +49,7 @@ class CosmosConfig:
     """Cosmos DB connection + container configuration."""
 
     endpoint: str = field(default_factory=lambda: os.getenv("AGENT_LEARNING_COSMOS_ENDPOINT", ""))
-    database_name: str = field(default_factory=lambda: os.getenv("AGENT_LEARNING_COSMOS_DATABASE", "dq-rl"))
+    database_name: str = field(default_factory=lambda: os.getenv("AGENT_LEARNING_COSMOS_DATABASE", "dq_rl"))
     auth_mode: str = field(default_factory=lambda: os.getenv("AGENT_LEARNING_COSMOS_AUTH_MODE", "aad"))
     account_key: str = field(default_factory=lambda: os.getenv("AGENT_LEARNING_COSMOS_KEY", ""))
     partition_key_field: str = field(
@@ -134,22 +134,41 @@ class ShapingConfig:
     Each weight is multiplied against the metric's normalized score (in
     [0, 1]) before summing. Weights need not sum to 1 — the shaper will
     return the raw weighted sum, clamped to [-1, 1].
+
+    The defaults reflect the credit-assignment design in
+    ``AGENTS_LEARNING_DESIGN.md`` §5: task completion gets the largest
+    weight because the action template directly controls it; intent
+    resolution gets the smallest weight because it is computed by an
+    upstream classifier the policy cannot influence.
     """
 
     intent_resolution_weight: float = field(
-        default_factory=lambda: _env_float("AGENT_LEARNING_W_INTENT", 0.4)
+        default_factory=lambda: _env_float("AGENT_LEARNING_W_INTENT", 0.10)
     )
     task_adherence_weight: float = field(
-        default_factory=lambda: _env_float("AGENT_LEARNING_W_ADHERENCE", 0.3)
+        default_factory=lambda: _env_float("AGENT_LEARNING_W_ADHERENCE", 0.20)
     )
     task_completion_weight: float = field(
-        default_factory=lambda: _env_float("AGENT_LEARNING_W_COMPLETION", 0.3)
+        default_factory=lambda: _env_float("AGENT_LEARNING_W_COMPLETION", 0.50)
     )
     latency_penalty_threshold_ms: int = field(
         default_factory=lambda: _env_int("AGENT_LEARNING_LATENCY_THRESHOLD_MS", 15000)
     )
     latency_penalty_value: float = field(
         default_factory=lambda: _env_float("AGENT_LEARNING_LATENCY_PENALTY", -0.1)
+    )
+    # Routing terms (§5.2). Computed in the orchestrator and passed to
+    # ``RewardShaper.shape(..., routing_reward=..., routing_penalty=...,
+    # hallucination_penalty=...)``. The values below are the magnitudes
+    # used by the orchestrator when the relevant condition fires.
+    route_correct_reward: float = field(
+        default_factory=lambda: _env_float("AGENT_LEARNING_R_ROUTE_CORRECT", 0.20)
+    )
+    route_wrong_penalty: float = field(
+        default_factory=lambda: _env_float("AGENT_LEARNING_P_ROUTE_WRONG", -0.30)
+    )
+    hallucinated_member_penalty: float = field(
+        default_factory=lambda: _env_float("AGENT_LEARNING_P_HALLU", -0.25)
     )
 
 

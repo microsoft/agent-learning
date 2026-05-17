@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List, Sequence
+from typing import Any, List, Optional, Sequence
 
 from ..types import Action, PolicySnapshot
 
@@ -25,11 +25,23 @@ class Policy(ABC):
     state lives in the :class:`PolicySnapshot` returned by
     :meth:`snapshot`. Callers persist the snapshot themselves; the
     Policy never talks to the store directly.
+
+    Concrete policies may use an optional ``state`` argument on
+    :meth:`choose` to condition action selection on contextual features
+    (a measure embedding, a cohort summary, etc.). Marginal policies
+    such as :class:`SoftmaxPolicy` ignore the argument.
     """
 
     @abstractmethod
-    def choose(self) -> Decision:
-        """Sample an action according to the current parameters."""
+    def choose(self, state: Optional[Any] = None) -> Decision:
+        """Sample an action according to the current parameters.
+
+        Args:
+            state: Optional contextual feature vector. Contextual
+                policies (e.g. :class:`ContextualSoftmaxPolicy`) require
+                a 1-D array of length ``feature_dim``. Marginal policies
+                ignore the argument.
+        """
 
     @abstractmethod
     def actions(self) -> Sequence[Action]:
