@@ -47,6 +47,14 @@ Quick start::
 
 from ._version import __version__
 from .capture import CaptureContext, EpisodeCapture, get_capture
+from .classifiers import (
+    AdherenceJudge,
+    Classifier,
+    ClassifierResult,
+    CompletionJudge,
+    IntentJudge,
+    RouterClassifier,
+)
 from .config import (
     CaptureConfig,
     CosmosConfig,
@@ -83,14 +91,19 @@ from .types import (
 
 __all__ = [
     "Action",
+    "AdherenceJudge",
     "CaptureConfig",
     "CaptureContext",
+    "Classifier",
+    "ClassifierResult",
+    "CompletionJudge",
     "ContextualSoftmaxPolicy",
     "CosmosConfig",
     "CosmosStore",
     "Episode",
     "EpisodeCapture",
     "InMemoryStore",
+    "IntentJudge",
     "IntentResolutionMetric",
     "JudgeConfig",
     "Learner",
@@ -109,6 +122,7 @@ __all__ = [
     "RewardShaper",
     "RewardSource",
     "RewardWriter",
+    "RouterClassifier",
     "ShapingConfig",
     "SoftmaxPolicy",
     "TaskAdherenceMetric",

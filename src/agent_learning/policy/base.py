@@ -28,7 +28,7 @@ class Policy(ABC):
 
     Concrete policies may use an optional ``state`` argument on
     :meth:`choose` to condition action selection on contextual features
-    (a measure embedding, a cohort summary, etc.). Marginal policies
+    (a request embedding, a session summary, etc.). Marginal policies
     such as :class:`SoftmaxPolicy` ignore the argument.
     """
 

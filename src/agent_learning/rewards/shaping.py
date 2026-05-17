@@ -55,14 +55,14 @@ class RewardShaper:
             results: Per-judge metric outputs.
             latency_ms: Episode latency in milliseconds; if above the
                 configured threshold the latency penalty is applied.
-            routing_correct: ``True`` if the orchestrator routed the
-                question to one of the cohort's selected measure ids
-                (→ add ``route_correct_reward``); ``False`` if it picked
-                a measure not in the cohort (→ add
+            routing_correct: ``True`` if the calling system routed the
+                request to a class id in the allowed set
+                (→ add ``route_correct_reward``); ``False`` if it
+                picked a class outside the allowed set (→ add
                 ``route_wrong_penalty``, which is negative). ``None``
                 disables the term entirely (no signal either way).
-            hallucinated_member: ``True`` if the rendered answer
-                mentions a member id not in the supplied cohort
+            hallucinated_member: ``True`` if the rendered output
+                references an entity id not in the allowed set
                 (→ add ``hallucinated_member_penalty``).
         """
         weights = {
