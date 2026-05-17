@@ -311,6 +311,84 @@ class StdlibJudgeConfig:
 
 
 @dataclass
+class NlpTextJudgeConfig:
+    """Configuration for the Tier 2 NLP text judges.
+
+    Tier 2 wraps a TF-IDF vectorizer + scikit-learn logistic
+    regression around the response text. The fitted vectorizer and
+    classifier are persisted to ``{snapshot_dir}/{name}.nlp_text.joblib``
+    with a sibling JSON header at ``{name}.nlp_text.json``. When no
+    snapshot is present the judges fall back to a rule-engine signal
+    only (adherence, completion) or the pass threshold (intent).
+
+    Requires the ``[nlp]`` extra (``pip install
+    azure-agents-learning-sdk[nlp]``).
+    """
+
+    snapshot_dir: str = field(
+        default_factory=lambda: os.getenv(
+            "AGENT_LEARNING_NLP_TEXT_JUDGE_DIR",
+            "./data/agent-learning/nlp-text-judges",
+        )
+    )
+    pass_threshold: float = field(
+        default_factory=lambda: _env_float(
+            "AGENT_LEARNING_NLP_TEXT_PASS_THRESHOLD", 0.5
+        )
+    )
+    max_features: int = field(
+        default_factory=lambda: _env_int(
+            "AGENT_LEARNING_NLP_TEXT_MAX_FEATURES", 20000
+        )
+    )
+    ngram_min: int = field(
+        default_factory=lambda: _env_int("AGENT_LEARNING_NLP_TEXT_NGRAM_MIN", 1)
+    )
+    ngram_max: int = field(
+        default_factory=lambda: _env_int("AGENT_LEARNING_NLP_TEXT_NGRAM_MAX", 2)
+    )
+
+
+@dataclass
+class SlmJudgeConfig:
+    """Configuration for the Tier 3 small-language-model judges.
+
+    Tier 3 wraps a locally-hosted instance of Microsoft
+    Phi-4-mini-instruct (3.8 B parameters, 4-bit ONNX) via
+    ``onnxruntime-genai``. The model is loaded from ``model_dir`` on
+    first use and reused across the three judges in the same process.
+
+    Requires the ``[slm]`` extra (``pip install
+    azure-agents-learning-sdk[slm]``). The default ``model_dir``
+    expects a Phi-4-mini-instruct INT4 ONNX bundle laid out under
+    ``./models/phi-4-mini-instruct-int4-onnx``; set
+    ``AGENT_LEARNING_SLM_MODEL_DIR`` to point at any local path.
+    """
+
+    model_dir: str = field(
+        default_factory=lambda: os.getenv(
+            "AGENT_LEARNING_SLM_MODEL_DIR",
+            "./models/phi-4-mini-instruct-int4-onnx",
+        )
+    )
+    pass_threshold: float = field(
+        default_factory=lambda: _env_float(
+            "AGENT_LEARNING_SLM_PASS_THRESHOLD", 0.5
+        )
+    )
+    max_new_tokens: int = field(
+        default_factory=lambda: _env_int(
+            "AGENT_LEARNING_SLM_MAX_NEW_TOKENS", 64
+        )
+    )
+    temperature: float = field(
+        default_factory=lambda: _env_float(
+            "AGENT_LEARNING_SLM_TEMPERATURE", 0.0
+        )
+    )
+
+
+@dataclass
 class JudgeRuntimeConfig:
     """Top-level switch across the four judge tiers.
 
@@ -334,6 +412,8 @@ class JudgeRuntimeConfig:
     tier: Optional[JudgeTier] = field(default_factory=_env_judge_tier)
     stdlib: StdlibJudgeConfig = field(default_factory=StdlibJudgeConfig)
     nlp: NlpJudgeConfig = field(default_factory=NlpJudgeConfig)
+    nlp_text: NlpTextJudgeConfig = field(default_factory=NlpTextJudgeConfig)
+    slm: SlmJudgeConfig = field(default_factory=SlmJudgeConfig)
     llm: JudgeConfig = field(default_factory=JudgeConfig)
 
 
@@ -385,7 +465,7 @@ class ShapingConfig:
         default_factory=lambda: _env_float("AGENT_LEARNING_LATENCY_PENALTY", -0.1)
     )
     # Routing terms. Computed by the calling system and passed to
-    # ``RewardShaper.shape(..., routing_correct=..., hallucinated_member=...)``.
+    # ``RewardShaper.shape(..., routing_correct=..., hallucinated_class=...)``.
     # The values below are the magnitudes used when the relevant condition
     # fires.
     route_correct_reward: float = field(
@@ -394,7 +474,7 @@ class ShapingConfig:
     route_wrong_penalty: float = field(
         default_factory=lambda: _env_float("AGENT_LEARNING_P_ROUTE_WRONG", -0.30)
     )
-    hallucinated_member_penalty: float = field(
+    hallucinated_class_penalty: float = field(
         default_factory=lambda: _env_float("AGENT_LEARNING_P_HALLU", -0.25)
     )
 
@@ -424,7 +504,11 @@ __all__ = [
     "JudgeConfig",
     "JudgeMode",
     "JudgeRuntimeConfig",
+    "JudgeTier",
     "LearnerConfig",
     "NlpJudgeConfig",
+    "NlpTextJudgeConfig",
     "ShapingConfig",
+    "SlmJudgeConfig",
+    "StdlibJudgeConfig",
 ]

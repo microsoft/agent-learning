@@ -53,6 +53,50 @@ def _build_stdlib(cfg: JudgeRuntimeConfig) -> Tuple[Judge, Judge, Judge]:
 
 
 def _build_nlp(cfg: JudgeRuntimeConfig) -> Tuple[Judge, Judge, Judge]:
+    """Tier 2: TF-IDF + scikit-learn judges over query/response text.
+
+    Requires the ``[nlp]`` extra. The judges are imported lazily so
+    callers that never select ``tier="nlp"`` don't need scikit-learn
+    installed.
+    """
+    from .nlp_text import (
+        NlpTextAdherenceJudge,
+        NlpTextCompletionJudge,
+        NlpTextIntentJudge,
+    )
+    nlp_text_cfg = cfg.nlp_text
+    return (
+        NlpTextIntentJudge.load_or_default(
+            nlp_text_cfg.snapshot_dir,
+            pass_threshold=nlp_text_cfg.pass_threshold,
+            max_features=nlp_text_cfg.max_features,
+            ngram_min=nlp_text_cfg.ngram_min,
+            ngram_max=nlp_text_cfg.ngram_max,
+        ),
+        NlpTextAdherenceJudge.load_or_default(
+            nlp_text_cfg.snapshot_dir,
+            pass_threshold=nlp_text_cfg.pass_threshold,
+            max_features=nlp_text_cfg.max_features,
+            ngram_min=nlp_text_cfg.ngram_min,
+            ngram_max=nlp_text_cfg.ngram_max,
+        ),
+        NlpTextCompletionJudge.load_or_default(
+            nlp_text_cfg.snapshot_dir,
+            pass_threshold=nlp_text_cfg.pass_threshold,
+            max_features=nlp_text_cfg.max_features,
+            ngram_min=nlp_text_cfg.ngram_min,
+            ngram_max=nlp_text_cfg.ngram_max,
+        ),
+    )
+
+
+def _build_nlp_legacy(cfg: JudgeRuntimeConfig) -> Tuple[Judge, Judge, Judge]:
+    """Back-compat path for callers using ``mode="nlp"``.
+
+    Routes to the original :class:`agent_learning.classifiers.judges.BinaryJudge`
+    stack over ``(phi, action_id)``. Preserves the v0.1 API for callers
+    that haven't migrated to the tier-based selector yet.
+    """
     from .nlp import (
         NlpAdherenceJudge,
         NlpCompletionJudge,
@@ -66,9 +110,38 @@ def _build_nlp(cfg: JudgeRuntimeConfig) -> Tuple[Judge, Judge, Judge]:
 
 
 def _build_slm(cfg: JudgeRuntimeConfig) -> Tuple[Judge, Judge, Judge]:
-    raise NotImplementedError(
-        "Tier 3 (slm) judges are not yet packaged. Install the [slm] "
-        "extra and select tier='slm' when the package ships."
+    """Tier 3: Phi-4-mini-instruct INT4 ONNX judges.
+
+    Requires the ``[slm]`` extra and a local copy of the
+    Phi-4-mini-instruct INT4 ONNX bundle. Judges are imported lazily so
+    callers that never select ``tier="slm"`` don't need
+    ``onnxruntime-genai`` installed.
+    """
+    from .slm import (
+        SlmAdherenceJudge,
+        SlmCompletionJudge,
+        SlmIntentJudge,
+    )
+    slm_cfg = cfg.slm
+    return (
+        SlmIntentJudge.load_or_default(
+            slm_cfg.model_dir,
+            pass_threshold=slm_cfg.pass_threshold,
+            max_new_tokens=slm_cfg.max_new_tokens,
+            temperature=slm_cfg.temperature,
+        ),
+        SlmAdherenceJudge.load_or_default(
+            slm_cfg.model_dir,
+            pass_threshold=slm_cfg.pass_threshold,
+            max_new_tokens=slm_cfg.max_new_tokens,
+            temperature=slm_cfg.temperature,
+        ),
+        SlmCompletionJudge.load_or_default(
+            slm_cfg.model_dir,
+            pass_threshold=slm_cfg.pass_threshold,
+            max_new_tokens=slm_cfg.max_new_tokens,
+            temperature=slm_cfg.temperature,
+        ),
     )
 
 
@@ -92,9 +165,11 @@ def build_judges(cfg: JudgeRuntimeConfig) -> Tuple[Judge, Judge, Judge]:
     """
     tier = cfg.tier
     if tier is None:
-        # Legacy mode fallback.
+        # Legacy mode fallback. mode="nlp" routes to the BinaryJudge
+        # stack, NOT the new TF-IDF judges (those are reachable via
+        # tier="nlp").
         if cfg.mode == "nlp":
-            return _build_nlp(cfg)
+            return _build_nlp_legacy(cfg)
         if cfg.mode == "llm":
             return _build_llm(cfg)
         raise ValueError(f"unknown judge_mode: {cfg.mode!r}")

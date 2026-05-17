@@ -418,10 +418,23 @@ def test_build_judges_tier_stdlib_uses_config_threshold(tmp_path):
     assert completion.pass_threshold == 0.7
 
 
-def test_build_judges_tier_slm_raises():
+def test_build_judges_tier_slm_returns_slm_judges():
+    """Tier 3 builds the three SLM judges without loading the real model.
+
+    The judges defer model load to first ``score()`` call via
+    ``SlmRunner.get_shared``, so construction alone is safe even when
+    ``onnxruntime-genai`` is not installed.
+    """
+    from agent_learning.judges.slm import (
+        SlmAdherenceJudge,
+        SlmCompletionJudge,
+        SlmIntentJudge,
+    )
     cfg = JudgeRuntimeConfig(tier="slm")
-    with pytest.raises(NotImplementedError):
-        build_judges(cfg)
+    intent, adherence, completion = build_judges(cfg)
+    assert isinstance(intent, SlmIntentJudge)
+    assert isinstance(adherence, SlmAdherenceJudge)
+    assert isinstance(completion, SlmCompletionJudge)
 
 
 def test_build_judges_unknown_tier_raises():

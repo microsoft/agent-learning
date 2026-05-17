@@ -125,12 +125,12 @@ def test_routing_none_is_neutral() -> None:
     assert all(p[0] not in ("route_correct", "route_wrong") for p in shaped.penalties)
 
 
-def test_hallucinated_member_adds_penalty() -> None:
-    cfg = _zero_weighted_cfg(hallucinated_member_penalty=-0.25)
+def test_hallucinated_class_adds_penalty() -> None:
+    cfg = _zero_weighted_cfg(hallucinated_class_penalty=-0.25)
     shaper = RewardShaper(cfg)
-    shaped = shaper.shape([], hallucinated_member=True)
+    shaped = shaper.shape([], hallucinated_class=True)
     assert abs(shaped.value + 0.25) < 1e-9
-    assert any(p[0] == "hallucinated_member" for p in shaped.penalties)
+    assert any(p[0] == "hallucinated_class" for p in shaped.penalties)
 
 
 def test_reward_is_clamped_to_unit_range() -> None:
@@ -140,7 +140,7 @@ def test_reward_is_clamped_to_unit_range() -> None:
         task_completion_weight=0.50,
         route_correct_reward=0.20,
         route_wrong_penalty=-0.30,
-        hallucinated_member_penalty=-0.25,
+        hallucinated_class_penalty=-0.25,
         latency_penalty_threshold_ms=10_000_000,
         latency_penalty_value=0.0,
     )
@@ -153,6 +153,6 @@ def test_reward_is_clamped_to_unit_range() -> None:
             _result(MetricName.TASK_COMPLETION, 0.0),
         ],
         routing_correct=False,
-        hallucinated_member=True,
+        hallucinated_class=True,
     )
     assert shaped.value == -1.0

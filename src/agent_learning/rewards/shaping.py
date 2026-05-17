@@ -47,7 +47,7 @@ class RewardShaper:
         *,
         latency_ms: Optional[int] = None,
         routing_correct: Optional[bool] = None,
-        hallucinated_member: bool = False,
+        hallucinated_class: bool = False,
     ) -> ShapedReward:
         """Combine judges + behavioural signals into a single scalar.
 
@@ -61,9 +61,9 @@ class RewardShaper:
                 picked a class outside the allowed set (→ add
                 ``route_wrong_penalty``, which is negative). ``None``
                 disables the term entirely (no signal either way).
-            hallucinated_member: ``True`` if the rendered output
-                references an entity id not in the allowed set
-                (→ add ``hallucinated_member_penalty``).
+            hallucinated_class: ``True`` if the rendered output
+                references an entity/class id not in the allowed set
+                (→ add ``hallucinated_class_penalty``).
         """
         weights = {
             MetricName.INTENT_RESOLUTION: self._config.intent_resolution_weight,
@@ -98,10 +98,10 @@ class RewardShaper:
             total += self._config.route_wrong_penalty
             penalties.append(("route_wrong", False, self._config.route_wrong_penalty))
 
-        if hallucinated_member:
-            total += self._config.hallucinated_member_penalty
+        if hallucinated_class:
+            total += self._config.hallucinated_class_penalty
             penalties.append(
-                ("hallucinated_member", True, self._config.hallucinated_member_penalty)
+                ("hallucinated_class", True, self._config.hallucinated_class_penalty)
             )
 
         clamped = max(-1.0, min(1.0, total))
