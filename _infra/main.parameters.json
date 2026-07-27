@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": {
+      "value": "${AZURE_ENV_NAME}"
+    },
+    "location": {
+      "value": "${AZURE_LOCATION}"
+    },
+    "cosmosDatabaseName": {
+      "value": "${AGENT_LEARNING_COSMOS_DATABASE=dq_rl}"
+    },
+    "vmSize": {
+      "value": "${VM_SIZE=Standard_D2s_v3}"
+    },
+    "adminUsername": {
+      "value": "${VM_ADMIN_USERNAME=azureuser}"
+    },
+    "sshPublicKey": {
+      "value": "${AZURE_SSH_PUBLIC_KEY}"
+    },
+    "enableVmPublicIp": {
+      "value": "${VM_ENABLE_PUBLIC_IP=false}"
+    },
+    "allowedSshSourceAddressPrefix": {
+      "value": "${VM_ALLOWED_SSH_SOURCE=}"
+    },
+    "developerPrincipalId": {
+      "value": "${DEVELOPER_PRINCIPAL_ID=}"
+    }
+  }
+}
