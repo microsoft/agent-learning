@@ -5,8 +5,8 @@ native, in-process learner. The SDK is organised into five layers:
 
 - ``agent_learning.types``    - durable record types (``Episode``,
   ``Reward``, ``PolicySnapshot``, ...).
-- ``agent_learning.storage``  - pluggable persistence (Cosmos DB and
-  in-memory).
+- ``agent_learning.storage``  - pluggable persistence (Cosmos DB,
+  local file system, and in-memory).
 - ``agent_learning.metrics``  - judge-based metrics that wrap the
   Azure AI Evaluation evaluators for Intent Resolution, Task
   Adherence, and Task Completion.
@@ -74,7 +74,13 @@ from .metrics import (
 )
 from .policy import ContextualSoftmaxPolicy, Policy, SoftmaxPolicy
 from .rewards import RewardShaper, RewardWriter, shape_episode_reward
-from .storage import CosmosStore, InMemoryStore, LearningStore, get_default_store
+from .storage import (
+    CosmosStore,
+    InMemoryStore,
+    LearningStore,
+    LocalFileStore,
+    get_default_store,
+)
 from .training import LearningRunner
 from .types import (
     Action,
@@ -111,6 +117,7 @@ __all__ = [
     "LearnerResult",
     "LearningRunner",
     "LearningStore",
+    "LocalFileStore",
     "MetricEvaluator",
     "MetricName",
     "MetricRequest",

@@ -51,6 +51,7 @@ write_files:
   - path: /etc/profile.d/agent-learning.sh
     permissions: '0644'
     content: |
+      export AGENT_LEARNING_STORE_BACKEND="cosmos"
       export AGENT_LEARNING_COSMOS_ENDPOINT="{0}"
       export AGENT_LEARNING_COSMOS_DATABASE="{1}"
       export AGENT_LEARNING_COSMOS_AUTH_MODE="aad"

@@ -93,13 +93,16 @@ pip install -e .
 
 ## Configure
 
-The SDK reads its configuration from environment variables. The most
-important ones are:
+The SDK reads its configuration from environment variables. Every
+variable is optional — with no configuration the SDK runs against an
+in-memory store. The most important ones are:
 
 | Variable | Purpose | Default |
 | --- | --- | --- |
-| `AGENT_LEARNING_COSMOS_ENDPOINT` | Cosmos DB account URL (enables persistence) | unset |
-| `AGENT_LEARNING_COSMOS_DATABASE` | Database name | `dq_rl` |
+| `AGENT_LEARNING_STORE_BACKEND` | Storage backend: `memory`, `cosmos`, or `local` | `memory` |
+| `AGENT_LEARNING_COSMOS_ENDPOINT` | Cosmos DB account URL (only used when backend is `cosmos`) | unset |
+| `AGENT_LEARNING_COSMOS_DATABASE` | Cosmos DB database name (only used when backend is `cosmos`) | `dq_rl` |
+| `AGENT_LEARNING_LOCAL_STORE_DIR` | Directory for the `local` file backend | `./data/agent-learning/store` |
 | `AGENT_LEARNING_JUDGE_ENDPOINT` | Azure OpenAI endpoint used by the judge | unset |
 | `AGENT_LEARNING_JUDGE_DEPLOYMENT` | Judge deployment name | unset |
 | `AGENT_LEARNING_W_INTENT` | Weight for intent-resolution reward | `0.4` |
@@ -108,9 +111,11 @@ important ones are:
 | `AGENT_LEARNING_LR` | REINFORCE learning rate | `0.05` |
 | `AGENT_LEARNING_BASELINE_DECAY` | EMA decay on the value baseline | `0.9` |
 
-When the Cosmos endpoint or judge configuration is missing, the SDK
-falls back to an in-memory store and skips evaluations so unit
-tests still pass.
+By default the SDK uses a volatile in-memory store. Set
+`AGENT_LEARNING_STORE_BACKEND=cosmos` (together with the Cosmos
+variables above) for durable Cosmos DB persistence, or `=local` to
+persist to JSON files on disk. When the judge configuration is
+missing, the SDK skips evaluations so unit tests still pass.
 
 ## Use it
 
@@ -123,7 +128,7 @@ actions = [
     Action(id="concise"),
     Action(id="detailed"),
 ]
-policy = SoftmaxPolicy.from_actions(actions, agent_id="dq")
+policy = SoftmaxPolicy.from_actions(actions, agent_id="nba")
 
 # At inference time
 decision = policy.choose()
@@ -140,7 +145,7 @@ capture.end(ctx, assistant_output="…")
 
 # Periodically (cron, manual, event-driven)
 runner = LearningRunner(policy=policy)
-run = runner.run_offline_batch("dq", episode_limit=500)
+run = runner.run_offline_batch("nba", episode_limit=500)
 ```
 
 The included CLI exposes the same flow:
@@ -151,6 +156,26 @@ agent-learn train --agent-id dq --limit 500
 agent-learn policy --agent-id dq
 ```
 
+## Examples
+
+Three runnable examples in [examples/](examples/) build on each other.
+All run in-process against the in-memory store with **no Azure
+credentials** required.
+
+| Example | Reward source | Objects it showcases |
+| --- | --- | --- |
+| [quickstart.py](examples/quickstart.py) | Stubbed constant | `SoftmaxPolicy`, built-in `ReinforceLearner`, `RewardShaper`, `LearningRunner` |
+| [next_best_action.py](examples/next_best_action.py) | Simulated outcome | `ContextualSoftmaxPolicy` (contextual bandit), a contextual policy-gradient learner |
+| [judged_optimization.py](examples/judged_optimization.py) | **Real Tier 1 judges** | `build_judges` (tiered judges), `JudgeScore`→`MetricResult`, routing + hallucination **shaping** penalties, rich `Episode` records |
+
+Start with [judged_optimization.py](examples/judged_optimization.py) to
+see the SDK's judge layer, reward shaping, metrics, policy, learner, and
+episode capture working together end to end:
+
+```bash
+python examples/judged_optimization.py
+```
+
 ## Layout
 
 ```
@@ -158,7 +183,7 @@ src/agent_learning/
 ├── types.py            # Durable record types
 ├── config.py           # Env-driven configuration
 ├── capture.py          # Episode capture hook
-├── storage/            # LearningStore (Cosmos + in-memory)
+├── storage/            # LearningStore (Cosmos + local file + in-memory)
 ├── metrics/            # IntentResolution/TaskAdherence/TaskCompletion
 ├── rewards/            # Shaping + writer
 ├── policy/             # SoftmaxPolicy
@@ -167,7 +192,7 @@ src/agent_learning/
 └── cli.py              # `agent-learn` command-line
 ```
 
-## Testing
+## Unit Testing
 
 ```bash
 pytest -q
@@ -176,3 +201,12 @@ pytest -q
 The test suite covers types, the in-memory store, the policy,
 reward shaping, the REINFORCE learner, and an end-to-end training
 loop with a stubbed metric evaluator.
+
+## Use
+
+```bash
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+
+```

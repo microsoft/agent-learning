@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "azure-agents-learning-sdk"
-version = "0.2.0"
+version = "0.3.0"
 description = "Native reinforcement learning SDK for AI agents using Azure AI Evaluation judge metrics."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
-authors = [{ name = "CMS Top Customers" }]
+authors = [{ name = "Chris Tava" }]
 keywords = ["reinforcement-learning", "ai-agents", "azure", "evaluation", "rlhf"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -19,7 +19,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software/Engineering :: Artificial Intelligence",
 ]
 
 dependencies = [

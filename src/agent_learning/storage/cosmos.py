@@ -8,6 +8,7 @@ from :class:`agent_learning.config.CosmosConfig` (overridable via env).
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any, Dict, Iterable, List, Optional
 
 try:  # azure-cosmos is required only when the Cosmos backend is used.
@@ -308,24 +309,54 @@ _default_store: Optional[LearningStore] = None
 
 
 def get_default_store() -> LearningStore:
-    """Return a process-wide singleton Cosmos-backed store.
+    """Return the process-wide singleton :class:`LearningStore`.
 
-    Falls back to :class:`InMemoryStore` if Cosmos is not configured;
-    this keeps unit tests and local notebooks usable with the same
-    code path as production.
+    The backend defaults to :class:`InMemoryStore`. Set the
+    ``AGENT_LEARNING_STORE_BACKEND`` environment variable to opt into a
+    durable backend:
+
+    - ``memory`` (default) - volatile, in-process store.
+    - ``cosmos``           - Cosmos DB (requires a configured endpoint
+      and the ``azure-cosmos`` package).
+    - ``local``            - JSON files under
+      ``AGENT_LEARNING_LOCAL_STORE_DIR``.
+
+    A ``cosmos`` request that is not usable, or an unrecognised value,
+    falls back to :class:`InMemoryStore`.
     """
     global _default_store
     if _default_store is not None:
         return _default_store
 
-    cfg = CosmosConfig()
-    if cfg.enabled and COSMOS_SDK_AVAILABLE:
-        _default_store = CosmosStore(cfg)
+    backend = os.getenv("AGENT_LEARNING_STORE_BACKEND", "memory").strip().lower()
+
+    if backend == "cosmos":
+        cfg = CosmosConfig()
+        if cfg.enabled and COSMOS_SDK_AVAILABLE:
+            _default_store = CosmosStore(cfg)
+        else:
+            # Lazy import to avoid a cycle at module load time
+            from .memory import InMemoryStore  # noqa: WPS433
+
+            logger.warning(
+                "AGENT_LEARNING_STORE_BACKEND=cosmos but Cosmos is unavailable "
+                "(endpoint unset or azure-cosmos missing); using InMemoryStore"
+            )
+            _default_store = InMemoryStore()
+    elif backend == "local":
+        # Lazy import to avoid a cycle at module load time
+        from .local import LocalFileStore  # noqa: WPS433
+
+        _default_store = LocalFileStore()
     else:
+        if backend != "memory":
+            logger.warning(
+                "Unknown AGENT_LEARNING_STORE_BACKEND=%r; using InMemoryStore",
+                backend,
+            )
         # Lazy import to avoid a cycle at module load time
         from .memory import InMemoryStore  # noqa: WPS433
 
-        logger.warning("CosmosStore unavailable; falling back to InMemoryStore")
         _default_store = InMemoryStore()
     return _default_store
 

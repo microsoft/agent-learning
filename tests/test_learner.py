@@ -24,18 +24,18 @@ def _make_episode(agent_id: str, action_id: str, logprob: float = None) -> Episo
 
 def test_positive_reward_shifts_logit_up() -> None:
     actions = [Action(id="a"), Action(id="b")]
-    policy = SoftmaxPolicy.from_actions(actions, agent_id="dq", rng=random.Random(0))
+    policy = SoftmaxPolicy.from_actions(actions, agent_id="nba", rng=random.Random(0))
     learner = ReinforceLearner(LearnerConfig(learning_rate=0.5, entropy_bonus=0.0))
 
     episodes = []
     rewards = []
     for _ in range(20):
-        ep = _make_episode("dq", "a")
+        ep = _make_episode("nba", "a")
         episodes.append(ep)
         rewards.append(
             Reward(
                 episode_id=ep.id,
-                agent_id="dq",
+                agent_id="nba",
                 source=RewardSource.AGGREGATE,
                 value=0.8,
             )
@@ -56,15 +56,15 @@ def test_positive_reward_shifts_logit_up() -> None:
 
 def test_no_aggregate_reward_yields_noop() -> None:
     actions = [Action(id="a"), Action(id="b")]
-    policy = SoftmaxPolicy.from_actions(actions, agent_id="dq")
+    policy = SoftmaxPolicy.from_actions(actions, agent_id="nba")
     learner = ReinforceLearner(LearnerConfig())
 
     # Pass non-aggregate rewards only - learner must skip them.
-    ep = _make_episode("dq", "a")
+    ep = _make_episode("nba", "a")
     rewards = [
         Reward(
             episode_id=ep.id,
-            agent_id="dq",
+            agent_id="nba",
             source=RewardSource.METRIC,
             value=0.9,
         )
@@ -75,14 +75,14 @@ def test_no_aggregate_reward_yields_noop() -> None:
 
 def test_unknown_action_is_skipped() -> None:
     actions = [Action(id="a")]
-    policy = SoftmaxPolicy.from_actions(actions, agent_id="dq")
+    policy = SoftmaxPolicy.from_actions(actions, agent_id="nba")
     learner = ReinforceLearner(LearnerConfig())
 
-    ep = _make_episode("dq", "missing")
+    ep = _make_episode("nba", "missing")
     rewards = [
         Reward(
             episode_id=ep.id,
-            agent_id="dq",
+            agent_id="nba",
             source=RewardSource.AGGREGATE,
             value=1.0,
         )
