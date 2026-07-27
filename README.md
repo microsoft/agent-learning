@@ -31,11 +31,13 @@ that run in your existing Python process:
 
 3. A **REINFORCE-with-baseline** learner updates the policy logits
    directly from logged episodes. Updates are tiny gradient steps
-   that run on CPU and persist immediately to Cosmos DB.
+   that run on CPU and persist through a pluggable store — in-memory
+   or local files by default, with Cosmos DB optional.
 
    <img src="images/cc970c453583c982.png" alt="Policy quality improves with every batch of episodes" width="360" style="max-width:100%; height:auto;" />
 
-Every episode, reward, run, and deployment is captured in Cosmos DB,
+Every episode, reward, run, and deployment is captured by the
+configured store — in-memory or local files by default, or Cosmos DB —
 giving you a complete lineage and audit trail of how the policy
 evolved over time.
 

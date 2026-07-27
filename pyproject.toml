@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "azure-agents-learning-sdk"
 version = "0.3.0"
-description = "Native reinforcement learning SDK for AI agents using Azure AI Evaluation judge metrics."
+description = "Native, in-process reinforcement learning SDK for AI agents — in-memory and local-file storage by default."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
@@ -19,13 +19,12 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "Topic :: Software/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
 dependencies = [
     "numpy>=1.24",
     "azure-identity>=1.15",
-    "azure-cosmos>=4.5",
     "azure-ai-evaluation>=1.0.0",
     "pydantic>=2.0",
 ]
@@ -37,6 +36,9 @@ dev = [
     "pytest-cov>=4.1",
     "ruff>=0.1",
     "mypy>=1.6",
+]
+cosmos = [
+    "azure-cosmos>=4.5",
 ]
 nlp = [
     "scikit-learn>=1.3",
