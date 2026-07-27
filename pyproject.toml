@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "azure-agents-learning-sdk"
-version = "0.3.0"
+version = "0.3.1"
 description = "Native, in-process reinforcement learning SDK for AI agents — in-memory and local-file storage by default."
-readme = "README.md"
+readme = "PYPI.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
 authors = [{ name = "Chris Tava" }]
