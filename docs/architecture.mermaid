@@ -1,0 +1,16 @@
+flowchart LR
+  subgraph RG[Resource group]
+    subgraph VNET[VNet 10.0.0.0/16]
+      subgraph VMSUB[vm subnet 10.0.1.0/24]
+        VM[Linux VM<br/>system-assigned identity<br/>runs the SDK]
+      end
+      subgraph PESUB[private-endpoints subnet 10.0.2.0/24]
+        CPE[Cosmos private endpoint]
+        SPE[Blob private endpoint]
+      end
+    end
+    COSMOS[Cosmos DB<br/>serverless, AAD-only<br/>public access Disabled]
+    STG[Storage account<br/>public access Disabled]
+  end
+  VM -->|managed identity| CPE --> COSMOS
+  VM -->|managed identity| SPE --> STG
