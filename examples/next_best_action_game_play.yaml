@@ -1,0 +1,111 @@
+# =============================================================================
+# Next Best Action -- Game Play use case
+# =============================================================================
+# A contextual bandit acting as a game "director" (dynamic engagement). The
+# best action depends on the CONTEXT (player frustration + playstyle): a
+# frustrated EXPLORER benefits from a hint, a frustrated ACHIEVER from a loot
+# reward, a frustrated SOCIALIZER from a co-op invite, and an engaged player is
+# best left in flow with no intervention.
+#
+# Consumed by `next_best_action.py`. The policy learns the context -> action
+# mapping from the simulated reward `environment` alone.
+#
+# Run:
+#   python examples/next_best_action.py examples/next_best_action_game_play.yaml
+# =============================================================================
+
+name: Game Play
+description: Recommend the next best engagement action for a player given frustration level and playstyle.
+agent_id: game-director
+entity: player
+decision_label: next_best_action
+
+# ---------------------------------------------------------------------------
+# Action space -- the discrete "director" actions the agent can take.
+# ---------------------------------------------------------------------------
+actions:
+  - id: stay_course
+    description: Keep current difficulty and content (no change)
+  - id: offer_hint
+    description: Surface a hint or tutorial nudge
+  - id: spawn_loot
+    description: Grant a reward, power-up, or loot drop
+  - id: matchmake_coop
+    description: Invite the player into co-op matchmaking
+
+# ---------------------------------------------------------------------------
+# Context schema -- the player state and how it is encoded into features.
+#   phi = [bias, frustration, is_socializer, is_achiever, is_explorer]
+#   -> feature_dim = 5.
+# ---------------------------------------------------------------------------
+context:
+  variables:
+    - name: frustration
+      type: continuous      # sampled uniformly in [low, high]
+      low: 0.0
+      high: 1.0
+      round: 3
+    - name: playstyle
+      type: categorical     # sampled uniformly from `categories`; one-hot encoded
+      categories: [socializer, achiever, explorer]
+
+# ---------------------------------------------------------------------------
+# Hidden environment -- ground-truth success probability of each action.
+# First matching rule wins; the last rule (no `when:`) is the default.
+# ---------------------------------------------------------------------------
+environment:
+  noise_std: 0.05
+  rules:
+    - name: engaged_player          # low frustration -> don't disrupt flow
+      when:
+        frustration: { lt: 0.5 }
+      success:
+        stay_course: 0.90
+        offer_hint: 0.60
+        spawn_loot: 0.30
+        matchmake_coop: 0.20
+    - name: frustrated_socializer   # wants company -> a co-op invite re-engages
+      when:
+        playstyle: socializer
+      success:
+        stay_course: 0.05
+        offer_hint: 0.50
+        spawn_loot: 0.70
+        matchmake_coop: 0.95
+    - name: frustrated_achiever     # reward-driven -> a loot drop re-engages
+      when:
+        playstyle: achiever
+      success:
+        stay_course: 0.10
+        offer_hint: 0.60
+        spawn_loot: 0.90
+        matchmake_coop: 0.60
+    - name: frustrated_explorer     # default: a stuck explorer needs a hint
+      success:
+        stay_course: 0.15
+        offer_hint: 0.85
+        spawn_loot: 0.70
+        matchmake_coop: 0.30
+
+# ---------------------------------------------------------------------------
+# Probes -- representative players printed before and after training.
+# ---------------------------------------------------------------------------
+probes:
+  - label: Frustrated EXPLORER
+    context: { frustration: 0.90, playstyle: explorer }
+  - label: Frustrated ACHIEVER
+    context: { frustration: 0.85, playstyle: achiever }
+  - label: Frustrated SOCIALIZER
+    context: { frustration: 0.80, playstyle: socializer }
+  - label: Relaxed SOCIALIZER
+    context: { frustration: 0.10, playstyle: socializer }
+
+# ---------------------------------------------------------------------------
+# Training -- REINFORCE-with-baseline hyperparameters and loop sizing.
+# ---------------------------------------------------------------------------
+training:
+  seed: 7
+  rounds: 200
+  episodes_per_round: 150
+  learning_rate: 0.8
+  entropy_bonus: 0.03

@@ -1,0 +1,120 @@
+# =============================================================================
+# Next Best Action -- Retention Risk use case
+# =============================================================================
+# A contextual bandit for customer retention. The best action depends on the
+# CONTEXT (churn risk + account segment): a high-risk ENTERPRISE account
+# warrants a human retention call, a high-risk SMB is better served by a
+# targeted discount, and a low-risk account should simply be left alone.
+#
+# This file is consumed by `next_best_action.py`, which builds a
+# ContextualSoftmaxPolicy from the action + context definitions below and
+# learns the context -> action mapping from the simulated reward `environment`
+# alone (the policy never sees the reward table).
+#
+# Run:
+#   python examples/next_best_action.py examples/next_best_action_retention_risk.yaml
+# =============================================================================
+
+name: Retention Risk
+description: Recommend the next best retention action for a customer given churn risk and account segment.
+agent_id: retention
+entity: customer          # noun for one context instance (used in printed output)
+decision_label: next_best_action
+
+# ---------------------------------------------------------------------------
+# Action space -- the discrete "next best actions" the agent can take.
+# ---------------------------------------------------------------------------
+actions:
+  - id: no_action
+    description: Leave the customer alone (no outreach)
+  - id: email_nudge
+    description: Send an automated re-engagement email
+  - id: discount_offer
+    description: Offer a targeted retention discount
+  - id: retention_call
+    description: Schedule a human retention call
+
+# ---------------------------------------------------------------------------
+# Context schema -- the customer state and how it is encoded into features.
+#
+# The feature vector phi is built automatically as:
+#   [ 1.0 (bias), <each continuous value>, <one-hot of each categorical> ]
+# For this file that is: [bias, churn_risk, is_enterprise, is_smb, is_consumer]
+# -> feature_dim = 5.
+# ---------------------------------------------------------------------------
+context:
+  variables:
+    - name: churn_risk
+      type: continuous      # sampled uniformly in [low, high]
+      low: 0.0
+      high: 1.0
+      round: 3
+    - name: segment
+      type: categorical     # sampled uniformly from `categories`; one-hot encoded
+      categories: [enterprise, smb, consumer]
+
+# ---------------------------------------------------------------------------
+# Hidden environment -- the "ground truth" success probability of each action.
+# The policy never sees this; it must discover it from reward alone.
+#
+# Rules are evaluated top-to-bottom; the FIRST rule whose `when` matches wins.
+# A rule with no `when:` is the default (always matches) and must come last.
+# `success` is the noise-free P(success) in [0, 1] for each action; the
+# sampled reward adds Gaussian noise with standard deviation `noise_std`.
+# ---------------------------------------------------------------------------
+environment:
+  noise_std: 0.05
+  rules:
+    - name: healthy_account         # low churn risk -> outreach wastes budget
+      when:
+        churn_risk: { lt: 0.5 }
+      success:
+        no_action: 0.90
+        email_nudge: 0.60
+        discount_offer: 0.30
+        retention_call: 0.20
+    - name: at_risk_enterprise      # high value -> a human call pays off
+      when:
+        segment: enterprise
+      success:
+        no_action: 0.05
+        email_nudge: 0.50
+        discount_offer: 0.70
+        retention_call: 0.95
+    - name: at_risk_smb             # price-sensitive -> a discount wins
+      when:
+        segment: smb
+      success:
+        no_action: 0.10
+        email_nudge: 0.60
+        discount_offer: 0.90
+        retention_call: 0.60
+    - name: at_risk_consumer        # default: low-touch email is enough
+      success:
+        no_action: 0.15
+        email_nudge: 0.85
+        discount_offer: 0.70
+        retention_call: 0.30
+
+# ---------------------------------------------------------------------------
+# Probes -- representative accounts printed before and after training.
+# ---------------------------------------------------------------------------
+probes:
+  - label: High-risk ENTERPRISE
+    context: { churn_risk: 0.90, segment: enterprise }
+  - label: High-risk SMB
+    context: { churn_risk: 0.85, segment: smb }
+  - label: High-risk CONSUMER
+    context: { churn_risk: 0.80, segment: consumer }
+  - label: Low-risk ENTERPRISE
+    context: { churn_risk: 0.10, segment: enterprise }
+
+# ---------------------------------------------------------------------------
+# Training -- REINFORCE-with-baseline hyperparameters and loop sizing.
+# ---------------------------------------------------------------------------
+training:
+  seed: 7
+  rounds: 200
+  episodes_per_round: 150
+  learning_rate: 0.8
+  entropy_bonus: 0.03

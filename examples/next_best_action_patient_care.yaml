@@ -1,0 +1,113 @@
+# =============================================================================
+# Next Best Action -- Patient Care use case
+# =============================================================================
+# A contextual bandit for care-management outreach. The best action depends on
+# the CONTEXT (readmission risk + care pathway): a high-risk POST-OP patient
+# needs a physician escalation, a high-risk CHRONIC patient is best served by a
+# nurse check-in, a high-risk BEHAVIORAL patient by self-care education, and a
+# stable patient should simply keep routine remote monitoring.
+#
+# Consumed by `next_best_action.py`. The policy learns the context -> action
+# mapping from the simulated reward `environment` alone.
+#
+# Run:
+#   python examples/next_best_action.py examples/next_best_action_patient_care.yaml
+#
+# NOTE: illustrative toy reward model only -- NOT clinical guidance.
+# =============================================================================
+
+name: Patient Care
+description: Recommend the next best care-management action for a patient given readmission risk and care pathway.
+agent_id: patient-care
+entity: patient
+decision_label: next_best_action
+
+# ---------------------------------------------------------------------------
+# Action space -- the discrete care-management actions the agent can take.
+# ---------------------------------------------------------------------------
+actions:
+  - id: monitor
+    description: Continue routine remote monitoring (no active outreach)
+  - id: educational_message
+    description: Send self-care educational content
+  - id: nurse_call
+    description: Schedule a telehealth nurse check-in
+  - id: physician_escalation
+    description: Escalate to a physician for urgent review
+
+# ---------------------------------------------------------------------------
+# Context schema -- the patient state and how it is encoded into features.
+#   phi = [bias, readmission_risk, is_post_op, is_chronic, is_behavioral]
+#   -> feature_dim = 5.
+# ---------------------------------------------------------------------------
+context:
+  variables:
+    - name: readmission_risk
+      type: continuous      # sampled uniformly in [low, high]
+      low: 0.0
+      high: 1.0
+      round: 3
+    - name: care_pathway
+      type: categorical     # sampled uniformly from `categories`; one-hot encoded
+      categories: [post_op, chronic, behavioral]
+
+# ---------------------------------------------------------------------------
+# Hidden environment -- ground-truth success probability of each action.
+# First matching rule wins; the last rule (no `when:`) is the default.
+# ---------------------------------------------------------------------------
+environment:
+  noise_std: 0.05
+  rules:
+    - name: stable_patient          # low risk -> routine monitoring is enough
+      when:
+        readmission_risk: { lt: 0.5 }
+      success:
+        monitor: 0.90
+        educational_message: 0.60
+        nurse_call: 0.30
+        physician_escalation: 0.20
+    - name: at_risk_post_op         # surgical complications need a physician
+      when:
+        care_pathway: post_op
+      success:
+        monitor: 0.05
+        educational_message: 0.50
+        nurse_call: 0.70
+        physician_escalation: 0.95
+    - name: at_risk_chronic         # chronic care -> nurse coordination wins
+      when:
+        care_pathway: chronic
+      success:
+        monitor: 0.10
+        educational_message: 0.60
+        nurse_call: 0.90
+        physician_escalation: 0.60
+    - name: at_risk_behavioral      # default: self-care education engages best
+      success:
+        monitor: 0.15
+        educational_message: 0.85
+        nurse_call: 0.70
+        physician_escalation: 0.30
+
+# ---------------------------------------------------------------------------
+# Probes -- representative patients printed before and after training.
+# ---------------------------------------------------------------------------
+probes:
+  - label: High-risk POST-OP
+    context: { readmission_risk: 0.90, care_pathway: post_op }
+  - label: High-risk CHRONIC
+    context: { readmission_risk: 0.85, care_pathway: chronic }
+  - label: High-risk BEHAVIORAL
+    context: { readmission_risk: 0.80, care_pathway: behavioral }
+  - label: Low-risk POST-OP
+    context: { readmission_risk: 0.10, care_pathway: post_op }
+
+# ---------------------------------------------------------------------------
+# Training -- REINFORCE-with-baseline hyperparameters and loop sizing.
+# ---------------------------------------------------------------------------
+training:
+  seed: 7
+  rounds: 200
+  episodes_per_round: 150
+  learning_rate: 0.8
+  entropy_bonus: 0.03
