@@ -83,6 +83,7 @@ class LearningRunner:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         score_missing: bool = True,
+        completed_only: bool = False,
     ) -> TrainingRun:
         """Score (if missing) and update the policy over recent episodes."""
         if self._policy is None:
@@ -103,6 +104,7 @@ class LearningRunner:
                 limit=episode_limit,
                 start_date=start_date,
                 end_date=end_date,
+                completed_only=completed_only,
             )
             rewards = self._collect_rewards(agent_id, episodes, score_missing=score_missing)
 
@@ -118,6 +120,7 @@ class LearningRunner:
                 {
                     "policy_version": policy_snapshot.version,
                     "score_missing": score_missing,
+                    "completed_only": completed_only,
                 }
             )
             self._store.store_run(run)

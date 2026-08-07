@@ -28,6 +28,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .capture import redact
+from .config import LearnerConfig
 from .policy.base import Policy
 from .policy.contextual_softmax import ContextualSoftmaxPolicy
 from .policy.softmax_bandit import SoftmaxPolicy
@@ -60,6 +61,14 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     train.add_argument("--start-date")
     train.add_argument("--end-date")
     train.add_argument(
+        "--min-episodes",
+        type=int,
+        help=(
+            "Minimum completed episodes required to train. Defaults to "
+            "AGENT_LEARNING_MIN_TRAIN_EPISODES or 5."
+        ),
+    )
+    train.add_argument(
         "--skip-scoring",
         action="store_true",
         help="Skip scoring episodes that have no rewards yet.",
@@ -71,6 +80,16 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     score.add_argument("--limit", type=int, default=100)
     _add_store_argument(score)
 
+    agents = sub.add_parser("agents-list", help="List agents with stored policies.")
+    _add_store_argument(agents)
+
+    episode_count = sub.add_parser(
+        "agents-episodes-count",
+        help="Print the number of completed episodes for an agent.",
+    )
+    episode_count.add_argument("agent_id")
+    _add_store_argument(episode_count)
+
     show = sub.add_parser("policy", help="Print the latest policy snapshot for an agent.")
     show.add_argument("--agent-id", required=True)
     _add_store_argument(show)
@@ -80,6 +99,10 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="Create the initial policy snapshot from a JSON file.",
     )
     init.add_argument("--agent-id", required=True)
+    init.add_argument(
+        "--agent-name",
+        help="Display name used by agents-list. Defaults to --agent-id.",
+    )
     init.add_argument(
         "--actions",
         required=True,
@@ -179,6 +202,23 @@ def _cmd_train(args: argparse.Namespace) -> int:
         )
         return 2
 
+    min_episodes = (
+        args.min_episodes
+        if args.min_episodes is not None
+        else LearnerConfig().min_train_episodes
+    )
+    if min_episodes < 1:
+        print("--min-episodes must be at least 1", file=sys.stderr)
+        return 2
+    completed_episodes = store.count_completed_episodes(args.agent_id)
+    if completed_episodes < min_episodes:
+        print(
+            f"Agent {args.agent_id!r} has {completed_episodes} completed episodes; "
+            f"at least {min_episodes} are required to train.",
+            file=sys.stderr,
+        )
+        return 2
+
     policy = SoftmaxPolicy.from_snapshot(snapshot)
     runner = LearningRunner(store=store, policy=policy)
     run = runner.run_offline_batch(
@@ -187,6 +227,7 @@ def _cmd_train(args: argparse.Namespace) -> int:
         start_date=args.start_date,
         end_date=args.end_date,
         score_missing=not args.skip_scoring,
+        completed_only=True,
     )
     print(json.dumps(run.to_dict(), indent=2))
     return 0
@@ -204,6 +245,18 @@ def _cmd_score(args: argparse.Namespace) -> int:
         runner.score_and_record(episode)
         scored += 1
     print(json.dumps({"episodes_seen": len(episodes), "newly_scored": scored}, indent=2))
+    return 0
+
+
+def _cmd_agents_list(args: argparse.Namespace) -> int:
+    agents = _get_cli_store(args).list_agents()
+    print(json.dumps([agent.to_dict() for agent in agents], indent=2))
+    return 0
+
+
+def _cmd_agents_episodes_count(args: argparse.Namespace) -> int:
+    count = _get_cli_store(args).count_completed_episodes(args.agent_id)
+    print(json.dumps(count))
     return 0
 
 
@@ -227,6 +280,7 @@ def _cmd_init_policy(args: argparse.Namespace) -> int:
     policy = SoftmaxPolicy.from_actions(actions, agent_id=args.agent_id)
     store = _get_cli_store(args)
     snapshot = policy.snapshot()
+    snapshot.metadata["name"] = args.agent_name or args.agent_id
     store.store_policy(snapshot)
     print(json.dumps(snapshot.to_dict(), indent=2))
     return 0
@@ -367,6 +421,8 @@ def main(argv: list[str] | None = None) -> int:
     dispatch = {
         "train": _cmd_train,
         "score": _cmd_score,
+        "agents-list": _cmd_agents_list,
+        "agents-episodes-count": _cmd_agents_episodes_count,
         "policy": _cmd_show_policy,
         "policy-init": _cmd_init_policy,
         "task-intent": _cmd_task_intent,

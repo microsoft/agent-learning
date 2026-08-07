@@ -85,6 +85,7 @@ from .storage import (
 from .training import LearningRunner
 from .types import (
     Action,
+    AgentInfo,
     Episode,
     MetricName,
     MetricResult,
@@ -98,6 +99,7 @@ from .types import (
 
 __all__ = [
     "Action",
+    "AgentInfo",
     "AdherenceJudge",
     "CaptureConfig",
     "CaptureContext",
