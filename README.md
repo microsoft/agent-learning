@@ -117,6 +117,31 @@ runner = LearningRunner(policy=policy)
 run = runner.run_offline_batch("nba", episode_limit=500)
 ```
 
+### Audit Scout actions locally
+
+`ScoutAuditAdapter` wraps synchronous or asynchronous Scout actions and
+appends one JSONL record per execution. Each record includes the requested
+intent, selected action path, result or error, duration, and offline intent,
+adherence, and completion judge signals.
+
+```python
+from agent_learning import ScoutAuditAdapter
+
+audit = ScoutAuditAdapter("scout-audit.jsonl")
+result = audit.execute(
+    intent="Create the weekly summary",
+    action_path=["automation", "weekly-summary"],
+    action=create_summary,
+    expected_tokens=["summary"],
+)
+```
+
+The adapter uses the SDK's pure-Python judges and local file I/O, so it
+requires no Azure configuration. See
+[examples/scout_audit.py](examples/scout_audit.py) for automation, skill, and
+MCP examples, including asynchronous MCP execution. Review the log with any
+JSONL-aware tool, or run `python -m json.tool --json-lines scout-audit.jsonl`.
+
 The included CLI exposes the same flow:
 
 ```bash
@@ -136,6 +161,7 @@ credentials** required.
 | [quickstart.py](examples/quickstart.py) | Stubbed constant | `SoftmaxPolicy`, built-in `ReinforceLearner`, `RewardShaper`, `LearningRunner` |
 | [next_best_action.py](examples/next_best_action.py) | Simulated outcome | `ContextualSoftmaxPolicy` (contextual bandit), a contextual policy-gradient learner |
 | [judged_optimization.py](examples/judged_optimization.py) | **Real Tier 1 judges** | `build_judges` (tiered judges), `JudgeScore`→`MetricResult`, routing + hallucination **shaping** penalties, rich `Episode` records |
+| [scout_audit.py](examples/scout_audit.py) | Tier 1 judge signals | `ScoutAuditAdapter` for automation, skill, and MCP execution |
 
 Start with [judged_optimization.py](examples/judged_optimization.py) to
 see the SDK's judge layer, reward shaping, metrics, policy, learner, and

@@ -74,6 +74,7 @@ from .metrics import (
 )
 from .policy import ContextualSoftmaxPolicy, Policy, SoftmaxPolicy
 from .rewards import RewardShaper, RewardWriter, shape_episode_reward
+from .scout import ScoutAuditAdapter
 from .storage import (
     CosmosStore,
     InMemoryStore,
@@ -130,6 +131,7 @@ __all__ = [
     "RewardSource",
     "RewardWriter",
     "RouterClassifier",
+    "ScoutAuditAdapter",
     "ShapingConfig",
     "SoftmaxPolicy",
     "TaskAdherenceMetric",
