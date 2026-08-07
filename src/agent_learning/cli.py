@@ -208,7 +208,10 @@ def _cmd_train(args: argparse.Namespace) -> int:
         else LearnerConfig().min_train_episodes
     )
     if min_episodes < 1:
-        print("--min-episodes must be at least 1", file=sys.stderr)
+        print(
+            "--min-episodes and AGENT_LEARNING_MIN_TRAIN_EPISODES must be at least 1",
+            file=sys.stderr,
+        )
         return 2
     completed_episodes = store.count_completed_episodes(args.agent_id)
     if completed_episodes < min_episodes:

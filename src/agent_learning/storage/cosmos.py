@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 _COMPLETED_EPISODE_SQL = (
     "(c.metadata.status = 'completed' OR "
     "(NOT IS_DEFINED(c.metadata.status) "
-    "AND c.user_input != '' AND c.assistant_output != ''))"
+    "AND TRIM(c.user_input) != '' AND TRIM(c.assistant_output) != ''))"
 )
 
 
