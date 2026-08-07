@@ -20,6 +20,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
+SourceDir=..\..
 OutputDir=dist-installer
 OutputBaseFilename=agents-learning-sdk-cli-{#AppVersion}-windows-x64
 UninstallDisplayIcon={app}\{#AppExeName}
