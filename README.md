@@ -129,8 +129,8 @@ run = runner.run_offline_batch("nba", episode_limit=500)
 
 `ScoutLearningAdapter` wraps synchronous or asynchronous Scout actions and
 appends one JSONL record per execution. Each record includes the requested
-intent, selected action path, result or error, duration, and offline intent,
-adherence, and completion judge signals.
+intent, selected action path, result or error, duration, and offline judge
+signals for intent, adherence, and completion.
 
 1. Install the SDK in the environment that runs Scout:
 

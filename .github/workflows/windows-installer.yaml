@@ -46,7 +46,7 @@ jobs:
       - name: Build Windows installer
         shell: pwsh
         run: |
-          ./scripts/build_windows_installer.ps1 -AppVersion "${{ steps.vars.outputs.app_version }}" -SkipTests
+          ./scripts/build_windows_installer.ps1 -AppVersion "${{ steps.vars.outputs.app_version }}"
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4

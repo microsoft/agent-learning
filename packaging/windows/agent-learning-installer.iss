@@ -28,7 +28,7 @@ UninstallDisplayIcon={app}\{#AppExeName}
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "addtopath"; Description: "Add agent-learning command to PATH"; GroupDescription: "Additional tasks:"; Flags: checkedonce
+Name: "addtopath"; Description: "Add agent-learning command to user PATH"; GroupDescription: "Additional tasks:"
 
 [Files]
 Source: "dist\agent-learning.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -37,9 +37,98 @@ Source: "dist\agent-learning.exe"; DestDir: "{app}"; Flags: ignoreversion
 Name: "{autoprograms}\Agents Learning CLI"; Filename: "{app}\{#AppExeName}"
 
 [Registry]
-Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}"; Tasks: addtopath; Check: NeedsAddPath(ExpandConstant('{app}'))
+Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}"; Tasks: addtopath; Check: HasNonEmptyPathValue() and NeedsAddPath(ExpandConstant('{app}'))
+Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{app}"; Tasks: addtopath; Check: not HasNonEmptyPathValue()
+Root: HKCU; Subkey: "Software\AgentsLearningSDKCLI"; ValueType: string; ValueName: "AddedToUserPath"; ValueData: "1"; Tasks: addtopath; Flags: uninsdeletekey
 
 [Code]
+function HasNonEmptyPathValue: Boolean;
+var
+  ExistingPath: string;
+begin
+  Result := RegQueryStringValue(HKCU, 'Environment', 'Path', ExistingPath) and (Trim(ExistingPath) <> '');
+end;
+
+function NormalizePathEntry(Value: string): string;
+begin
+  Result := Trim(Uppercase(RemoveQuotes(Value)));
+  while (Length(Result) > 0) and ((Result[Length(Result)] = '\') or (Result[Length(Result)] = '/')) do
+    Delete(Result, Length(Result), 1);
+end;
+
+procedure SplitPathEntries(PathValue: string; var Entries: TArrayOfString);
+var
+  Segment: string;
+  SegmentIndex: Integer;
+  SeparatorIndex: Integer;
+  Working: string;
+begin
+  SetArrayLength(Entries, 0);
+  Working := PathValue;
+  while True do
+  begin
+    SeparatorIndex := Pos(';', Working);
+    if SeparatorIndex = 0 then
+    begin
+      Segment := Working;
+      Working := '';
+    end
+    else
+    begin
+      Segment := Copy(Working, 1, SeparatorIndex - 1);
+      Delete(Working, 1, SeparatorIndex);
+    end;
+
+    Segment := Trim(Segment);
+    if Segment <> '' then
+    begin
+      SegmentIndex := GetArrayLength(Entries);
+      SetArrayLength(Entries, SegmentIndex + 1);
+      Entries[SegmentIndex] := Segment;
+    end;
+
+    if SeparatorIndex = 0 then
+      Break;
+  end;
+end;
+
+function PathContainsEntry(OrigPath: string; Dir: string): Boolean;
+var
+  Entries: TArrayOfString;
+  I: Integer;
+begin
+  Result := False;
+  SplitPathEntries(OrigPath, Entries);
+  for I := 0 to GetArrayLength(Entries) - 1 do
+  begin
+    if NormalizePathEntry(Entries[I]) = NormalizePathEntry(Dir) then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+end;
+
+function RemovePathEntry(OrigPath: string; Dir: string): string;
+var
+  Entries: TArrayOfString;
+  I: Integer;
+  NormalizedDir: string;
+begin
+  Result := '';
+  NormalizedDir := NormalizePathEntry(Dir);
+  SplitPathEntries(OrigPath, Entries);
+  for I := 0 to GetArrayLength(Entries) - 1 do
+  begin
+    if NormalizePathEntry(Entries[I]) = NormalizedDir then
+      Continue;
+    if Result = '' then
+      Result := Entries[I]
+    else
+      Result := Result + ';' + Entries[I];
+  end;
+end;
+
 function NeedsAddPath(Dir: string): Boolean;
 var
   OrigPath: string;
@@ -48,6 +137,29 @@ begin
   if not RegQueryStringValue(HKCU, 'Environment', 'Path', OrigPath) then
     Exit;
 
-  if Pos(';' + Uppercase(Dir) + ';', ';' + Uppercase(OrigPath) + ';') > 0 then
+  if PathContainsEntry(OrigPath, Dir) then
     Result := False;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  AddedToPath: string;
+  CurrentPath: string;
+  UpdatedPath: string;
+begin
+  if CurUninstallStep <> usUninstall then
+    Exit;
+  if not RegQueryStringValue(HKCU, 'Software\AgentsLearningSDKCLI', 'AddedToUserPath', AddedToPath) then
+    Exit;
+  if not RegQueryStringValue(HKCU, 'Environment', 'Path', CurrentPath) then
+    Exit;
+
+  UpdatedPath := RemovePathEntry(CurrentPath, ExpandConstant('{app}'));
+  if UpdatedPath = CurrentPath then
+    Exit;
+
+  if UpdatedPath = '' then
+    RegDeleteValue(HKCU, 'Environment', 'Path')
+  else
+    RegWriteExpandStringValue(HKCU, 'Environment', 'Path', UpdatedPath);
 end;

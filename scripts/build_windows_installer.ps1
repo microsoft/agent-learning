@@ -16,12 +16,11 @@ Write-Host "Skip tests:  $SkipTests"
 
 Push-Location $SdkRoot
 try {
+    python -m pip install --upgrade pip
+
     if (-not $SkipTests) {
-        python -m pip install --upgrade pip
         python -m pip install -e ".[dev]"
         python -m pytest -q
-    } else {
-        python -m pip install --upgrade pip
     }
 
     python -m pip install pyinstaller
