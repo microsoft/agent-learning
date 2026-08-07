@@ -177,6 +177,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.release-metadata.outputs.tag }}
           TAG_EXISTS: ${{ needs.release-metadata.outputs.tag-exists }}
         run: |
