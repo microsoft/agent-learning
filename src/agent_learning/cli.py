@@ -394,12 +394,7 @@ def _cmd_show_task_policy(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
-    payload: Any
-    if args.history == 1:
-        payload = snapshots[0].to_dict()
-    else:
-        payload = [snapshot.to_dict() for snapshot in snapshots]
-    print(json.dumps(payload, indent=2))
+    print(json.dumps([snapshot.to_dict() for snapshot in snapshots], indent=2))
     return 0
 
 

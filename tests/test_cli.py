@@ -131,7 +131,7 @@ def test_task_commands_persist_a_complete_episode(tmp_path: Path, capsys) -> Non
             str(store_dir),
         ]
     ) == 0
-    assert _stdout_json(capsys)["id"] == policy["id"]
+    assert _stdout_json(capsys)[0]["id"] == policy["id"]
 
 
 def test_agent_listing_and_completed_episode_count(tmp_path: Path, capsys) -> None:
