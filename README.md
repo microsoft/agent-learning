@@ -117,30 +117,77 @@ runner = LearningRunner(policy=policy)
 run = runner.run_offline_batch("nba", episode_limit=500)
 ```
 
-### Learn from Scout actions locally
+### Integrate with Scout
 
 `ScoutLearningAdapter` wraps synchronous or asynchronous Scout actions and
 appends one JSONL record per execution. Each record includes the requested
 intent, selected action path, result or error, duration, and offline intent,
 adherence, and completion judge signals.
 
-```python
-from agent_learning import ScoutLearningAdapter
+1. Install the SDK in the environment that runs Scout:
 
-learning = ScoutLearningAdapter("scout-learning.jsonl")
+   ```bash
+   pip install agents-learning-sdk
+   ```
+
+2. Create one adapter for the process. The output defaults to
+   `scout-learning.jsonl`, or you can provide another local path:
+
+   ```python
+   from agent_learning import ScoutLearningAdapter
+
+   learning = ScoutLearningAdapter("data/scout-learning.jsonl")
+   ```
+
+3. Wrap each Scout automation, skill, or MCP call with `execute`. Pass:
+
+   - `intent`: the user's requested outcome.
+   - `action_path`: stable path segments identifying the Scout action.
+   - `action`: the callable Scout would normally invoke.
+   - `args` or `action_kwargs`: inputs for that callable, when needed.
+   - `contract` and `expected_tokens`: optional criteria for adherence and
+     completion signals.
+
+```python
 result = learning.execute(
     intent="Create the weekly summary",
     action_path=["automation", "weekly-summary"],
     action=create_summary,
+    action_kwargs={"week": "2026-W32"},
+    contract={"required_substrings": ["summary"]},
     expected_tokens=["summary"],
 )
 ```
 
-The adapter uses the SDK's pure-Python judges and local file I/O, so it
-requires no Azure configuration. See
-[examples/scout_learning.py](examples/scout_learning.py) for automation, skill, and
-MCP examples, including asynchronous MCP execution. Review the log with any
-JSONL-aware tool, or run `python -m json.tool --json-lines scout-learning.jsonl`.
+For an asynchronous Scout action, use `execute_async` and pass its async
+callable directly:
+
+```python
+issues = await learning.execute_async(
+    intent="List open issues",
+    action_path=["mcp", "github", "list_issues"],
+    action=list_issues,
+    action_kwargs={"owner": "microsoft", "repo": "agents-learning-sdk"},
+    expected_tokens=["issues"],
+)
+```
+
+The adapter returns the original callable's result unchanged. If the callable
+raises, it records the failure and re-raises the same exception so existing
+Scout error handling continues to work. Sensitive values in intents, results,
+and errors are redacted before records are written.
+
+The integration uses the SDK's pure-Python judges and local file I/O, so it
+requires no Azure configuration. Use stable `action_path` values to group
+records by automation, skill, or MCP tool when analyzing the learning data.
+Review the output with any JSONL-aware tool, or run:
+
+```bash
+python -m json.tool --json-lines data/scout-learning.jsonl
+```
+
+See [examples/scout_learning.py](examples/scout_learning.py) for a complete
+runnable integration covering automation, skill, and asynchronous MCP calls.
 
 The included CLI exposes the same flow:
 
