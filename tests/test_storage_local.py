@@ -77,6 +77,44 @@ def test_policy_versioning(tmp_path: Path) -> None:
     assert latest.version == 1
 
 
+def test_agent_listing_and_completed_episode_count(tmp_path: Path) -> None:
+    store = LocalFileStore(tmp_path)
+    store.store_policy(
+        PolicySnapshot(
+            agent_id="scout",
+            actions=[Action(id="a")],
+            metadata={"name": "Scout"},
+        )
+    )
+    store.store_policy(
+        PolicySnapshot(agent_id="writer", actions=[Action(id="a")])
+    )
+    store.store_episode(
+        Episode(
+            id="completed",
+            agent_id="scout",
+            metadata={"status": "completed"},
+        )
+    )
+    store.store_episode(
+        Episode(
+            id="in-progress",
+            agent_id="scout",
+            metadata={"status": "in_progress"},
+        )
+    )
+
+    assert [agent.to_dict() for agent in store.list_agents()] == [
+        {"id": "scout", "name": "Scout"},
+        {"id": "writer", "name": "writer"},
+    ]
+    assert store.count_completed_episodes("scout") == 1
+    assert [
+        episode.id
+        for episode in store.query_episodes("scout", completed_only=True)
+    ] == ["completed"]
+
+
 def test_query_filters_and_limit(tmp_path: Path) -> None:
     store = LocalFileStore(tmp_path)
     store.store_episode(Episode(agent_id="dq", created_at="2024-01-01T00:00:00+00:00", policy_id="p1"))

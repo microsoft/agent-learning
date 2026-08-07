@@ -488,15 +488,15 @@ class ShapingConfig:
 class LearnerConfig:
     """Hyperparameters for the REINFORCE-with-baseline learner."""
 
-    min_train_episodes: int = field(
-        default_factory=lambda: _env_int("AGENT_LEARNING_MIN_TRAIN_EPISODES", 5)
-    )
     learning_rate: float = field(default_factory=lambda: _env_float("AGENT_LEARNING_LR", 0.05))
     baseline_decay: float = field(default_factory=lambda: _env_float("AGENT_LEARNING_BASELINE_DECAY", 0.9))
     entropy_bonus: float = field(default_factory=lambda: _env_float("AGENT_LEARNING_ENTROPY_BONUS", 0.01))
     max_logit_abs: float = field(default_factory=lambda: _env_float("AGENT_LEARNING_MAX_LOGIT", 10.0))
     importance_clip: float = field(
         default_factory=lambda: _env_float("AGENT_LEARNING_IMPORTANCE_CLIP", 5.0)
+    )
+    min_train_episodes: int = field(
+        default_factory=lambda: _env_int("AGENT_LEARNING_MIN_TRAIN_EPISODES", 5)
     )
 
 

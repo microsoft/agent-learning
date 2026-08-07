@@ -215,7 +215,10 @@ and `episode_id`. After Scout applies that action, `task-complete` updates the
 same local episode with the final output.
 
 ```bash
-agent-learn policy-init --agent-id scout --actions ./actions.json
+agent-learn policy-init \
+  --agent-id scout \
+  --agent-name "Scout Agent" \
+  --actions ./actions.json
 
 agent-learn task-intent \
   --agent-id scout \
@@ -230,9 +233,19 @@ agent-learn task-complete \
 
 The episode records the user intent, context, policy version, selected action,
 selection probability, and completion output under
-`./data/agent-learning/store` by default. Run `agent-learn train --agent-id
-scout` periodically to judge completed episodes and update the policy, then
-inspect it with `agent-learn policy --agent-id scout`.
+`./data/agent-learning/store` by default. Inspect known agents and their
+completed episode counts, then train once enough data is available:
+
+```bash
+agent-learn agents-list
+agent-learn agents-episodes-count scout
+agent-learn train --agent-id scout --limit 200
+agent-learn policy --agent-id scout
+```
+
+Training requires five completed episodes by default and ignores episodes that
+are still in progress. Set `AGENT_LEARNING_MIN_TRAIN_EPISODES` or pass
+`--min-episodes` to configure the threshold.
 
 ## Examples
 

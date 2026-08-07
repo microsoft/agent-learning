@@ -60,3 +60,47 @@ def test_policy_versioning() -> None:
     latest = store.get_latest_policy("dq")
     assert latest is not None
     assert latest.version == 1
+
+
+def test_agent_listing_and_completed_episode_queries() -> None:
+    store = InMemoryStore()
+    store.store_policy(
+        PolicySnapshot(
+            agent_id="scout",
+            actions=[Action(id="a")],
+            metadata={"name": "Scout"},
+        )
+    )
+    store.store_episode(
+        Episode(
+            id="completed",
+            agent_id="scout",
+            metadata={"status": "completed"},
+        )
+    )
+    store.store_episode(
+        Episode(
+            id="in-progress",
+            agent_id="scout",
+            user_input="Task",
+            assistant_output="Partial output",
+            metadata={"status": "in_progress"},
+        )
+    )
+    store.store_episode(
+        Episode(
+            id="captured",
+            agent_id="scout",
+            user_input="Task",
+            assistant_output="Finished output",
+        )
+    )
+
+    assert [agent.to_dict() for agent in store.list_agents()] == [
+        {"id": "scout", "name": "Scout"}
+    ]
+    assert store.count_completed_episodes("scout") == 2
+    assert {
+        episode.id
+        for episode in store.query_episodes("scout", completed_only=True)
+    } == {"completed", "captured"}

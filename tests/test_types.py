@@ -34,6 +34,20 @@ def test_episode_roundtrip() -> None:
     assert other.action_logprob == -0.5
 
 
+def test_episode_completion_state() -> None:
+    assert Episode(metadata={"status": "completed"}).is_complete is True
+    assert (
+        Episode(
+            user_input="task",
+            assistant_output="partial",
+            metadata={"status": "in_progress"},
+        ).is_complete
+        is False
+    )
+    assert Episode(user_input="task", assistant_output="done").is_complete is True
+    assert Episode(user_input="task").is_complete is False
+
+
 def test_reward_roundtrip() -> None:
     r = Reward(
         episode_id="ep1",
