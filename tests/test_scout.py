@@ -1,4 +1,4 @@
-"""Tests for the local Scout audit adapter."""
+"""Tests for the local Scout learning adapter."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_learning.scout import ScoutAuditAdapter
+from agent_learning.scout import ScoutLearningAdapter
 
 
 def _records(path: Path) -> list[dict]:
@@ -15,8 +15,8 @@ def _records(path: Path) -> list[dict]:
 
 
 def test_execute_records_outcome_and_local_judge_signals(tmp_path: Path) -> None:
-    path = tmp_path / "scout-audit.jsonl"
-    adapter = ScoutAuditAdapter(path)
+    path = tmp_path / "scout-learning.jsonl"
+    adapter = ScoutLearningAdapter(path)
 
     result = adapter.execute(
         intent="Create the weekly summary",
@@ -40,8 +40,8 @@ def test_execute_records_outcome_and_local_judge_signals(tmp_path: Path) -> None
 
 
 def test_execute_records_failure_then_reraises(tmp_path: Path) -> None:
-    path = tmp_path / "scout-audit.jsonl"
-    adapter = ScoutAuditAdapter(path)
+    path = tmp_path / "scout-learning.jsonl"
+    adapter = ScoutLearningAdapter(path)
 
     def fail() -> None:
         raise RuntimeError("skill failed")
@@ -67,7 +67,7 @@ def test_execute_rejects_invalid_action_path_before_running(tmp_path: Path) -> N
         called = True
 
     with pytest.raises(ValueError, match="action_path"):
-        ScoutAuditAdapter(tmp_path / "audit.jsonl").execute(
+        ScoutLearningAdapter(tmp_path / "learning.jsonl").execute(
             intent="Do something",
             action_path=[],
             action=action,
@@ -78,13 +78,13 @@ def test_execute_rejects_invalid_action_path_before_running(tmp_path: Path) -> N
 
 def test_adapter_requires_all_three_judges(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="intent, adherence, and completion"):
-        ScoutAuditAdapter(tmp_path / "audit.jsonl", judges=())  # type: ignore[arg-type]
+        ScoutLearningAdapter(tmp_path / "learning.jsonl", judges=())  # type: ignore[arg-type]
 
 
 @pytest.mark.asyncio
 async def test_execute_async_appends_one_record_per_action(tmp_path: Path) -> None:
-    path = tmp_path / "scout-audit.jsonl"
-    adapter = ScoutAuditAdapter(path)
+    path = tmp_path / "scout-learning.jsonl"
+    adapter = ScoutLearningAdapter(path)
 
     async def call_mcp(value: int) -> str:
         return f"Found {value} issues"
@@ -104,8 +104,8 @@ async def test_execute_async_appends_one_record_per_action(tmp_path: Path) -> No
 
 
 def test_sensitive_values_are_redacted(tmp_path: Path) -> None:
-    path = tmp_path / "scout-audit.jsonl"
-    adapter = ScoutAuditAdapter(path)
+    path = tmp_path / "scout-learning.jsonl"
+    adapter = ScoutLearningAdapter(path)
 
     adapter.execute(
         intent="Use token=private-value",

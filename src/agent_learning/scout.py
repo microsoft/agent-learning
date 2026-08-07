@@ -1,4 +1,4 @@
-"""Local audit adapter for Scout action executions."""
+"""Local learning adapter for Scout action executions."""
 
 from __future__ import annotations
 
@@ -18,18 +18,18 @@ from .judges.stdlib import StdlibAdherenceJudge, StdlibCompletionJudge, StdlibIn
 T = TypeVar("T")
 
 
-class ScoutAuditAdapter:
-    """Execute Scout actions and append inspectable audit records to JSONL."""
+class ScoutLearningAdapter:
+    """Execute Scout actions and append inspectable learning records to JSONL."""
 
     def __init__(
         self,
-        audit_path: str | Path = "scout-audit.jsonl",
+        learning_path: str | Path = "scout-learning.jsonl",
         *,
         judges: tuple[Judge, Judge, Judge] | None = None,
     ) -> None:
         if judges is not None and len(judges) != 3:
             raise ValueError("judges must contain intent, adherence, and completion judges")
-        self.audit_path = Path(audit_path).expanduser()
+        self.learning_path = Path(learning_path).expanduser()
         defaults = cast(
             tuple[Judge, Judge, Judge],
             (StdlibIntentJudge(), StdlibAdherenceJudge(), StdlibCompletionJudge()),
@@ -48,7 +48,7 @@ class ScoutAuditAdapter:
         contract: dict[str, Any] | None = None,
         expected_tokens: Sequence[str] | None = None,
     ) -> T:
-        """Run one synchronous Scout action, audit it, and return its result."""
+        """Run one synchronous Scout action, record it for learning, and return its result."""
         path = _action_path(action_path)
         started = time.monotonic()
         try:
@@ -89,7 +89,7 @@ class ScoutAuditAdapter:
         contract: dict[str, Any] | None = None,
         expected_tokens: Sequence[str] | None = None,
     ) -> T:
-        """Run one asynchronous Scout action, audit it, and return its result."""
+        """Run one asynchronous Scout action, record it for learning, and return its result."""
         path = _action_path(action_path)
         started = time.monotonic()
         try:
@@ -156,9 +156,9 @@ class ScoutAuditAdapter:
             },
             "judge_signals": signals,
         }
-        self.audit_path.parent.mkdir(parents=True, exist_ok=True)
+        self.learning_path.parent.mkdir(parents=True, exist_ok=True)
         line = json.dumps(record, ensure_ascii=False, separators=(",", ":"))
-        with self._write_lock, self.audit_path.open("a", encoding="utf-8") as handle:
+        with self._write_lock, self.learning_path.open("a", encoding="utf-8") as handle:
             handle.write(line + "\n")
 
     def _evaluate(
@@ -179,7 +179,7 @@ class ScoutAuditAdapter:
                     expected_tokens=expected_tokens,
                 )
                 signals[name] = _score_dict(score)
-            except Exception as exc:  # noqa: BLE001 - judge failures belong in the audit record
+            except Exception as exc:  # noqa: BLE001 - judge failures belong in the learning record
                 signals[name] = {
                     "status": "error",
                     "error": redact(str(exc)),
@@ -221,4 +221,4 @@ def _json_safe(value: Any) -> Any:
     return redact(str(value))
 
 
-__all__ = ["ScoutAuditAdapter"]
+__all__ = ["ScoutLearningAdapter"]

@@ -53,7 +53,7 @@ The runtime configuration carries two top-level pieces:
 
 A single factory entry point hides the backend choice. The factory inspects the mode, the installed extras, and the configuration, then returns the three judges (intent, adherence, completion) bound to the appropriate tier. Callers never instantiate a judge directly.
 
-Snapshot metadata carries the resolved tier and mode alongside each scored episode, so historical episodes know which scorer produced them. Re-shaping a past episode under a new tier becomes a deterministic, auditable operation.
+Snapshot metadata carries the resolved tier and mode alongside each scored episode, so historical episodes know which scorer produced them. Re-shaping a past episode under a new tier becomes a deterministic, reproducible operation.
 
 ## The four-tier capability stack
 

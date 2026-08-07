@@ -333,7 +333,7 @@ def main() -> None:
     _report(policy, "learned")
 
     # Show the judge decomposition for one episode of each template so the
-    # reward gradient is auditable.
+    # reward gradient is reproducible.
     print("\n=== Per-template judge scores (single ticket) ===")
     ticket = TICKETS[0]
     for action_id, template in TEMPLATES.items():

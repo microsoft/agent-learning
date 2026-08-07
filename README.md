@@ -42,7 +42,7 @@ that run in your existing Python process:
 
 Every episode, reward, run, and deployment is captured by the
 configured store — in-memory or local files by default, or Cosmos DB —
-giving you a complete lineage and audit trail of how the policy
+giving you a complete learning history of how the policy
 evolved over time.
 
 ## Install
@@ -117,18 +117,18 @@ runner = LearningRunner(policy=policy)
 run = runner.run_offline_batch("nba", episode_limit=500)
 ```
 
-### Audit Scout actions locally
+### Learn from Scout actions locally
 
-`ScoutAuditAdapter` wraps synchronous or asynchronous Scout actions and
+`ScoutLearningAdapter` wraps synchronous or asynchronous Scout actions and
 appends one JSONL record per execution. Each record includes the requested
 intent, selected action path, result or error, duration, and offline intent,
 adherence, and completion judge signals.
 
 ```python
-from agent_learning import ScoutAuditAdapter
+from agent_learning import ScoutLearningAdapter
 
-audit = ScoutAuditAdapter("scout-audit.jsonl")
-result = audit.execute(
+learning = ScoutLearningAdapter("scout-learning.jsonl")
+result = learning.execute(
     intent="Create the weekly summary",
     action_path=["automation", "weekly-summary"],
     action=create_summary,
@@ -138,9 +138,9 @@ result = audit.execute(
 
 The adapter uses the SDK's pure-Python judges and local file I/O, so it
 requires no Azure configuration. See
-[examples/scout_audit.py](examples/scout_audit.py) for automation, skill, and
+[examples/scout_learning.py](examples/scout_learning.py) for automation, skill, and
 MCP examples, including asynchronous MCP execution. Review the log with any
-JSONL-aware tool, or run `python -m json.tool --json-lines scout-audit.jsonl`.
+JSONL-aware tool, or run `python -m json.tool --json-lines scout-learning.jsonl`.
 
 The included CLI exposes the same flow:
 
@@ -161,7 +161,7 @@ credentials** required.
 | [quickstart.py](examples/quickstart.py) | Stubbed constant | `SoftmaxPolicy`, built-in `ReinforceLearner`, `RewardShaper`, `LearningRunner` |
 | [next_best_action.py](examples/next_best_action.py) | Simulated outcome | `ContextualSoftmaxPolicy` (contextual bandit), a contextual policy-gradient learner |
 | [judged_optimization.py](examples/judged_optimization.py) | **Real Tier 1 judges** | `build_judges` (tiered judges), `JudgeScore`→`MetricResult`, routing + hallucination **shaping** penalties, rich `Episode` records |
-| [scout_audit.py](examples/scout_audit.py) | Tier 1 judge signals | `ScoutAuditAdapter` for automation, skill, and MCP execution |
+| [scout_learning.py](examples/scout_learning.py) | Tier 1 judge signals | `ScoutLearningAdapter` for automation, skill, and MCP execution |
 
 Start with [judged_optimization.py](examples/judged_optimization.py) to
 see the SDK's judge layer, reward shaping, metrics, policy, learner, and
