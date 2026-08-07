@@ -2,7 +2,7 @@
   #define AppVersion "dev"
 #endif
 
-#define AppName "Agents Learning SDK CLI"
+#define AppName "Agent Learning CLI"
 #define AppExeName "agent-learn.exe"
 #define AppPublisher "Microsoft"
 
@@ -11,8 +11,8 @@ AppId={{8D2A4479-E23B-4449-BEA5-9F846ECF08F9}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
-DefaultDirName={autopf}\Agents Learning SDK
-DefaultGroupName=Agents Learning SDK
+DefaultDirName={autopf}\Agent Learning
+DefaultGroupName=Agent Learning
 DisableProgramGroupPage=yes
 ChangesEnvironment=yes
 ArchitecturesAllowed=x64compatible
@@ -22,7 +22,7 @@ SolidCompression=yes
 WizardStyle=modern
 SourceDir=..\..
 OutputDir=dist-installer
-OutputBaseFilename=agents-learning-sdk-cli-{#AppVersion}-windows-x64
+OutputBaseFilename=agent-learning-cli-{#AppVersion}-windows-x64
 UninstallDisplayIcon={app}\{#AppExeName}
 
 [Languages]
@@ -35,12 +35,12 @@ Name: "addtopath"; Description: "Add agent-learn command to user PATH"; GroupDes
 Source: "dist\agent-learn.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\Agents Learning CLI"; Filename: "{app}\{#AppExeName}"
+Name: "{autoprograms}\Agent Learning CLI"; Filename: "{app}\{#AppExeName}"
 
 [Registry]
 Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}"; Tasks: addtopath; Check: HasNonEmptyPathValue() and NeedsAddPath(ExpandConstant('{app}'))
 Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{app}"; Tasks: addtopath; Check: not HasNonEmptyPathValue()
-Root: HKCU; Subkey: "Software\AgentsLearningSDKCLI"; ValueType: string; ValueName: "AddedToUserPath"; ValueData: "1"; Tasks: addtopath; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\AgentLearningCLI"; ValueType: string; ValueName: "AddedToUserPath"; ValueData: "1"; Tasks: addtopath; Flags: uninsdeletekey
 
 [Code]
 function HasNonEmptyPathValue: Boolean;
@@ -150,7 +150,7 @@ var
 begin
   if CurUninstallStep <> usUninstall then
     Exit;
-  if not RegQueryStringValue(HKCU, 'Software\AgentsLearningSDKCLI', 'AddedToUserPath', AddedToPath) then
+  if not RegQueryStringValue(HKCU, 'Software\AgentLearningCLI', 'AddedToUserPath', AddedToPath) then
     Exit;
   if not RegQueryStringValue(HKCU, 'Environment', 'Path', CurrentPath) then
     Exit;

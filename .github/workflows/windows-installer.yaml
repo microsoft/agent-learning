@@ -55,7 +55,7 @@ jobs:
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: agents-learning-sdk-windows-installer-${{ steps.vars.outputs.app_version }}
+          name: agent-learning-windows-installer-${{ steps.vars.outputs.app_version }}
           path: |
             dist/agent-learn.exe
             dist-installer/*.exe

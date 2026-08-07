@@ -1,4 +1,4 @@
-# agents-learning-sdk
+# agent-learning
 
 Native reinforcement learning SDK for AI agents. An in-process
 learner optimizes a small, interpretable policy over discrete agent choices (e.g., "take action A", "take action B", "take action C") using AI Evaluation scores as the reward
@@ -41,7 +41,7 @@ evolved over time.
 
 For a Python-independent installation, download `agent-learn.exe` or the
 standalone installer from the
-[latest GitHub release](https://github.com/microsoft/agents-learning-sdk/releases/latest).
+[latest GitHub release](https://github.com/microsoft/agent-learning/releases/latest).
 The installer can add its installation directory to your user `PATH`, so
 `agent-learn` works from PowerShell or Command Prompt without Python or `pip`.
 
@@ -52,10 +52,10 @@ agent-learn.exe --help
 ### Python SDK
 
 Released versions are published to PyPI:
-<https://pypi.org/project/agents-learning-sdk/>.
+<https://pypi.org/project/agent-learning/>.
 
 ```powershell
-py -m pip install agents-learning-sdk
+py -m pip install agent-learning
 agent-learn.exe --help
 ```
 

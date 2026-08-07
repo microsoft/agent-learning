@@ -9,7 +9,7 @@ $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $SdkRoot = Resolve-Path (Join-Path $ScriptDir "..")
 
-Write-Host "=== agents-learning-sdk Windows installer build ===" -ForegroundColor Cyan
+Write-Host "=== agent-learning Windows installer build ===" -ForegroundColor Cyan
 Write-Host "SDK root:    $SdkRoot"
 Write-Host "App version: $AppVersion"
 Write-Host "Skip tests:  $SkipTests"
