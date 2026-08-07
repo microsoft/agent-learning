@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Union
 from urllib.parse import quote
 
-from ..types import Episode, MetricResult, PolicySnapshot, Reward, TrainingRun
+from ..types import AgentInfo, Episode, MetricResult, PolicySnapshot, Reward, TrainingRun
 from .base import LearningStore
 
 logger = logging.getLogger(__name__)
@@ -119,6 +119,20 @@ class LocalFileStore(LearningStore):
                 docs.append(doc)
         return docs
 
+    def _read_all_docs(self, kind: str) -> List[Dict[str, Any]]:
+        """Read all one-document-per-file records across agent partitions."""
+        root = self._root / kind
+        if not root.is_dir():
+            return []
+        docs: List[Dict[str, Any]] = []
+        for entry in root.glob("*/*.json"):
+            if not entry.is_file():
+                continue
+            doc = self._read_json(entry)
+            if isinstance(doc, dict):
+                docs.append(doc)
+        return docs
+
     # ------------------------------------------------------------------
     # Episodes
     # ------------------------------------------------------------------
@@ -141,6 +155,7 @@ class LocalFileStore(LearningStore):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         policy_id: Optional[str] = None,
+        completed_only: bool = False,
     ) -> List[Episode]:
         results = [
             ep
@@ -148,9 +163,28 @@ class LocalFileStore(LearningStore):
             if (start_date is None or ep.created_at >= start_date)
             and (end_date is None or ep.created_at <= end_date)
             and (policy_id is None or ep.policy_id == policy_id)
+            and (not completed_only or ep.is_complete)
         ]
         results.sort(key=lambda ep: ep.created_at, reverse=True)
         return results[:limit]
+
+    def count_completed_episodes(self, agent_id: str) -> int:
+        return sum(
+            Episode.from_dict(doc).is_complete
+            for doc in self._read_dir_docs("episodes", agent_id)
+        )
+
+    def list_agents(self) -> List[AgentInfo]:
+        latest: Dict[str, PolicySnapshot] = {}
+        for doc in self._read_all_docs("policies"):
+            policy = PolicySnapshot.from_dict(doc)
+            current = latest.get(policy.agent_id)
+            if current is None or policy.version > current.version:
+                latest[policy.agent_id] = policy
+        return [
+            AgentInfo.from_metadata(agent_id, latest[agent_id].metadata)
+            for agent_id in sorted(latest)
+        ]
 
     # ------------------------------------------------------------------
     # Metric results

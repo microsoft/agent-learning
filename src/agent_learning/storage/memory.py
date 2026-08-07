@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Dict, Iterable, List, Optional, Tuple
 
-from ..types import Episode, MetricResult, PolicySnapshot, Reward, TrainingRun
+from ..types import AgentInfo, Episode, MetricResult, PolicySnapshot, Reward, TrainingRun
 from .base import LearningStore
 
 
@@ -39,6 +39,7 @@ class InMemoryStore(LearningStore):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         policy_id: Optional[str] = None,
+        completed_only: bool = False,
     ) -> List[Episode]:
         results = [
             ep
@@ -47,9 +48,28 @@ class InMemoryStore(LearningStore):
             and (start_date is None or ep.created_at >= start_date)
             and (end_date is None or ep.created_at <= end_date)
             and (policy_id is None or ep.policy_id == policy_id)
+            and (not completed_only or ep.is_complete)
         ]
         results.sort(key=lambda ep: ep.created_at, reverse=True)
         return results[:limit]
+
+    def count_completed_episodes(self, agent_id: str) -> int:
+        return sum(
+            episode.is_complete
+            for (_episode_id, stored_agent_id), episode in self._episodes.items()
+            if stored_agent_id == agent_id
+        )
+
+    def list_agents(self) -> List[AgentInfo]:
+        latest: Dict[str, PolicySnapshot] = {}
+        for (_policy_id, agent_id), policy in self._policies.items():
+            current = latest.get(agent_id)
+            if current is None or policy.version > current.version:
+                latest[agent_id] = policy
+        return [
+            AgentInfo.from_metadata(agent_id, latest[agent_id].metadata)
+            for agent_id in sorted(latest)
+        ]
 
     # ---- Metric results -------------------------------------------
 

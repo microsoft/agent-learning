@@ -31,10 +31,16 @@ except ImportError:  # pragma: no cover
     IDENTITY_AVAILABLE = False
 
 from ..config import CosmosConfig
-from ..types import Episode, MetricResult, PolicySnapshot, Reward, TrainingRun
+from ..types import AgentInfo, Episode, MetricResult, PolicySnapshot, Reward, TrainingRun
 from .base import LearningStore
 
 logger = logging.getLogger(__name__)
+
+_COMPLETED_EPISODE_SQL = (
+    "(c.metadata.status = 'completed' OR "
+    "(NOT IS_DEFINED(c.metadata.status) "
+    "AND c.user_input != '' AND c.assistant_output != ''))"
+)
 
 
 class CosmosStore(LearningStore):
@@ -144,7 +150,7 @@ class CosmosStore(LearningStore):
         *,
         partition_key: Optional[str] = None,
         cross_partition: bool = False,
-    ) -> List[Dict[str, Any]]:
+    ) -> List[Any]:
         self._ensure_ready()
         kwargs: Dict[str, Any] = {"query": query, "parameters": parameters or []}
         if partition_key is not None:
@@ -177,6 +183,7 @@ class CosmosStore(LearningStore):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         policy_id: Optional[str] = None,
+        completed_only: bool = False,
     ) -> List[Episode]:
         clauses = ["c.agent_id = @agent_id"]
         params: List[Dict[str, Any]] = [{"name": "@agent_id", "value": agent_id}]
@@ -189,6 +196,8 @@ class CosmosStore(LearningStore):
         if policy_id:
             clauses.append("c.policy_id = @policy_id")
             params.append({"name": "@policy_id", "value": policy_id})
+        if completed_only:
+            clauses.append(_COMPLETED_EPISODE_SQL)
 
         query = (
             "SELECT * FROM c WHERE "
@@ -198,6 +207,36 @@ class CosmosStore(LearningStore):
         )
         docs = self._query("episodes", query, params, partition_key=agent_id)
         return [Episode.from_dict(d) for d in docs]
+
+    def count_completed_episodes(self, agent_id: str) -> int:
+        query = (
+            "SELECT VALUE COUNT(1) FROM c WHERE c.agent_id = @agent_id AND "
+            + _COMPLETED_EPISODE_SQL
+        )
+        params = [{"name": "@agent_id", "value": agent_id}]
+        counts = self._query("episodes", query, params, partition_key=agent_id)
+        return int(counts[0]) if counts else 0
+
+    def list_agents(self) -> List[AgentInfo]:
+        docs = self._query(
+            "policies",
+            "SELECT c.agent_id, c.version, c.metadata FROM c",
+            cross_partition=True,
+        )
+        latest: Dict[str, Dict[str, Any]] = {}
+        for doc in docs:
+            if not isinstance(doc, dict) or not isinstance(doc.get("agent_id"), str):
+                continue
+            agent_id = doc["agent_id"]
+            current = latest.get(agent_id)
+            if current is None or int(doc.get("version", 0)) > int(
+                current.get("version", 0)
+            ):
+                latest[agent_id] = doc
+        return [
+            AgentInfo.from_metadata(agent_id, latest[agent_id].get("metadata") or {})
+            for agent_id in sorted(latest)
+        ]
 
     # ------------------------------------------------------------------
     # Metric results

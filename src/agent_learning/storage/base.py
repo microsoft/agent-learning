@@ -12,7 +12,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Iterable, List, Optional
 
-from ..types import Episode, MetricResult, PolicySnapshot, Reward, TrainingRun
+from ..types import AgentInfo, Episode, MetricResult, PolicySnapshot, Reward, TrainingRun
 
 
 class LearningStore(ABC):
@@ -37,8 +37,17 @@ class LearningStore(ABC):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         policy_id: Optional[str] = None,
+        completed_only: bool = False,
     ) -> List[Episode]:
         """List episodes filtered by optional time window / policy id."""
+
+    @abstractmethod
+    def count_completed_episodes(self, agent_id: str) -> int:
+        """Return the number of finished episodes stored for an agent."""
+
+    @abstractmethod
+    def list_agents(self) -> List[AgentInfo]:
+        """List agents that have a stored policy snapshot."""
 
     # ---- Metric results -------------------------------------------
 

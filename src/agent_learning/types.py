@@ -67,6 +67,29 @@ class TrainingStatus(str, Enum):
 
 
 # ---------------------------------------------------------------------------
+# Agent
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class AgentInfo:
+    """Display information for an agent known to a learning store."""
+
+    id: str
+    name: str
+
+    @classmethod
+    def from_metadata(cls, agent_id: str, metadata: Dict[str, Any]) -> "AgentInfo":
+        name = metadata.get("name") or metadata.get("agent_name")
+        if not isinstance(name, str) or not name.strip():
+            name = agent_id
+        return cls(id=agent_id, name=name)
+
+    def to_dict(self) -> Dict[str, str]:
+        return {"id": self.id, "name": self.name}
+
+
+# ---------------------------------------------------------------------------
 # Episode
 # ---------------------------------------------------------------------------
 
@@ -131,6 +154,14 @@ class Episode:
     token_usage: Optional[Dict[str, int]] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
     created_at: str = field(default_factory=_utcnow_iso)
+
+    @property
+    def is_complete(self) -> bool:
+        """Whether the episode contains a finished agent interaction."""
+        status = self.metadata.get("status")
+        if status is not None:
+            return status == "completed"
+        return bool(self.user_input.strip() and self.assistant_output.strip())
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -414,6 +445,7 @@ class TrainingRun:
 
 __all__ = [
     "Action",
+    "AgentInfo",
     "Episode",
     "MetricName",
     "MetricResult",
