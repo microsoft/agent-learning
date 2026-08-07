@@ -94,6 +94,11 @@ variables above) for durable Cosmos DB persistence, or `=local` to
 persist to JSON files on disk. When the judge configuration is
 missing, the SDK skips evaluations so unit tests still pass.
 
+The `agent-learn` CLI defaults to the local file store because each command
+runs in a separate process. Use `--store-dir` on its commands to select a
+different local directory, or set `AGENT_LEARNING_STORE_BACKEND` explicitly
+to use another configured backend.
+
 ## Use it
 
 ```python
@@ -197,13 +202,31 @@ python -m json.tool --json-lines data/scout-learning.jsonl
 See [examples/scout_learning.py](examples/scout_learning.py) for a complete
 runnable integration covering automation, skill, and asynchronous MCP calls.
 
-The included CLI exposes the same flow:
+Scout can also use the CLI as a task lifecycle. `task-intent` chooses a policy
+action and starts an episode; its JSON response includes the selected action
+and `episode_id`. After Scout applies that action, `task-complete` updates the
+same local episode with the final output.
 
 ```bash
-agent-learn init-policy --agent-id dq --actions ./actions.json
-agent-learn train --agent-id dq --limit 500
-agent-learn policy --agent-id dq
+agent-learn policy-init --agent-id scout --actions ./actions.json
+
+agent-learn task-intent \
+  --agent-id scout \
+  --intent "Create the weekly summary" \
+  --context '{"week":"2026-W32"}'
+
+agent-learn task-complete \
+  --agent-id scout \
+  --episode-id "<episode_id from task-intent>" \
+  --output "Weekly summary created"
 ```
+
+The episode records the user intent, context, policy version, selected action,
+selection probability, and completion output under
+`./data/agent-learning/store` by default. Run `agent-learn train --agent-id
+scout` periodically to judge completed episodes and update the policy, then
+inspect it with `agent-learn policy --agent-id scout`. The older `init-policy`
+command remains an alias for `policy-init`.
 
 ## Examples
 
