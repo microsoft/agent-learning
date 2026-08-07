@@ -1,8 +1,8 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
 
-name: azure-agents-learning-sdk
+name: agents-learning-sdk
 metadata:
-  template: azure-agents-learning-sdk@1.0.0
+  template: agents-learning-sdk@1.0.0
 
 infra:
   provider: bicep

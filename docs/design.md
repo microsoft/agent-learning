@@ -62,7 +62,7 @@ Snapshot metadata carries the resolved tier and mode alongside each scored episo
 
 ### Tier 1, Python standard library
 
-* Install: `pip install azure-agents-learning-sdk`.
+* Install: `pip install agents-learning-sdk`.
 * Footprint on disk: 0 MB additional.
 * Latency: sub-millisecond.
 * License of new code: MIT (the SDK itself).
@@ -73,7 +73,7 @@ Tier 1 handles the easy bands of all three judges: closed-set intent classificat
 
 ### Tier 2, NLP library
 
-* Install: `pip install azure-agents-learning-sdk[nlp]`.
+* Install: `pip install agents-learning-sdk[nlp]`.
 * Footprint on disk: about 75 MB total.
 * Latency: 1 to 5 milliseconds per judgement.
 * License posture: every package below is permissive (BSD, MIT, or Apache 2.0).
@@ -95,7 +95,7 @@ Tier 2 is the recommended default for production deployments that cannot tolerat
 
 ### Tier 3, small language model
 
-* Install: `pip install azure-agents-learning-sdk[nlp-semantic]` (pulls Tier 2 transitively).
+* Install: `pip install agents-learning-sdk[nlp-semantic]` (pulls Tier 2 transitively).
 * Footprint on disk: about 380 MB total, dominated by PyTorch.
 * Latency: 5 to 30 milliseconds per judgement on CPU.
 * License posture: every package below is permissive (Apache-2.0 or BSD-3).
@@ -115,7 +115,7 @@ Tier 3 makes the judges robust to paraphrase. Intent gains per-class centroids a
 
 ### Tier 4, large language model
 
-* Install: `pip install azure-agents-learning-sdk[llm]`.
+* Install: `pip install agents-learning-sdk[llm]`.
 * Footprint on disk: about 10 MB of Python code plus network egress to the model endpoint.
 * Latency: 200 to 1000 milliseconds per judgement, network-bound.
 * License posture: permissive Python clients; the model itself sits behind Azure OpenAI or Azure AI Foundry and is governed by the customer's deployment contract.

@@ -58,7 +58,7 @@ write_files:
 runcmd:
   - pip3 install --upgrade pip
   - pip3 install azure-cosmos azure-identity numpy
-  - su - {2} -c "git clone https://github.com/microsoft/azure-agents-learning-sdk.git ~/azure-agents-learning-sdk || true"
+  - su - {2} -c "git clone https://github.com/microsoft/agents-learning-sdk.git ~/agents-learning-sdk || true"
 ''', cosmosEndpoint, cosmosDatabaseName, adminUsername)
 
 resource publicIp 'Microsoft.Network/publicIPAddresses@2023-05-01' = if (enablePublicIp) {

@@ -67,7 +67,7 @@ class CosmosStore(LearningStore):
             return
         if not COSMOS_SDK_AVAILABLE:
             raise RuntimeError(
-                "azure-cosmos is not installed. Install azure-agents-learning-sdk with its "
+                "azure-cosmos is not installed. Install agents-learning-sdk with its "
                 "default dependencies or use storage.InMemoryStore for local testing."
             )
         if not self._config.enabled:

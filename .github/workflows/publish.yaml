@@ -50,11 +50,11 @@ jobs:
   publish-testpypi:
     name: Publish to TestPyPI
     needs: build
-    if: ${{ github.repository == 'microsoft/azure-agents-learning-sdk' && github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi' }}
+    if: ${{ github.repository == 'microsoft/agents-learning-sdk' && github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi' }}
     runs-on: ubuntu-latest
     environment:
       name: testpypi
-      url: https://test.pypi.org/p/azure-agents-learning-sdk
+      url: https://test.pypi.org/p/agents-learning-sdk
     permissions:
       id-token: write
     steps:
@@ -71,11 +71,11 @@ jobs:
   publish-pypi:
     name: Publish to PyPI
     needs: build
-    if: ${{ github.repository == 'microsoft/azure-agents-learning-sdk' && (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi')) }}
+    if: ${{ github.repository == 'microsoft/agents-learning-sdk' && (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi')) }}
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/azure-agents-learning-sdk
+      url: https://pypi.org/p/agents-learning-sdk
     permissions:
       id-token: write
     steps:

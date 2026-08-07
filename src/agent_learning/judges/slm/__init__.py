@@ -11,7 +11,7 @@ Install:
 
 .. code-block:: bash
 
-    pip install azure-agents-learning-sdk[slm]
+    pip install agents-learning-sdk[slm]
 """
 
 from .adherence import SlmAdherenceJudge

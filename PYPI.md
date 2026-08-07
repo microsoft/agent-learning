@@ -1,4 +1,4 @@
-# azure-agents-learning-sdk
+# agents-learning-sdk
 
 Native reinforcement learning SDK for AI agents. An in-process learner optimizes a small, interpretable policy over discrete agent configuration choices (prompt variants, retrieval-k, tool selection strategies, …).
 

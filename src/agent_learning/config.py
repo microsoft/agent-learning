@@ -322,7 +322,7 @@ class NlpTextJudgeConfig:
     only (adherence, completion) or the pass threshold (intent).
 
     Requires the ``[nlp]`` extra (``pip install
-    azure-agents-learning-sdk[nlp]``).
+    agents-learning-sdk[nlp]``).
     """
 
     snapshot_dir: str = field(
@@ -359,7 +359,7 @@ class SlmJudgeConfig:
     first use and reused across the three judges in the same process.
 
     Requires the ``[slm]`` extra (``pip install
-    azure-agents-learning-sdk[slm]``). The default ``model_dir``
+    agents-learning-sdk[slm]``). The default ``model_dir``
     expects a Phi-4-mini-instruct INT4 ONNX bundle laid out under
     ``./models/phi-4-mini-instruct-int4-onnx``; set
     ``AGENT_LEARNING_SLM_MODEL_DIR`` to point at any local path.

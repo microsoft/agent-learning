@@ -18,7 +18,7 @@ from ..base import JudgeScore
 
 _SKLEARN_IMPORT_ERROR = (
     "Tier 2 NLP text judges require the [nlp] extra. Install with: "
-    "pip install azure-agents-learning-sdk[nlp]"
+    "pip install agents-learning-sdk[nlp]"
 )
 
 

@@ -41,7 +41,7 @@ from ..base import JudgeScore
 
 _GENAI_IMPORT_ERROR = (
     "Tier 3 SLM judges require the [slm] extra. Install with: "
-    "pip install azure-agents-learning-sdk[slm]"
+    "pip install agents-learning-sdk[slm]"
 )
 
 

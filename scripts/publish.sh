@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scripts/publish.sh
 #
-# Build and publish azure-agents-learning-sdk to PyPI / TestPyPI.
+# Build and publish agents-learning-sdk to PyPI / TestPyPI.
 #
 # Usage:
 #   ./scripts/publish.sh                       # build only (no upload)
@@ -45,7 +45,7 @@ esac
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 SDK_ROOT="$( cd "${SCRIPT_DIR}/.." && pwd )"
 
-echo "=== azure-agents-learning-sdk publish ==="
+echo "=== agents-learning-sdk publish ==="
 echo "SDK root:   ${SDK_ROOT}"
 echo "Target:     ${TARGET}"
 echo "Skip tests: ${SKIP_TESTS}"
@@ -118,7 +118,7 @@ case "${TARGET}" in
         "${PYTHON}" -m twine upload --repository-url https://test.pypi.org/legacy/ dist/*
         echo ""
         echo "Published. View at:"
-        echo "  https://test.pypi.org/project/azure-agents-learning-sdk/"
+        echo "  https://test.pypi.org/project/agents-learning-sdk/"
         ;;
     pypi)
         echo "[5/5] Uploading to PyPI (production) ..."
@@ -129,6 +129,6 @@ case "${TARGET}" in
         "${PYTHON}" -m twine upload dist/*
         echo ""
         echo "Published. View at:"
-        echo "  https://pypi.org/project/azure-agents-learning-sdk/"
+        echo "  https://pypi.org/project/agents-learning-sdk/"
         ;;
 esac

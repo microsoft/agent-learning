@@ -639,7 +639,7 @@ class AgentLearning(Scene):
             "No weight fine-tuning.  No GPUs.  Just tiny CPU gradient steps.",
             font=SANS, font_size=26, color=WHITE, weight=BOLD,
         ).move_to(DOWN * 2.3)
-        name = Text("azure-agents-learning-sdk", font=MONO, font_size=22, color=ACCENT)
+        name = Text("agents-learning-sdk", font=MONO, font_size=22, color=ACCENT)
         name.next_to(tagline, DOWN, buff=0.3)
         self.play(FadeIn(tagline, shift=UP * 0.2), run_time=0.7)
         self.play(FadeIn(name), run_time=0.5)

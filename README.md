@@ -2,13 +2,17 @@
   <img src="images/362d5160ecde885f.png" alt="Agent Learning — Native reinforcement learning for AI agents" width="640" style="max-width:100%; height:auto;" />
 </p>
 
-# azure-agents-learning-sdk
+# agents-learning-sdk
 
 Native reinforcement learning SDK for AI agents. An in-process
 learner optimizes a small, interpretable policy over discrete agent
 configuration choices (prompt variants, retrieval-k, tool selection
 strategies, …) using Azure AI Evaluation judge metrics as the reward
 signal.
+
+<p align="center">
+  <img src="images/agent-learning-loop.svg" alt="Animated loop: Policy chooses an action, Judges score the episode, and Learner updates the policy" width="960" style="max-width:100%; height:auto;" />
+</p>
 
 ## How it works
 
@@ -41,50 +45,13 @@ configured store — in-memory or local files by default, or Cosmos DB —
 giving you a complete lineage and audit trail of how the policy
 evolved over time.
 
-## Architecture
-
-<p align="center">
-  <img src="images/86caebedfa1e2ab5.png" alt="Architecture: Orchestrator turn → Cosmos DB → LearningRunner" width="520" style="max-width:100%; height:auto;" />
-</p>
-
-<details>
-<summary>Text diagram (same flow, plain ASCII)</summary>
-
-```
-┌──────────────────────────────────────────────────────────┐
-│  Orchestrator turn                                       │
-│  ┌─────────────────────────────────────────────────────┐ │
-│  │ policy.choose() → Action                            │ │
-│  │ EpisodeCapture.start(action_id=…, logprob=…)        │ │
-│  │ … run agent, record tool calls …                    │ │
-│  │ EpisodeCapture.end(assistant_output=…)              │ │
-│  └─────────────────────────────────────────────────────┘ │
-│                       │                                  │
-│                       ▼                                  │
-│  ┌─────────────────────────────────────────────────────┐ │
-│  │ Cosmos DB: episodes, metrics, rewards, policies     │ │
-│  └─────────────────────────────────────────────────────┘ │
-│                       │                                  │
-│                       ▼                                  │
-│  ┌─────────────────────────────────────────────────────┐ │
-│  │ LearningRunner.run_offline_batch(agent_id)          │ │
-│  │   ┌─ evaluate (3 judges)                            │ │
-│  │   ├─ shape (weighted sum + penalties → reward)      │ │
-│  │   ├─ persist per-metric + aggregate rewards         │ │
-│  │   └─ ReinforceLearner.update(policy, episodes)      │ │
-│  └─────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────┘
-```
-
-</details>
-
 ## Install
 
 Released versions are published to PyPI:
-<https://pypi.org/project/azure-agents-learning-sdk/>.
+<https://pypi.org/project/agents-learning-sdk/>.
 
 ```bash
-pip install azure-agents-learning-sdk
+pip install agents-learning-sdk
 ```
 
 For local development against a checkout of this repository:
