@@ -58,7 +58,6 @@ llm = [
 
 [project.scripts]
 agent-learn = "agent_learning.cli:main"
-agent-learning = "agent_learning.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/microsoft/agents-learning-sdk"

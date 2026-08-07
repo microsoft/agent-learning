@@ -3,7 +3,7 @@
 #endif
 
 #define AppName "Agents Learning SDK CLI"
-#define AppExeName "agent-learning.exe"
+#define AppExeName "agent-learn.exe"
 #define AppPublisher "Microsoft"
 
 [Setup]
@@ -28,10 +28,10 @@ UninstallDisplayIcon={app}\{#AppExeName}
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "addtopath"; Description: "Add agent-learning command to user PATH"; GroupDescription: "Additional tasks:"
+Name: "addtopath"; Description: "Add agent-learn command to user PATH"; GroupDescription: "Additional tasks:"
 
 [Files]
-Source: "dist\agent-learning.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "dist\agent-learn.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\Agents Learning CLI"; Filename: "{app}\{#AppExeName}"

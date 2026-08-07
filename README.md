@@ -64,8 +64,8 @@ pip install -e .
 
 If Scout runs outside a Python-managed environment, install the standalone
 Windows CLI installer from the repository's **Build Windows CLI Installer**
-workflow artifacts. The installer places `agent-learning.exe` on disk and can
-add its install directory to your user `PATH`, so `agent-learning` works from
+workflow artifacts. The installer places `agent-learn.exe` on disk and can
+add its install directory to your user `PATH`, so `agent-learn` works from
 Command Prompt and PowerShell without `pip install`.
 
 ## Configure
@@ -200,12 +200,10 @@ runnable integration covering automation, skill, and asynchronous MCP calls.
 The included CLI exposes the same flow:
 
 ```bash
-agent-learning init-policy --agent-id dq --actions ./actions.json
-agent-learning train --agent-id dq --limit 500
-agent-learning policy --agent-id dq
+agent-learn init-policy --agent-id dq --actions ./actions.json
+agent-learn train --agent-id dq --limit 500
+agent-learn policy --agent-id dq
 ```
-
-`agent-learn` remains available as a backwards-compatible alias.
 
 ## Examples
 
@@ -241,7 +239,7 @@ src/agent_learning/
 ├── policy/             # SoftmaxPolicy
 ├── learners/           # REINFORCE
 ├── training/           # End-to-end runner
-└── cli.py              # `agent-learning` command-line
+└── cli.py              # `agent-learn` command-line
 ```
 
 ## Unit Testing

@@ -3,13 +3,13 @@
 Examples::
 
     # Run an offline learning batch over the last 500 episodes
-    agent-learning train --agent-id dq --limit 500
+    agent-learn train --agent-id dq --limit 500
 
     # Score (only) recent episodes without updating the policy
-    agent-learning score --agent-id dq --limit 100
+    agent-learn score --agent-id dq --limit 100
 
     # Inspect the current policy
-    agent-learning policy --agent-id dq
+    agent-learn policy --agent-id dq
 
 The CLI is intentionally thin - it loads default components from
 environment variables and delegates to :class:`LearningRunner`.
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="agent-learning", description="Native RL CLI for AI agents.")
+    parser = argparse.ArgumentParser(prog="agent-learn", description="Native RL CLI for AI agents.")
     sub = parser.add_subparsers(dest="command", required=True)
 
     train = sub.add_parser("train", help="Run one offline learning batch.")
@@ -71,7 +71,7 @@ def _cmd_train(args: argparse.Namespace) -> int:
     if snapshot is None:
         print(
             f"No policy found for agent_id={args.agent_id!r}. "
-            "Run `agent-learning init-policy` first.",
+            "Run `agent-learn init-policy` first.",
             file=sys.stderr,
         )
         return 2

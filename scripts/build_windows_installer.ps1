@@ -33,7 +33,7 @@ try {
         --clean `
         --noconfirm `
         --onefile `
-        --name "agent-learning" `
+        --name "agent-learn" `
         "packaging/windows/agent_learning_entry.py"
 
     $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
