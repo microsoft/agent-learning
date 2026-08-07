@@ -1,9 +1,13 @@
-name: Build Windows CLI Installer
+name: Build Windows CLI
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_call:
+    inputs:
+      app_version:
+        description: "Version embedded in the installer name"
+        required: false
+        default: ""
+        type: string
   workflow_dispatch:
     inputs:
       app_version:
@@ -34,8 +38,8 @@ jobs:
         id: vars
         shell: pwsh
         run: |
-          if ("${{ github.event.inputs.app_version }}") {
-            $version = "${{ github.event.inputs.app_version }}"
+          if ("${{ inputs.app_version }}") {
+            $version = "${{ inputs.app_version }}"
           } elseif ("${{ github.ref_type }}" -eq "tag") {
             $version = "${{ github.ref_name }}".TrimStart("v")
           } else {
@@ -48,8 +52,11 @@ jobs:
         run: |
           ./scripts/build_windows_installer.ps1 -AppVersion "${{ steps.vars.outputs.app_version }}"
 
-      - name: Upload installer artifact
+      - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
           name: agents-learning-sdk-windows-installer-${{ steps.vars.outputs.app_version }}
-          path: dist-installer/*.exe
+          path: |
+            dist/agent-learn.exe
+            dist-installer/*.exe
+          if-no-files-found: error
