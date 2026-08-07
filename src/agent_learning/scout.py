@@ -27,6 +27,8 @@ class ScoutAuditAdapter:
         *,
         judges: tuple[Judge, Judge, Judge] | None = None,
     ) -> None:
+        if judges is not None and len(judges) != 3:
+            raise ValueError("judges must contain intent, adherence, and completion judges")
         self.audit_path = Path(audit_path).expanduser()
         defaults = cast(
             tuple[Judge, Judge, Judge],

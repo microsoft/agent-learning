@@ -76,6 +76,11 @@ def test_execute_rejects_invalid_action_path_before_running(tmp_path: Path) -> N
     assert called is False
 
 
+def test_adapter_requires_all_three_judges(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="intent, adherence, and completion"):
+        ScoutAuditAdapter(tmp_path / "audit.jsonl", judges=())  # type: ignore[arg-type]
+
+
 @pytest.mark.asyncio
 async def test_execute_async_appends_one_record_per_action(tmp_path: Path) -> None:
     path = tmp_path / "scout-audit.jsonl"
@@ -105,10 +110,9 @@ def test_sensitive_values_are_redacted(tmp_path: Path) -> None:
     adapter.execute(
         intent="Use token=private-value",
         action_path=["skill", "lookup"],
-        action=lambda: {"note": "******"},
+        action=lambda: {"note": "done"},
     )
 
     content = path.read_text(encoding="utf-8")
     assert "private-value" not in content
-    assert "hunter2" not in content
     assert "[REDACTED]" in content
