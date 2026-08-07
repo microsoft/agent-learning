@@ -225,8 +225,7 @@ The episode records the user intent, context, policy version, selected action,
 selection probability, and completion output under
 `./data/agent-learning/store` by default. Run `agent-learn train --agent-id
 scout` periodically to judge completed episodes and update the policy, then
-inspect it with `agent-learn policy --agent-id scout`. The older `init-policy`
-command remains an alias for `policy-init`.
+inspect it with `agent-learn policy --agent-id scout`.
 
 ## Examples
 

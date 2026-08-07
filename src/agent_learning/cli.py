@@ -77,7 +77,6 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 
     init = sub.add_parser(
         "policy-init",
-        aliases=["init-policy"],
         help="Create the initial policy snapshot from a JSON file.",
     )
     init.add_argument("--agent-id", required=True)
@@ -370,7 +369,6 @@ def main(argv: list[str] | None = None) -> int:
         "score": _cmd_score,
         "policy": _cmd_show_policy,
         "policy-init": _cmd_init_policy,
-        "init-policy": _cmd_init_policy,
         "task-intent": _cmd_task_intent,
         "task-complete": _cmd_task_complete,
     }

@@ -120,27 +120,6 @@ def test_task_commands_persist_a_complete_episode(tmp_path: Path, capsys) -> Non
     assert _stdout_json(capsys)["id"] == policy["id"]
 
 
-def test_init_policy_alias_uses_the_local_store(tmp_path: Path, capsys) -> None:
-    store_dir = tmp_path / "store"
-
-    assert main(
-        [
-            "init-policy",
-            "--agent-id",
-            "scout",
-            "--actions",
-            str(_actions_file(tmp_path)),
-            "--store-dir",
-            str(store_dir),
-        ]
-    ) == 0
-    snapshot = _stdout_json(capsys)
-
-    stored = LocalFileStore(store_dir).get_latest_policy("scout")
-    assert stored is not None
-    assert stored.id == snapshot["id"]
-
-
 def test_task_intent_requires_an_existing_policy(tmp_path: Path, capsys) -> None:
     assert main(
         [
