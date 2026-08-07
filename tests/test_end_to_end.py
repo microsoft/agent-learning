@@ -124,6 +124,10 @@ def test_end_to_end_offline_batch_improves_policy() -> None:
     assert run.status.value == "succeeded"
     assert after.logits["good"] > before.logits["good"]
     assert after.logits["bad"] < before.logits["bad"]
+    policy_history = store.list_policies("dq")
+    assert len(policy_history) == 2
+    assert policy_history[0].id == run.metadata["result_policy_id"]
+    assert policy_history[1].id == before.id
 
     # After a single batch the policy must already lean toward "good".
     # A second batch would push this higher; here we just assert the

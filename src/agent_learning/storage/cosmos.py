@@ -31,7 +31,15 @@ except ImportError:  # pragma: no cover
     IDENTITY_AVAILABLE = False
 
 from ..config import CosmosConfig
-from ..types import AgentInfo, Episode, MetricResult, PolicySnapshot, Reward, TrainingRun
+from ..types import (
+    AgentInfo,
+    AgentTaskInfo,
+    Episode,
+    MetricResult,
+    PolicySnapshot,
+    Reward,
+    TrainingRun,
+)
 from .base import LearningStore
 
 logger = logging.getLogger(__name__)
@@ -183,6 +191,7 @@ class CosmosStore(LearningStore):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         policy_id: Optional[str] = None,
+        task_id: Optional[str] = None,
         completed_only: bool = False,
     ) -> List[Episode]:
         clauses = ["c.agent_id = @agent_id"]
@@ -196,6 +205,9 @@ class CosmosStore(LearningStore):
         if policy_id:
             clauses.append("c.policy_id = @policy_id")
             params.append({"name": "@policy_id", "value": policy_id})
+        if task_id:
+            clauses.append("c.task_id = @task_id")
+            params.append({"name": "@task_id", "value": task_id})
         if completed_only:
             clauses.append(_COMPLETED_EPISODE_SQL)
 
@@ -208,12 +220,18 @@ class CosmosStore(LearningStore):
         docs = self._query("episodes", query, params, partition_key=agent_id)
         return [Episode.from_dict(d) for d in docs]
 
-    def count_completed_episodes(self, agent_id: str) -> int:
-        query = (
-            "SELECT VALUE COUNT(1) FROM c WHERE c.agent_id = @agent_id AND "
-            + _COMPLETED_EPISODE_SQL
-        )
+    def count_completed_episodes(
+        self,
+        agent_id: str,
+        *,
+        task_id: Optional[str] = None,
+    ) -> int:
+        clauses = ["c.agent_id = @agent_id", _COMPLETED_EPISODE_SQL]
         params = [{"name": "@agent_id", "value": agent_id}]
+        if task_id:
+            clauses.append("c.task_id = @task_id")
+            params.append({"name": "@task_id", "value": task_id})
+        query = "SELECT VALUE COUNT(1) FROM c WHERE " + " AND ".join(clauses)
         counts = self._query("episodes", query, params, partition_key=agent_id)
         return int(counts[0]) if counts else 0
 
@@ -236,6 +254,32 @@ class CosmosStore(LearningStore):
         return [
             AgentInfo.from_metadata(agent_id, latest[agent_id].get("metadata") or {})
             for agent_id in sorted(latest)
+        ]
+
+    def list_agent_tasks(self, agent_id: str) -> List[AgentTaskInfo]:
+        query = (
+            "SELECT c.id, c.task_id, c.version, c.created_at, c.metadata "
+            "FROM c WHERE c.agent_id = @agent_id AND IS_DEFINED(c.task_id)"
+        )
+        params = [{"name": "@agent_id", "value": agent_id}]
+        docs = self._query("policies", query, params, partition_key=agent_id)
+        latest: Dict[str, Dict[str, Any]] = {}
+        for doc in docs:
+            if not isinstance(doc, dict) or not isinstance(doc.get("task_id"), str):
+                continue
+            task_id = doc["task_id"]
+            current = latest.get(task_id)
+            if current is None or (
+                int(doc.get("version", 0)),
+                str(doc.get("created_at", "")),
+            ) > (
+                int(current.get("version", 0)),
+                str(current.get("created_at", "")),
+            ):
+                latest[task_id] = doc
+        return [
+            AgentTaskInfo.from_metadata(task_id, latest[task_id].get("metadata") or {})
+            for task_id in sorted(latest)
         ]
 
     # ------------------------------------------------------------------
@@ -304,13 +348,35 @@ class CosmosStore(LearningStore):
         doc = self._read("policies", policy_id, agent_id)
         return PolicySnapshot.from_dict(doc) if doc else None
 
-    def get_latest_policy(self, agent_id: str) -> Optional[PolicySnapshot]:
-        query = (
-            "SELECT TOP 1 * FROM c WHERE c.agent_id = @agent_id ORDER BY c.version DESC"
-        )
+    def list_policies(
+        self,
+        agent_id: str,
+        *,
+        task_id: Optional[str] = None,
+        limit: int = 100,
+    ) -> List[PolicySnapshot]:
+        clauses = ["c.agent_id = @agent_id"]
         params = [{"name": "@agent_id", "value": agent_id}]
+        if task_id:
+            clauses.append("c.task_id = @task_id")
+            params.append({"name": "@task_id", "value": task_id})
+        query = (
+            "SELECT * FROM c WHERE "
+            + " AND ".join(clauses)
+            + " ORDER BY c.version DESC, c.created_at DESC"
+            + f" OFFSET 0 LIMIT {int(limit)}"
+        )
         docs = self._query("policies", query, params, partition_key=agent_id)
-        return PolicySnapshot.from_dict(docs[0]) if docs else None
+        return [PolicySnapshot.from_dict(doc) for doc in docs]
+
+    def get_latest_policy(
+        self,
+        agent_id: str,
+        *,
+        task_id: Optional[str] = None,
+    ) -> Optional[PolicySnapshot]:
+        policies = self.list_policies(agent_id, task_id=task_id, limit=1)
+        return policies[0] if policies else None
 
     # ------------------------------------------------------------------
     # Training runs

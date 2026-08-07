@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from agent_learning.types import (
     Action,
+    AgentTaskInfo,
     Episode,
     MetricName,
     MetricResult,
@@ -19,6 +20,7 @@ from agent_learning.types import (
 def test_episode_roundtrip() -> None:
     ep = Episode(
         agent_id="dq",
+        task_id="summary",
         user_input="hello",
         assistant_output="hi there",
         tool_calls=[ToolCall(name="lookup", arguments={"q": "x"}, result="ok")],
@@ -29,6 +31,7 @@ def test_episode_roundtrip() -> None:
     other = Episode.from_dict(ep.to_dict())
     assert other.id == ep.id
     assert other.agent_id == "dq"
+    assert other.task_id == "summary"
     assert other.tool_calls[0].name == "lookup"
     assert other.action_id == "prompt_A"
     assert other.action_logprob == -0.5
@@ -78,6 +81,7 @@ def test_metric_result_roundtrip() -> None:
 def test_policy_snapshot_roundtrip() -> None:
     snap = PolicySnapshot(
         agent_id="dq",
+        task_id="summary",
         version=2,
         actions=[Action(id="a"), Action(id="b")],
         logits={"a": 0.5, "b": -0.5},
@@ -86,6 +90,7 @@ def test_policy_snapshot_roundtrip() -> None:
         updates_applied=1,
     )
     other = PolicySnapshot.from_dict(snap.to_dict())
+    assert other.task_id == "summary"
     assert other.version == 2
     assert other.logits == {"a": 0.5, "b": -0.5}
     assert other.actions[0].id == "a"
@@ -94,6 +99,7 @@ def test_policy_snapshot_roundtrip() -> None:
 def test_training_run_roundtrip() -> None:
     run = TrainingRun(
         agent_id="dq",
+        task_id="summary",
         policy_id="p1",
         algorithm="reinforce",
         status=TrainingStatus.RUNNING,
@@ -101,6 +107,12 @@ def test_training_run_roundtrip() -> None:
         hyperparameters={"lr": 0.1},
     )
     other = TrainingRun.from_dict(run.to_dict())
+    assert other.task_id == "summary"
     assert other.status == TrainingStatus.RUNNING
     assert other.hyperparameters["lr"] == 0.1
     assert other.episode_ids == ["ep1", "ep2"]
+
+
+def test_agent_task_info_uses_task_name() -> None:
+    task = AgentTaskInfo.from_metadata("weekly-summary", {"task_name": "Weekly summary"})
+    assert task.to_dict() == {"id": "weekly-summary", "name": "Weekly summary"}

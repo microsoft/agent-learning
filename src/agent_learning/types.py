@@ -16,7 +16,6 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -80,10 +79,28 @@ class AgentInfo:
 
     @classmethod
     def from_metadata(cls, agent_id: str, metadata: Dict[str, Any]) -> "AgentInfo":
-        name = metadata.get("name") or metadata.get("agent_name")
+        name = metadata.get("agent_name") or metadata.get("name")
         if not isinstance(name, str) or not name.strip():
             name = agent_id
         return cls(id=agent_id, name=name)
+
+    def to_dict(self) -> Dict[str, str]:
+        return {"id": self.id, "name": self.name}
+
+
+@dataclass(frozen=True)
+class AgentTaskInfo:
+    """Display information for a task with a stored policy."""
+
+    id: str
+    name: str
+
+    @classmethod
+    def from_metadata(cls, task_id: str, metadata: Dict[str, Any]) -> "AgentTaskInfo":
+        name = metadata.get("task_name")
+        if not isinstance(name, str) or not name.strip():
+            name = task_id
+        return cls(id=task_id, name=name)
 
     def to_dict(self) -> Dict[str, str]:
         return {"id": self.id, "name": self.name}
@@ -135,6 +152,7 @@ class Episode:
 
     id: str = field(default_factory=_new_id)
     agent_id: str = "default"
+    task_id: Optional[str] = None
     user_input: str = ""
     assistant_output: str = ""
     system_message: Optional[str] = None
@@ -167,6 +185,7 @@ class Episode:
         return {
             "id": self.id,
             "agent_id": self.agent_id,
+            "task_id": self.task_id,
             "user_input": self.user_input,
             "assistant_output": self.assistant_output,
             "system_message": self.system_message,
@@ -191,6 +210,7 @@ class Episode:
         return cls(
             id=data["id"],
             agent_id=data.get("agent_id", "default"),
+            task_id=data.get("task_id"),
             user_input=data.get("user_input", ""),
             assistant_output=data.get("assistant_output", ""),
             system_message=data.get("system_message"),
@@ -350,6 +370,7 @@ class PolicySnapshot:
 
     id: str = field(default_factory=_new_id)
     agent_id: str = "default"
+    task_id: Optional[str] = None
     version: int = 0
     actions: List[Action] = field(default_factory=list)
     logits: Dict[str, float] = field(default_factory=dict)
@@ -363,6 +384,7 @@ class PolicySnapshot:
         return {
             "id": self.id,
             "agent_id": self.agent_id,
+            "task_id": self.task_id,
             "version": self.version,
             "actions": [a.to_dict() for a in self.actions],
             "logits": self.logits,
@@ -378,6 +400,7 @@ class PolicySnapshot:
         return cls(
             id=data["id"],
             agent_id=data.get("agent_id", "default"),
+            task_id=data.get("task_id"),
             version=int(data.get("version", 0)),
             actions=[Action.from_dict(a) for a in data.get("actions", [])],
             logits={k: float(v) for k, v in data.get("logits", {}).items()},
@@ -395,6 +418,7 @@ class TrainingRun:
 
     id: str = field(default_factory=_new_id)
     agent_id: str = "default"
+    task_id: Optional[str] = None
     policy_id: str = ""
     algorithm: str = "reinforce"
     status: TrainingStatus = TrainingStatus.PENDING
@@ -411,6 +435,7 @@ class TrainingRun:
         return {
             "id": self.id,
             "agent_id": self.agent_id,
+            "task_id": self.task_id,
             "policy_id": self.policy_id,
             "algorithm": self.algorithm,
             "status": self.status.value,
@@ -429,6 +454,7 @@ class TrainingRun:
         return cls(
             id=data["id"],
             agent_id=data.get("agent_id", "default"),
+            task_id=data.get("task_id"),
             policy_id=data.get("policy_id", ""),
             algorithm=data.get("algorithm", "reinforce"),
             status=TrainingStatus(data.get("status", "pending")),
@@ -446,6 +472,7 @@ class TrainingRun:
 __all__ = [
     "Action",
     "AgentInfo",
+    "AgentTaskInfo",
     "Episode",
     "MetricName",
     "MetricResult",

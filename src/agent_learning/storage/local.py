@@ -32,7 +32,15 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Union
 from urllib.parse import quote
 
-from ..types import AgentInfo, Episode, MetricResult, PolicySnapshot, Reward, TrainingRun
+from ..types import (
+    AgentInfo,
+    AgentTaskInfo,
+    Episode,
+    MetricResult,
+    PolicySnapshot,
+    Reward,
+    TrainingRun,
+)
 from .base import LearningStore
 
 logger = logging.getLogger(__name__)
@@ -155,6 +163,7 @@ class LocalFileStore(LearningStore):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         policy_id: Optional[str] = None,
+        task_id: Optional[str] = None,
         completed_only: bool = False,
     ) -> List[Episode]:
         results = [
@@ -163,15 +172,22 @@ class LocalFileStore(LearningStore):
             if (start_date is None or ep.created_at >= start_date)
             and (end_date is None or ep.created_at <= end_date)
             and (policy_id is None or ep.policy_id == policy_id)
+            and (task_id is None or ep.task_id == task_id)
             and (not completed_only or ep.is_complete)
         ]
         results.sort(key=lambda ep: ep.created_at, reverse=True)
         return results[:limit]
 
-    def count_completed_episodes(self, agent_id: str) -> int:
+    def count_completed_episodes(
+        self,
+        agent_id: str,
+        *,
+        task_id: Optional[str] = None,
+    ) -> int:
         return sum(
-            Episode.from_dict(doc).is_complete
+            episode.is_complete and (task_id is None or episode.task_id == task_id)
             for doc in self._read_dir_docs("episodes", agent_id)
+            for episode in [Episode.from_dict(doc)]
         )
 
     def list_agents(self) -> List[AgentInfo]:
@@ -184,6 +200,23 @@ class LocalFileStore(LearningStore):
         return [
             AgentInfo.from_metadata(agent_id, latest[agent_id].metadata)
             for agent_id in sorted(latest)
+        ]
+
+    def list_agent_tasks(self, agent_id: str) -> List[AgentTaskInfo]:
+        latest: Dict[str, PolicySnapshot] = {}
+        for doc in self._read_dir_docs("policies", agent_id):
+            policy = PolicySnapshot.from_dict(doc)
+            if not policy.task_id:
+                continue
+            current = latest.get(policy.task_id)
+            if current is None or (policy.version, policy.created_at) > (
+                current.version,
+                current.created_at,
+            ):
+                latest[policy.task_id] = policy
+        return [
+            AgentTaskInfo.from_metadata(task_id, latest[task_id].metadata)
+            for task_id in sorted(latest)
         ]
 
     # ------------------------------------------------------------------
@@ -253,12 +286,35 @@ class LocalFileStore(LearningStore):
         doc = self._read_json(self._path("policies", agent_id, policy_id))
         return PolicySnapshot.from_dict(doc) if doc else None
 
-    def get_latest_policy(self, agent_id: str) -> Optional[PolicySnapshot]:
-        docs = self._read_dir_docs("policies", agent_id)
-        if not docs:
-            return None
-        latest = max(docs, key=lambda d: int(d.get("version", 0)))
-        return PolicySnapshot.from_dict(latest)
+    def list_policies(
+        self,
+        agent_id: str,
+        *,
+        task_id: Optional[str] = None,
+        limit: int = 100,
+    ) -> List[PolicySnapshot]:
+        policies = [
+            policy
+            for policy in (
+                PolicySnapshot.from_dict(doc)
+                for doc in self._read_dir_docs("policies", agent_id)
+            )
+            if task_id is None or policy.task_id == task_id
+        ]
+        policies.sort(
+            key=lambda policy: (policy.version, policy.created_at),
+            reverse=True,
+        )
+        return policies[:limit]
+
+    def get_latest_policy(
+        self,
+        agent_id: str,
+        *,
+        task_id: Optional[str] = None,
+    ) -> Optional[PolicySnapshot]:
+        policies = self.list_policies(agent_id, task_id=task_id, limit=1)
+        return policies[0] if policies else None
 
     # ------------------------------------------------------------------
     # Training runs

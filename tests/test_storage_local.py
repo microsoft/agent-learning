@@ -81,38 +81,96 @@ def test_agent_listing_and_completed_episode_count(tmp_path: Path) -> None:
     store = LocalFileStore(tmp_path)
     store.store_policy(
         PolicySnapshot(
-            agent_id="scout",
+            agent_id="assistant",
+            task_id="summary",
             actions=[Action(id="a")],
-            metadata={"name": "Scout"},
+            metadata={
+                "agent_name": "Assistant",
+                "task_name": "Weekly summary",
+            },
         )
     )
     store.store_policy(
-        PolicySnapshot(agent_id="writer", actions=[Action(id="a")])
+        PolicySnapshot(
+            agent_id="writer",
+            task_id="draft",
+            actions=[Action(id="a")],
+        )
     )
     store.store_episode(
         Episode(
             id="completed",
-            agent_id="scout",
+            agent_id="assistant",
+            task_id="summary",
             metadata={"status": "completed"},
         )
     )
     store.store_episode(
         Episode(
             id="in-progress",
-            agent_id="scout",
+            agent_id="assistant",
+            task_id="summary",
             metadata={"status": "in_progress"},
         )
     )
 
     assert [agent.to_dict() for agent in store.list_agents()] == [
-        {"id": "scout", "name": "Scout"},
+        {"id": "assistant", "name": "Assistant"},
         {"id": "writer", "name": "writer"},
     ]
-    assert store.count_completed_episodes("scout") == 1
+    assert [
+        task.to_dict() for task in store.list_agent_tasks("assistant")
+    ] == [{"id": "summary", "name": "Weekly summary"}]
+    assert store.count_completed_episodes("assistant") == 1
+    assert store.count_completed_episodes("assistant", task_id="summary") == 1
     assert [
         episode.id
-        for episode in store.query_episodes("scout", completed_only=True)
+        for episode in store.query_episodes(
+            "assistant",
+            task_id="summary",
+            completed_only=True,
+        )
     ] == ["completed"]
+
+
+def test_task_policy_history_is_independent(tmp_path: Path) -> None:
+    store = LocalFileStore(tmp_path)
+    store.store_policy(
+        PolicySnapshot(
+            id="summary-v0",
+            agent_id="assistant",
+            task_id="summary",
+            version=0,
+        )
+    )
+    store.store_policy(
+        PolicySnapshot(
+            id="summary-v1",
+            agent_id="assistant",
+            task_id="summary",
+            version=1,
+        )
+    )
+    store.store_policy(
+        PolicySnapshot(
+            id="translate-v3",
+            agent_id="assistant",
+            task_id="translate",
+            version=3,
+        )
+    )
+
+    assert [
+        policy.id
+        for policy in store.list_policies(
+            "assistant",
+            task_id="summary",
+        )
+    ] == ["summary-v1", "summary-v0"]
+    assert store.get_latest_policy(
+        "assistant",
+        task_id="summary",
+    ).id == "summary-v1"
 
 
 def test_query_filters_and_limit(tmp_path: Path) -> None:

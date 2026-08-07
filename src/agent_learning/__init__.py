@@ -74,7 +74,6 @@ from .metrics import (
 )
 from .policy import ContextualSoftmaxPolicy, Policy, SoftmaxPolicy
 from .rewards import RewardShaper, RewardWriter, shape_episode_reward
-from .scout import ScoutLearningAdapter
 from .storage import (
     CosmosStore,
     InMemoryStore,
@@ -86,6 +85,7 @@ from .training import LearningRunner
 from .types import (
     Action,
     AgentInfo,
+    AgentTaskInfo,
     Episode,
     MetricName,
     MetricResult,
@@ -99,8 +99,9 @@ from .types import (
 
 __all__ = [
     "Action",
-    "AgentInfo",
     "AdherenceJudge",
+    "AgentInfo",
+    "AgentTaskInfo",
     "CaptureConfig",
     "CaptureContext",
     "Classifier",
@@ -133,7 +134,6 @@ __all__ = [
     "RewardSource",
     "RewardWriter",
     "RouterClassifier",
-    "ScoutLearningAdapter",
     "ShapingConfig",
     "SoftmaxPolicy",
     "TaskAdherenceMetric",

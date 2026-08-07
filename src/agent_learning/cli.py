@@ -2,15 +2,15 @@
 
 Examples::
 
-    # Initialise a durable local policy
-    agent-learn policy-init --agent-id dq --actions ./actions.json
+    # Initialise a durable policy for one agent task
+    agent-learn task-policy-init --agent-id dq --task-id summary --actions ./actions.json
 
     # Ask the policy how to handle a task, then record its result
-    agent-learn task-intent --agent-id dq --intent "Summarise Q3 sales"
+    agent-learn task-intent --agent-id dq --task-id summary --intent "Summarise Q3 sales"
     agent-learn task-complete --agent-id dq --episode-id <id> --output "..."
 
     # Judge completed episodes and update the policy
-    agent-learn train --agent-id dq --limit 500
+    agent-learn train --agent-id dq --task-id summary --limit 500
 
 The CLI defaults to the local file store so state survives separate command
 invocations. Explicit ``AGENT_LEARNING_STORE_BACKEND`` configuration still
@@ -57,6 +57,10 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 
     train = sub.add_parser("train", help="Run one offline learning batch.")
     train.add_argument("--agent-id", required=True)
+    train.add_argument(
+        "--task-id",
+        help="Task policy to train. May be omitted when the agent has exactly one task.",
+    )
     train.add_argument("--limit", type=int, default=200)
     train.add_argument("--start-date")
     train.add_argument("--end-date")
@@ -77,6 +81,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 
     score = sub.add_parser("score", help="Score episodes but skip the policy update.")
     score.add_argument("--agent-id", required=True)
+    score.add_argument("--task-id", help="Only score episodes for this task.")
     score.add_argument("--limit", type=int, default=100)
     _add_store_argument(score)
 
@@ -90,18 +95,49 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     episode_count.add_argument("agent_id")
     _add_store_argument(episode_count)
 
-    show = sub.add_parser("policy", help="Print the latest policy snapshot for an agent.")
+    episodes = sub.add_parser(
+        "agents-episodes-list",
+        help="Print completed episodes with their evaluation and reward details.",
+    )
+    episodes.add_argument("agent_id")
+    episodes.add_argument("--task-id")
+    episodes.add_argument("--limit", type=int, default=500)
+    _add_store_argument(episodes)
+
+    tasks = sub.add_parser(
+        "agent-tasks-list",
+        help="List tasks with stored policies for an agent.",
+    )
+    tasks.add_argument("agent_id")
+    _add_store_argument(tasks)
+
+    show = sub.add_parser(
+        "task-policy",
+        help="Print policy snapshots for an agent task, newest first.",
+    )
     show.add_argument("--agent-id", required=True)
+    show.add_argument("--task-id", required=True)
+    show.add_argument(
+        "--history",
+        type=int,
+        default=1,
+        help="Number of policy snapshots to print.",
+    )
     _add_store_argument(show)
 
     init = sub.add_parser(
-        "policy-init",
-        help="Create the initial policy snapshot from a JSON file.",
+        "task-policy-init",
+        help="Create and activate a policy snapshot for an agent task.",
     )
     init.add_argument("--agent-id", required=True)
+    init.add_argument("--task-id", required=True)
     init.add_argument(
         "--agent-name",
         help="Display name used by agents-list. Defaults to --agent-id.",
+    )
+    init.add_argument(
+        "--task-name",
+        help="Display name used by agent-tasks-list. Defaults to --task-id.",
     )
     init.add_argument(
         "--actions",
@@ -115,6 +151,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="Choose an action for a task and start a locally persisted episode.",
     )
     intent.add_argument("--agent-id", required=True)
+    intent.add_argument("--task-id", required=True)
     intent.add_argument("--intent", required=True, help="The user's requested outcome.")
     intent.add_argument(
         "--context",
@@ -191,15 +228,39 @@ def _redact_json(value: Any) -> Any:
     return value
 
 
+def _resolve_task_policy(
+    store: LearningStore,
+    agent_id: str,
+    task_id: str | None,
+) -> tuple[str, PolicySnapshot]:
+    if task_id is None:
+        tasks = store.list_agent_tasks(agent_id)
+        if not tasks:
+            raise ValueError(
+                f"No task policy found for agent_id={agent_id!r}. "
+                "Run `agent-learn task-policy-init` first."
+            )
+        if len(tasks) > 1:
+            raise ValueError(
+                f"Agent {agent_id!r} has multiple tasks; pass --task-id to select one."
+            )
+        task_id = tasks[0].id
+
+    snapshot = store.get_latest_policy(agent_id, task_id=task_id)
+    if snapshot is None:
+        raise ValueError(
+            f"No policy found for agent_id={agent_id!r}, task_id={task_id!r}. "
+            "Run `agent-learn task-policy-init` first."
+        )
+    return task_id, snapshot
+
+
 def _cmd_train(args: argparse.Namespace) -> int:
     store = _get_cli_store(args)
-    snapshot = store.get_latest_policy(args.agent_id)
-    if snapshot is None:
-        print(
-            f"No policy found for agent_id={args.agent_id!r}. "
-            "Run `agent-learn policy-init` first.",
-            file=sys.stderr,
-        )
+    try:
+        task_id, snapshot = _resolve_task_policy(store, args.agent_id, args.task_id)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
         return 2
 
     min_episodes = (
@@ -213,16 +274,20 @@ def _cmd_train(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
-    completed_episodes = store.count_completed_episodes(args.agent_id)
+    completed_episodes = store.count_completed_episodes(
+        args.agent_id,
+        task_id=task_id,
+    )
     if completed_episodes < min_episodes:
         print(
-            f"Agent {args.agent_id!r} has {completed_episodes} completed episodes; "
+            f"Agent {args.agent_id!r} task {task_id!r} has "
+            f"{completed_episodes} completed episodes; "
             f"at least {min_episodes} are required to train.",
             file=sys.stderr,
         )
         return 2
 
-    policy = SoftmaxPolicy.from_snapshot(snapshot)
+    policy = _policy_from_snapshot(snapshot)
     runner = LearningRunner(store=store, policy=policy)
     run = runner.run_offline_batch(
         args.agent_id,
@@ -231,6 +296,7 @@ def _cmd_train(args: argparse.Namespace) -> int:
         end_date=args.end_date,
         score_missing=not args.skip_scoring,
         completed_only=True,
+        task_id=task_id,
     )
     print(json.dumps(run.to_dict(), indent=2))
     return 0
@@ -239,7 +305,11 @@ def _cmd_train(args: argparse.Namespace) -> int:
 def _cmd_score(args: argparse.Namespace) -> int:
     store = _get_cli_store(args)
     runner = LearningRunner(store=store)
-    episodes = store.query_episodes(args.agent_id, limit=args.limit)
+    episodes = store.query_episodes(
+        args.agent_id,
+        limit=args.limit,
+        task_id=args.task_id,
+    )
     scored = 0
     for episode in episodes:
         existing = store.get_rewards_for_episode(episode.id, args.agent_id)
@@ -263,17 +333,80 @@ def _cmd_agents_episodes_count(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_show_policy(args: argparse.Namespace) -> int:
+def _cmd_agents_episodes_list(args: argparse.Namespace) -> int:
     store = _get_cli_store(args)
-    snapshot = store.get_latest_policy(args.agent_id)
-    if snapshot is None:
-        print(f"No policy found for agent_id={args.agent_id!r}.", file=sys.stderr)
+    if args.limit < 1:
+        print("--limit must be at least 1", file=sys.stderr)
         return 2
-    print(json.dumps(snapshot.to_dict(), indent=2))
+    episodes = store.query_episodes(
+        args.agent_id,
+        limit=args.limit,
+        task_id=args.task_id,
+        completed_only=True,
+    )
+    review = []
+    for episode in episodes:
+        metrics = store.get_metric_results(episode.id, args.agent_id)
+        rewards = store.get_rewards_for_episode(episode.id, args.agent_id)
+        aggregate_rewards = [
+            reward for reward in rewards if reward.source.value == "aggregate"
+        ]
+        review.append(
+            {
+                "id": episode.id,
+                "task_id": episode.task_id,
+                "intent_summary": episode.user_input,
+                "chosen_action": episode.action_id,
+                "score_breakdown": [metric.to_dict() for metric in metrics],
+                "final_reward": (
+                    aggregate_rewards[-1].value if aggregate_rewards else None
+                ),
+                "execution_result": episode.assistant_output,
+                "status": episode.metadata.get("status"),
+                "policy_id": episode.policy_id,
+                "policy_version": episode.policy_version,
+                "created_at": episode.created_at,
+            }
+        )
+    print(json.dumps(review, indent=2))
     return 0
 
 
-def _cmd_init_policy(args: argparse.Namespace) -> int:
+def _cmd_agent_tasks_list(args: argparse.Namespace) -> int:
+    tasks = _get_cli_store(args).list_agent_tasks(args.agent_id)
+    print(json.dumps([task.to_dict() for task in tasks], indent=2))
+    return 0
+
+
+def _cmd_show_task_policy(args: argparse.Namespace) -> int:
+    if args.history < 1:
+        print("--history must be at least 1", file=sys.stderr)
+        return 2
+    snapshots = _get_cli_store(args).list_policies(
+        args.agent_id,
+        task_id=args.task_id,
+        limit=args.history,
+    )
+    if not snapshots:
+        print(
+            f"No policy found for agent_id={args.agent_id!r}, "
+            f"task_id={args.task_id!r}.",
+            file=sys.stderr,
+        )
+        return 2
+    payload: Any
+    if args.history == 1:
+        payload = snapshots[0].to_dict()
+    else:
+        payload = [snapshot.to_dict() for snapshot in snapshots]
+    print(json.dumps(payload, indent=2))
+    return 0
+
+
+def _cmd_init_task_policy(args: argparse.Namespace) -> int:
+    if not args.agent_id.strip() or not args.task_id.strip():
+        print("--agent-id and --task-id must not be empty", file=sys.stderr)
+        return 2
     with open(args.actions, "r", encoding="utf-8") as f:
         action_payloads = json.load(f)
     if not isinstance(action_payloads, list) or not action_payloads:
@@ -283,7 +416,23 @@ def _cmd_init_policy(args: argparse.Namespace) -> int:
     policy = SoftmaxPolicy.from_actions(actions, agent_id=args.agent_id)
     store = _get_cli_store(args)
     snapshot = policy.snapshot()
-    snapshot.metadata["name"] = args.agent_name or args.agent_id
+    current = store.get_latest_policy(args.agent_id, task_id=args.task_id)
+    snapshot.task_id = args.task_id
+    snapshot.version = current.version + 1 if current is not None else 0
+
+    existing_agents = {
+        agent.id: agent.name for agent in store.list_agents()
+    }
+    snapshot.metadata["agent_name"] = (
+        args.agent_name
+        or existing_agents.get(args.agent_id)
+        or args.agent_id
+    )
+    snapshot.metadata["task_name"] = (
+        args.task_name
+        or (current.metadata.get("task_name") if current is not None else None)
+        or args.task_id
+    )
     store.store_policy(snapshot)
     print(json.dumps(snapshot.to_dict(), indent=2))
     return 0
@@ -293,6 +442,9 @@ def _cmd_task_intent(args: argparse.Namespace) -> int:
     if not args.intent.strip():
         print("--intent must not be empty", file=sys.stderr)
         return 2
+    if not args.task_id.strip():
+        print("--task-id must not be empty", file=sys.stderr)
+        return 2
 
     try:
         context = _redact_json(_load_context(args.context))
@@ -301,11 +453,12 @@ def _cmd_task_intent(args: argparse.Namespace) -> int:
         return 2
 
     store = _get_cli_store(args)
-    snapshot = store.get_latest_policy(args.agent_id)
+    snapshot = store.get_latest_policy(args.agent_id, task_id=args.task_id)
     if snapshot is None:
         print(
-            f"No policy found for agent_id={args.agent_id!r}. "
-            "Run `agent-learn policy-init` first.",
+            f"No policy found for agent_id={args.agent_id!r}, "
+            f"task_id={args.task_id!r}. "
+            "Run `agent-learn task-policy-init` first.",
             file=sys.stderr,
         )
         return 2
@@ -340,6 +493,7 @@ def _cmd_task_intent(args: argparse.Namespace) -> int:
     }
     episode = Episode(
         agent_id=args.agent_id,
+        task_id=args.task_id,
         user_input=redact(args.intent) or "",
         policy_id=snapshot.id,
         policy_version=snapshot.version,
@@ -363,6 +517,7 @@ def _cmd_task_intent(args: argparse.Namespace) -> int:
             {
                 "episode_id": episode.id,
                 "agent_id": episode.agent_id,
+                "task_id": episode.task_id,
                 "policy_id": episode.policy_id,
                 "policy_version": episode.policy_version,
                 "action_id": decision.action.id,
@@ -408,6 +563,7 @@ def _cmd_task_complete(args: argparse.Namespace) -> int:
             {
                 "episode_id": episode.id,
                 "agent_id": episode.agent_id,
+                "task_id": episode.task_id,
                 "status": "completed",
                 "episode": episode.to_dict(),
             },
@@ -426,8 +582,10 @@ def main(argv: list[str] | None = None) -> int:
         "score": _cmd_score,
         "agents-list": _cmd_agents_list,
         "agents-episodes-count": _cmd_agents_episodes_count,
-        "policy": _cmd_show_policy,
-        "policy-init": _cmd_init_policy,
+        "agents-episodes-list": _cmd_agents_episodes_list,
+        "agent-tasks-list": _cmd_agent_tasks_list,
+        "task-policy": _cmd_show_task_policy,
+        "task-policy-init": _cmd_init_task_policy,
         "task-intent": _cmd_task_intent,
         "task-complete": _cmd_task_complete,
     }

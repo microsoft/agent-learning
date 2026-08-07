@@ -7,7 +7,13 @@ from pathlib import Path
 
 from agent_learning.cli import main
 from agent_learning.storage import LocalFileStore
-from agent_learning.types import Episode
+from agent_learning.types import (
+    Episode,
+    MetricName,
+    MetricResult,
+    Reward,
+    RewardSource,
+)
 
 
 def _actions_file(tmp_path: Path) -> Path:
@@ -37,9 +43,11 @@ def test_task_commands_persist_a_complete_episode(tmp_path: Path, capsys) -> Non
 
     assert main(
         [
-            "policy-init",
+            "task-policy-init",
             "--agent-id",
-            "scout",
+            "assistant",
+            "--task-id",
+            "summary",
             "--actions",
             str(actions),
             "--store-dir",
@@ -52,7 +60,9 @@ def test_task_commands_persist_a_complete_episode(tmp_path: Path, capsys) -> Non
         [
             "task-intent",
             "--agent-id",
-            "scout",
+            "assistant",
+            "--task-id",
+            "summary",
             "--intent",
             "Summarise the open issues",
             "--context",
@@ -73,8 +83,9 @@ def test_task_commands_persist_a_complete_episode(tmp_path: Path, capsys) -> Non
     assert decision["probabilities"] == {"direct": 1.0}
 
     store = LocalFileStore(store_dir)
-    started = store.get_episode("task-1", "scout")
+    started = store.get_episode("task-1", "assistant")
     assert started is not None
+    assert started.task_id == "summary"
     assert started.user_input == "Summarise the open issues"
     assert started.assistant_output == ""
     assert started.action_id == "direct"
@@ -88,7 +99,7 @@ def test_task_commands_persist_a_complete_episode(tmp_path: Path, capsys) -> Non
         [
             "task-complete",
             "--agent-id",
-            "scout",
+            "assistant",
             "--episode-id",
             "task-1",
             "--output",
@@ -101,7 +112,7 @@ def test_task_commands_persist_a_complete_episode(tmp_path: Path, capsys) -> Non
 
     assert completion["episode_id"] == "task-1"
     assert completion["status"] == "completed"
-    completed = store.get_episode("task-1", "scout")
+    completed = store.get_episode("task-1", "assistant")
     assert completed is not None
     assert completed.assistant_output == "There are no open issues."
     assert completed.metadata["status"] == "completed"
@@ -111,9 +122,11 @@ def test_task_commands_persist_a_complete_episode(tmp_path: Path, capsys) -> Non
 
     assert main(
         [
-            "policy",
+            "task-policy",
             "--agent-id",
-            "scout",
+            "assistant",
+            "--task-id",
+            "summary",
             "--store-dir",
             str(store_dir),
         ]
@@ -125,11 +138,15 @@ def test_agent_listing_and_completed_episode_count(tmp_path: Path, capsys) -> No
     store_dir = tmp_path / "store"
     assert main(
         [
-            "policy-init",
+            "task-policy-init",
             "--agent-id",
-            "scout",
+            "assistant",
+            "--task-id",
+            "summary",
             "--agent-name",
-            "Scout Agent",
+            "Assistant Agent",
+            "--task-name",
+            "Weekly summary",
             "--actions",
             str(_actions_file(tmp_path)),
             "--store-dir",
@@ -142,27 +159,134 @@ def test_agent_listing_and_completed_episode_count(tmp_path: Path, capsys) -> No
     store.store_episode(
         Episode(
             id="completed",
-            agent_id="scout",
+            agent_id="assistant",
+            task_id="summary",
             metadata={"status": "completed"},
         )
     )
     store.store_episode(
         Episode(
             id="in-progress",
-            agent_id="scout",
+            agent_id="assistant",
+            task_id="summary",
             metadata={"status": "in_progress"},
         )
     )
 
     assert main(["agents-list", "--store-dir", str(store_dir)]) == 0
     assert json.loads(capsys.readouterr().out) == [
-        {"id": "scout", "name": "Scout Agent"}
+        {"id": "assistant", "name": "Assistant Agent"}
     ]
 
     assert main(
-        ["agents-episodes-count", "scout", "--store-dir", str(store_dir)]
+        ["agents-episodes-count", "assistant", "--store-dir", str(store_dir)]
     ) == 0
     assert json.loads(capsys.readouterr().out) == 1
+
+    assert main(
+        ["agent-tasks-list", "assistant", "--store-dir", str(store_dir)]
+    ) == 0
+    assert json.loads(capsys.readouterr().out) == [
+        {"id": "summary", "name": "Weekly summary"}
+    ]
+
+
+def test_task_policy_history_preserves_replaced_snapshots(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    store_dir = tmp_path / "store"
+    command = [
+        "task-policy-init",
+        "--agent-id",
+        "assistant",
+        "--task-id",
+        "summary",
+        "--actions",
+        str(_actions_file(tmp_path)),
+        "--store-dir",
+        str(store_dir),
+    ]
+    assert main(command) == 0
+    first = _stdout_json(capsys)
+    assert main(command) == 0
+    second = _stdout_json(capsys)
+
+    assert first["id"] != second["id"]
+    assert [first["version"], second["version"]] == [0, 1]
+    assert main(
+        [
+            "task-policy",
+            "--agent-id",
+            "assistant",
+            "--task-id",
+            "summary",
+            "--history",
+            "2",
+            "--store-dir",
+            str(store_dir),
+        ]
+    ) == 0
+    assert [
+        snapshot["id"] for snapshot in json.loads(capsys.readouterr().out)
+    ] == [second["id"], first["id"]]
+
+
+def test_completed_episode_review_includes_learning_signals(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    store_dir = tmp_path / "store"
+    store = LocalFileStore(store_dir)
+    episode = Episode(
+        id="episode-1",
+        agent_id="assistant",
+        task_id="summary",
+        user_input="Summarise the open issues",
+        assistant_output="There are no open issues.",
+        action_id="direct",
+        policy_id="policy-1",
+        policy_version=2,
+        metadata={"status": "completed"},
+    )
+    store.store_episode(episode)
+    store.store_metric_results(
+        episode.id,
+        episode.agent_id,
+        [
+            MetricResult(
+                metric=MetricName.TASK_COMPLETION,
+                score=5,
+                normalized=1.0,
+                status="completed",
+            )
+        ],
+    )
+    store.store_reward(
+        Reward(
+            episode_id=episode.id,
+            agent_id=episode.agent_id,
+            source=RewardSource.AGGREGATE,
+            value=0.9,
+        )
+    )
+
+    assert main(
+        [
+            "agents-episodes-list",
+            "assistant",
+            "--task-id",
+            "summary",
+            "--store-dir",
+            str(store_dir),
+        ]
+    ) == 0
+    review = json.loads(capsys.readouterr().out)
+    assert review[0]["intent_summary"] == "Summarise the open issues"
+    assert review[0]["chosen_action"] == "direct"
+    assert review[0]["score_breakdown"][0]["metric"] == "task_completion"
+    assert review[0]["final_reward"] == 0.9
+    assert review[0]["execution_result"] == "There are no open issues."
 
 
 def test_train_requires_five_completed_episodes_by_default(
@@ -174,9 +298,11 @@ def test_train_requires_five_completed_episodes_by_default(
     store_dir = tmp_path / "store"
     assert main(
         [
-            "policy-init",
+            "task-policy-init",
             "--agent-id",
-            "scout",
+            "assistant",
+            "--task-id",
+            "summary",
             "--actions",
             str(_actions_file(tmp_path)),
             "--store-dir",
@@ -190,7 +316,8 @@ def test_train_requires_five_completed_episodes_by_default(
         store.store_episode(
             Episode(
                 id=f"completed-{index}",
-                agent_id="scout",
+                agent_id="assistant",
+                task_id="summary",
                 metadata={"status": "completed"},
             )
         )
@@ -198,7 +325,9 @@ def test_train_requires_five_completed_episodes_by_default(
     command = [
         "train",
         "--agent-id",
-        "scout",
+        "assistant",
+        "--task-id",
+        "summary",
         "--limit",
         "3",
         "--store-dir",
@@ -212,7 +341,8 @@ def test_train_requires_five_completed_episodes_by_default(
     store.store_episode(
         Episode(
             id="completed-4",
-            agent_id="scout",
+            agent_id="assistant",
+            task_id="summary",
             metadata={"status": "completed"},
         )
     )
@@ -233,7 +363,8 @@ def test_train_requires_five_completed_episodes_by_default(
 
     assert main(command) == 0
     assert _stdout_json(capsys) == {"status": "succeeded"}
-    assert call["agent_id"] == "scout"
+    assert call["agent_id"] == "assistant"
+    assert call["task_id"] == "summary"
     assert call["episode_limit"] == 3
     assert call["completed_only"] is True
 
@@ -246,9 +377,11 @@ def test_train_minimum_is_configurable(
     store_dir = tmp_path / "store"
     assert main(
         [
-            "policy-init",
+            "task-policy-init",
             "--agent-id",
-            "scout",
+            "assistant",
+            "--task-id",
+            "summary",
             "--actions",
             str(_actions_file(tmp_path)),
             "--store-dir",
@@ -259,7 +392,8 @@ def test_train_minimum_is_configurable(
     LocalFileStore(store_dir).store_episode(
         Episode(
             id="completed",
-            agent_id="scout",
+            agent_id="assistant",
+            task_id="summary",
             metadata={"status": "completed"},
         )
     )
@@ -277,7 +411,9 @@ def test_train_minimum_is_configurable(
         [
             "train",
             "--agent-id",
-            "scout",
+            "assistant",
+            "--task-id",
+            "summary",
             "--limit",
             "1",
             "--store-dir",
@@ -292,7 +428,9 @@ def test_task_intent_requires_an_existing_policy(tmp_path: Path, capsys) -> None
         [
             "task-intent",
             "--agent-id",
-            "scout",
+            "assistant",
+            "--task-id",
+            "summary",
             "--intent",
             "Do the task",
             "--store-dir",
@@ -302,7 +440,7 @@ def test_task_intent_requires_an_existing_policy(tmp_path: Path, capsys) -> None
 
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert "policy-init" in captured.err
+    assert "task-policy-init" in captured.err
 
 
 def test_task_complete_requires_an_existing_episode(tmp_path: Path, capsys) -> None:
@@ -310,7 +448,7 @@ def test_task_complete_requires_an_existing_episode(tmp_path: Path, capsys) -> N
         [
             "task-complete",
             "--agent-id",
-            "scout",
+            "assistant",
             "--episode-id",
             "missing",
             "--output",
@@ -329,9 +467,11 @@ def test_task_intent_rejects_invalid_context(tmp_path: Path, capsys) -> None:
     store_dir = tmp_path / "store"
     assert main(
         [
-            "policy-init",
+            "task-policy-init",
             "--agent-id",
-            "scout",
+            "assistant",
+            "--task-id",
+            "summary",
             "--actions",
             str(_actions_file(tmp_path)),
             "--store-dir",
@@ -344,7 +484,9 @@ def test_task_intent_rejects_invalid_context(tmp_path: Path, capsys) -> None:
         [
             "task-intent",
             "--agent-id",
-            "scout",
+            "assistant",
+            "--task-id",
+            "summary",
             "--intent",
             "Do the task",
             "--context",
@@ -361,9 +503,11 @@ def test_task_fields_are_redacted_before_persistence(tmp_path: Path, capsys) -> 
     store_dir = tmp_path / "store"
     assert main(
         [
-            "policy-init",
+            "task-policy-init",
             "--agent-id",
-            "scout",
+            "assistant",
+            "--task-id",
+            "summary",
             "--actions",
             str(_actions_file(tmp_path)),
             "--store-dir",
@@ -376,7 +520,9 @@ def test_task_fields_are_redacted_before_persistence(tmp_path: Path, capsys) -> 
         [
             "task-intent",
             "--agent-id",
-            "scout",
+            "assistant",
+            "--task-id",
+            "summary",
             "--intent",
             "Use token=private-value",
             "--episode-id",
@@ -390,7 +536,7 @@ def test_task_fields_are_redacted_before_persistence(tmp_path: Path, capsys) -> 
         [
             "task-complete",
             "--agent-id",
-            "scout",
+            "assistant",
             "--episode-id",
             "task-secret",
             "--result",
@@ -401,7 +547,7 @@ def test_task_fields_are_redacted_before_persistence(tmp_path: Path, capsys) -> 
     ) == 0
     capsys.readouterr()
 
-    content = (store_dir / "episodes" / "scout" / "task-secret.json").read_text(
+    content = (store_dir / "episodes" / "assistant" / "task-secret.json").read_text(
         encoding="utf-8"
     )
     assert "private-value" not in content

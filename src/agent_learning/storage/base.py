@@ -12,7 +12,15 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Iterable, List, Optional
 
-from ..types import AgentInfo, Episode, MetricResult, PolicySnapshot, Reward, TrainingRun
+from ..types import (
+    AgentInfo,
+    AgentTaskInfo,
+    Episode,
+    MetricResult,
+    PolicySnapshot,
+    Reward,
+    TrainingRun,
+)
 
 
 class LearningStore(ABC):
@@ -37,17 +45,27 @@ class LearningStore(ABC):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         policy_id: Optional[str] = None,
+        task_id: Optional[str] = None,
         completed_only: bool = False,
     ) -> List[Episode]:
-        """List episodes filtered by optional time window / policy id."""
+        """List episodes filtered by optional time window, policy, or task."""
 
     @abstractmethod
-    def count_completed_episodes(self, agent_id: str) -> int:
+    def count_completed_episodes(
+        self,
+        agent_id: str,
+        *,
+        task_id: Optional[str] = None,
+    ) -> int:
         """Return the number of finished episodes stored for an agent."""
 
     @abstractmethod
     def list_agents(self) -> List[AgentInfo]:
         """List agents that have a stored policy snapshot."""
+
+    @abstractmethod
+    def list_agent_tasks(self, agent_id: str) -> List[AgentTaskInfo]:
+        """List tasks that have a stored policy snapshot for an agent."""
 
     # ---- Metric results -------------------------------------------
 
@@ -92,8 +110,23 @@ class LearningStore(ABC):
         """Fetch a single policy snapshot by id."""
 
     @abstractmethod
-    def get_latest_policy(self, agent_id: str) -> Optional[PolicySnapshot]:
-        """Return the highest-version policy snapshot for the agent."""
+    def list_policies(
+        self,
+        agent_id: str,
+        *,
+        task_id: Optional[str] = None,
+        limit: int = 100,
+    ) -> List[PolicySnapshot]:
+        """List policy snapshots newest-first, optionally scoped to a task."""
+
+    @abstractmethod
+    def get_latest_policy(
+        self,
+        agent_id: str,
+        *,
+        task_id: Optional[str] = None,
+    ) -> Optional[PolicySnapshot]:
+        """Return the active highest-version policy snapshot for a task."""
 
     # ---- Training runs --------------------------------------------
 

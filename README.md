@@ -60,10 +60,10 @@ For local development against a checkout of this repository:
 pip install -e .
 ```
 
-### Windows CLI installer (Scout-friendly)
+### Windows CLI installer
 
-If Scout runs outside a Python-managed environment, download `agent-learn.exe`
-or the standalone installer from the
+For a Python-independent installation, download `agent-learn.exe` or the
+standalone installer from the
 [latest GitHub release](https://github.com/microsoft/agents-learning-sdk/releases/latest).
 Each release is attached to a `v<version>` tag. The installer places
 `agent-learn.exe` on disk and can add its install directory to your user
@@ -137,110 +137,38 @@ runner = LearningRunner(policy=policy)
 run = runner.run_offline_batch("nba", episode_limit=500)
 ```
 
-### Integrate with Scout
+### Task-oriented CLI
 
-`ScoutLearningAdapter` wraps synchronous or asynchronous Scout actions and
-appends one JSONL record per execution. Each record includes the requested
-intent, selected action path, result or error, duration, and offline judge
-signals for intent, adherence, and completion.
-
-1. Install the SDK in the environment that runs Scout:
-
-   ```bash
-   pip install agents-learning-sdk
-   ```
-
-2. Create one adapter for the process. The output defaults to
-   `scout-learning.jsonl`, or you can provide another local path:
-
-   ```python
-   from agent_learning import ScoutLearningAdapter
-
-   learning = ScoutLearningAdapter("data/scout-learning.jsonl")
-   ```
-
-3. Wrap each Scout automation, skill, or MCP call with `execute`. Pass:
-
-   - `intent`: the user's requested outcome.
-   - `action_path`: stable path segments identifying the Scout action.
-   - `action`: the callable Scout would normally invoke.
-   - `args` or `action_kwargs`: inputs for that callable, when needed.
-   - `contract` and `expected_tokens`: optional criteria for adherence and
-     completion signals.
-
-```python
-result = learning.execute(
-    intent="Create the weekly summary",
-    action_path=["automation", "weekly-summary"],
-    action=create_summary,
-    action_kwargs={"week": "2026-W32"},
-    contract={"required_substrings": ["summary"]},
-    expected_tokens=["summary"],
-)
-```
-
-For an asynchronous Scout action, use `execute_async` and pass its async
-callable directly:
-
-```python
-issues = await learning.execute_async(
-    intent="List open issues",
-    action_path=["mcp", "github", "list_issues"],
-    action=list_issues,
-    action_kwargs={"owner": "microsoft", "repo": "agents-learning-sdk"},
-    expected_tokens=["issues"],
-)
-```
-
-The adapter returns the original callable's result unchanged. If the callable
-raises, it records the failure and re-raises the same exception so existing
-Scout error handling continues to work. Sensitive values in intents, results,
-and errors are redacted before records are written.
-
-The integration uses the SDK's pure-Python judges and local file I/O, so it
-requires no Azure configuration. Use stable `action_path` values to group
-records by automation, skill, or MCP tool when analyzing the learning data.
-Review the output with any JSONL-aware tool, or run:
+Policies are scoped to tasks under an agent. `task-intent` chooses an action
+from the active task policy and starts an episode. Its JSON response includes
+the selected action and `episode_id`; `task-complete` records the final output.
 
 ```bash
-python -m json.tool --json-lines data/scout-learning.jsonl
-```
-
-See [examples/scout_learning.py](examples/scout_learning.py) for a complete
-runnable integration covering automation, skill, and asynchronous MCP calls.
-
-Scout can also use the CLI as a task lifecycle. `task-intent` chooses a policy
-action and starts an episode; its JSON response includes the selected action
-and `episode_id`. After Scout applies that action, `task-complete` updates the
-same local episode with the final output.
-
-```bash
-agent-learn policy-init \
-  --agent-id scout \
-  --agent-name "Scout Agent" \
+agent-learn task-policy-init \
+  --agent-id writer \
+  --task-id weekly-summary \
   --actions ./actions.json
 
 agent-learn task-intent \
-  --agent-id scout \
+  --agent-id writer \
+  --task-id weekly-summary \
   --intent "Create the weekly summary" \
   --context '{"week":"2026-W32"}'
 
 agent-learn task-complete \
-  --agent-id scout \
+  --agent-id writer \
   --episode-id "<episode_id from task-intent>" \
   --output "Weekly summary created"
 ```
 
-The episode records the user intent, context, policy version, selected action,
-selection probability, and completion output under
-`./data/agent-learning/store` by default. Inspect known agents and their
-completed episode counts, then train once enough data is available:
+Inspect agents, tasks, and completed episode counts before training:
 
 ```bash
 agent-learn agents-list
-agent-learn agents-episodes-count scout
-agent-learn train --agent-id scout --limit 200
-agent-learn policy --agent-id scout
+agent-learn agent-tasks-list writer
+agent-learn agents-episodes-count writer
+agent-learn train --agent-id writer --task-id weekly-summary --limit 500
+agent-learn task-policy --agent-id writer --task-id weekly-summary
 ```
 
 Training requires five completed episodes by default and ignores episodes that
@@ -258,7 +186,6 @@ credentials** required.
 | [quickstart.py](examples/quickstart.py) | Stubbed constant | `SoftmaxPolicy`, built-in `ReinforceLearner`, `RewardShaper`, `LearningRunner` |
 | [next_best_action.py](examples/next_best_action.py) | Simulated outcome | `ContextualSoftmaxPolicy` (contextual bandit), a contextual policy-gradient learner |
 | [judged_optimization.py](examples/judged_optimization.py) | **Real Tier 1 judges** | `build_judges` (tiered judges), `JudgeScore`→`MetricResult`, routing + hallucination **shaping** penalties, rich `Episode` records |
-| [scout_learning.py](examples/scout_learning.py) | Tier 1 judge signals | `ScoutLearningAdapter` for automation, skill, and MCP execution |
 
 Start with [judged_optimization.py](examples/judged_optimization.py) to
 see the SDK's judge layer, reward shaping, metrics, policy, learner, and
