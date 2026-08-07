@@ -144,6 +144,7 @@ jobs:
           name: python-distributions-${{ needs.release-metadata.outputs.version }}
           path: dist/
           if-no-files-found: error
+          overwrite: true
 
   build-windows:
     name: Build Windows release

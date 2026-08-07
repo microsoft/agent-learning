@@ -62,11 +62,18 @@ pip install -e .
 
 ### Windows CLI installer (Scout-friendly)
 
-If Scout runs outside a Python-managed environment, install the standalone
-Windows CLI installer from the repository's **Build Windows CLI Installer**
-workflow artifacts. The installer places `agent-learn.exe` on disk and can
-add its install directory to your user `PATH`, so `agent-learn` works from
-Command Prompt and PowerShell without `pip install`.
+If Scout runs outside a Python-managed environment, download `agent-learn.exe`
+or the standalone installer from the
+[latest GitHub release](https://github.com/microsoft/agents-learning-sdk/releases/latest).
+Each release is attached to a `v<version>` tag. The installer places
+`agent-learn.exe` on disk and can add its install directory to your user
+`PATH`, so `agent-learn` works from Command Prompt and PowerShell without
+`pip install`.
+
+Pushes to `main` release the version declared in `pyproject.toml` and
+`src/agent_learning/_version.py`, attach the Windows executables, and then
+publish the matching Python package to PyPI. Increment both version declarations
+before the next production release.
 
 ## Configure
 

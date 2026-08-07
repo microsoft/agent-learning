@@ -60,3 +60,4 @@ jobs:
             dist/agent-learn.exe
             dist-installer/*.exe
           if-no-files-found: error
+          overwrite: true
