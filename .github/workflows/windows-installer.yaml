@@ -1,0 +1,63 @@
+name: Build Windows CLI
+
+on:
+  workflow_call:
+    inputs:
+      app_version:
+        description: "Version embedded in the installer name"
+        required: false
+        default: ""
+        type: string
+  workflow_dispatch:
+    inputs:
+      app_version:
+        description: "Installer version override (defaults to tag name or dev)"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build-installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --yes --no-progress
+
+      - name: Resolve installer version
+        id: vars
+        shell: pwsh
+        run: |
+          if ("${{ inputs.app_version }}") {
+            $version = "${{ inputs.app_version }}"
+          } elseif ("${{ github.ref_type }}" -eq "tag") {
+            $version = "${{ github.ref_name }}".TrimStart("v")
+          } else {
+            $version = "dev"
+          }
+          "app_version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          ./scripts/build_windows_installer.ps1 -AppVersion "${{ steps.vars.outputs.app_version }}"
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: agents-learning-sdk-windows-installer-${{ steps.vars.outputs.app_version }}
+          path: |
+            dist/agent-learn.exe
+            dist-installer/*.exe
+          if-no-files-found: error
+          overwrite: true

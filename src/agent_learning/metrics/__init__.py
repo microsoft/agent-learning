@@ -1,7 +1,7 @@
-"""Judge-based evaluation metrics for native RL reward shaping.
+"""Score-based evaluation metrics for native RL reward shaping.
 
 Each metric is a thin wrapper around an evaluator from
-``azure-ai-evaluation``. The wrapper normalises the raw judge score
+``azure-ai-evaluation``. The wrapper normalises the raw evaluator score
 into the ``[0, 1]`` range expected by the reward shaper.
 """
 

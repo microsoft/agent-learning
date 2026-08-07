@@ -3,7 +3,7 @@
 // =========================================
 // Publishes the storage account's blob service into the VNet so the SDK VM
 // resolves the account host to a private IP. Only the blob sub-resource is
-// wired up because the Agent Learning SDK reads/writes blobs (judge snapshots,
+// wired up because the Agent Learning SDK reads/writes blobs (score snapshots,
 // exported data) and does not use queues.
 
 @description('Specifies the name of the virtual network.')

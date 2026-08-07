@@ -1,4 +1,4 @@
-"""Base classes for native judge-based metrics."""
+"""Base classes for native score-based metrics."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from ..config import JudgeConfig
+from ..config import ScoreConfig
 from ..types import Episode, MetricName, MetricResult
 
 logger = logging.getLogger(__name__)
@@ -67,7 +67,7 @@ def _format_query(episode: Episode) -> str:
 
 
 def _format_tool_calls(episode: Episode) -> str:
-    """Render tool calls as a JSON string consumable by the judge."""
+    """Render tool calls as a JSON string consumable by the scorer."""
     if not episode.tool_calls:
         return "[]"
     payload = [
@@ -83,18 +83,18 @@ def _format_tool_calls(episode: Episode) -> str:
 
 
 class MetricEvaluator(ABC):
-    """Abstract base for all native judge metrics."""
+    """Abstract base for all native scoring metrics."""
 
     #: Stable identifier - subclasses must override.
     NAME: MetricName
 
     def __init__(
         self,
-        judge_config: Optional[JudgeConfig] = None,
+        score_config: Optional[ScoreConfig] = None,
         *,
         evaluator: Optional[Any] = None,
     ) -> None:
-        self._judge_config = judge_config or JudgeConfig()
+        self._score_config = score_config or ScoreConfig()
         self._evaluator = evaluator  # Allow injection for tests
 
     # ------------------------------------------------------------------
@@ -121,20 +121,20 @@ class MetricEvaluator(ABC):
     def evaluator(self) -> Any:
         """The lazily-constructed underlying evaluator."""
         if self._evaluator is None:
-            if not self._judge_config.enabled:
+            if not self._score_config.enabled:
                 raise RuntimeError(
-                    "Judge model is not configured. Set AGENT_LEARNING_JUDGE_ENDPOINT "
-                    "and AGENT_LEARNING_JUDGE_DEPLOYMENT (or pass an explicit "
-                    "JudgeConfig) before evaluating metrics."
+                    "Score model is not configured. Set AGENT_LEARNING_SCORE_ENDPOINT "
+                    "and AGENT_LEARNING_SCORE_DEPLOYMENT (or pass an explicit "
+                    "ScoreConfig) before evaluating metrics."
                 )
             self._evaluator = self._build_evaluator()
         return self._evaluator
 
     def evaluate(self, request: MetricRequest) -> MetricResult:
-        """Run the underlying judge and return a normalised result.
+        """Run the underlying scorer and return a normalised result.
 
         Errors are caught and returned as ``status=skipped`` so that a
-        flaky judge does not poison the learner. Callers that want
+        flaky scorer does not poison the learner. Callers that want
         strict semantics can inspect ``result.status``.
         """
         if not (request.query and request.response):
@@ -144,7 +144,7 @@ class MetricEvaluator(ABC):
                 normalized=None,
                 status="skipped",
                 reason="query or response is empty",
-                evaluator=self._judge_config.azure_deployment or None,
+                evaluator=self._score_config.azure_deployment or None,
             )
 
         try:
@@ -152,7 +152,7 @@ class MetricEvaluator(ABC):
             raw = self.evaluator(**kwargs)
             if not isinstance(raw, dict):
                 raw = dict(raw)
-        except Exception as exc:  # pragma: no cover - judge runtime errors
+        except Exception as exc:  # pragma: no cover - scoring runtime errors
             logger.warning("Metric %s failed: %s", self.NAME.value, exc)
             return MetricResult(
                 metric=self.NAME,
@@ -160,7 +160,7 @@ class MetricEvaluator(ABC):
                 normalized=None,
                 status="skipped",
                 reason=f"evaluator error: {exc}",
-                evaluator=self._judge_config.azure_deployment or None,
+                evaluator=self._score_config.azure_deployment or None,
             )
 
         return self._build_result(raw)
@@ -192,13 +192,13 @@ class MetricEvaluator(ABC):
             status=status,
             reason=reason,
             properties=properties,
-            evaluator=self._judge_config.azure_deployment or None,
+            evaluator=self._score_config.azure_deployment or None,
             metadata={"raw": _safe_subset(raw)},
         )
 
 
 def _extract_score(raw: Dict[str, Any], name: MetricName) -> Optional[float]:
-    """Return the numeric score from a judge response, regardless of key."""
+    """Return the numeric score from a scorer response, regardless of key."""
     keys = (
         "score",
         f"{name.value}_score",
@@ -214,7 +214,7 @@ def _extract_score(raw: Dict[str, Any], name: MetricName) -> Optional[float]:
 
 
 def _safe_subset(raw: Dict[str, Any]) -> Dict[str, Any]:
-    """Trim the raw judge dict to a Cosmos-safe size for persistence."""
+    """Trim the raw score dict to a Cosmos-safe size for persistence."""
     keep_keys = {
         "score",
         "status",

@@ -4,7 +4,15 @@ from __future__ import annotations
 
 from typing import Dict, Iterable, List, Optional, Tuple
 
-from ..types import Episode, MetricResult, PolicySnapshot, Reward, TrainingRun
+from ..types import (
+    AgentSummary,
+    AgentTaskSummary,
+    Episode,
+    MetricResult,
+    PolicySnapshot,
+    Reward,
+    TrainingRun,
+)
 from .base import LearningStore
 
 
@@ -20,7 +28,33 @@ class InMemoryStore(LearningStore):
         self._metrics: Dict[Tuple[str, str], List[MetricResult]] = {}
         self._rewards: Dict[Tuple[str, str], List[Reward]] = {}
         self._policies: Dict[Tuple[str, str], PolicySnapshot] = {}
+        self._active_policies: Dict[Tuple[str, str], str] = {}
         self._runs: Dict[Tuple[str, str], TrainingRun] = {}
+
+    # ---- Discovery -------------------------------------------------
+
+    def list_agents(self) -> List[AgentSummary]:
+        names: Dict[str, str] = {}
+        for episode in self._episodes.values():
+            names.setdefault(episode.agent_id, episode.agent_id)
+            if episode.agent_name:
+                names[episode.agent_id] = episode.agent_name
+        for policy in self._policies.values():
+            names.setdefault(policy.agent_id, policy.agent_id)
+        return [AgentSummary(id=agent_id, name=names[agent_id]) for agent_id in sorted(names)]
+
+    def list_agent_tasks(self, agent_id: str) -> List[AgentTaskSummary]:
+        names: Dict[str, str] = {}
+        for episode in self._episodes.values():
+            if episode.agent_id != agent_id:
+                continue
+            names.setdefault(episode.task_id, episode.task_id)
+            if episode.task_name:
+                names[episode.task_id] = episode.task_name
+        for policy in self._policies.values():
+            if policy.agent_id == agent_id:
+                names.setdefault(policy.task_id, policy.task_id)
+        return [AgentTaskSummary(id=task_id, name=names[task_id]) for task_id in sorted(names)]
 
     # ---- Episodes --------------------------------------------------
 
@@ -39,6 +73,7 @@ class InMemoryStore(LearningStore):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         policy_id: Optional[str] = None,
+        task_id: Optional[str] = None,
     ) -> List[Episode]:
         results = [
             ep
@@ -47,9 +82,25 @@ class InMemoryStore(LearningStore):
             and (start_date is None or ep.created_at >= start_date)
             and (end_date is None or ep.created_at <= end_date)
             and (policy_id is None or ep.policy_id == policy_id)
+            and (task_id is None or ep.task_id == task_id)
         ]
         results.sort(key=lambda ep: ep.created_at, reverse=True)
         return results[:limit]
+
+    def count_episodes(
+        self,
+        agent_id: str,
+        *,
+        task_id: Optional[str] = None,
+        full_only: bool = False,
+    ) -> int:
+        return sum(
+            1
+            for episode in self._episodes.values()
+            if episode.agent_id == agent_id
+            and (task_id is None or episode.task_id == task_id)
+            and (not full_only or episode.is_full)
+        )
 
     # ---- Metric results -------------------------------------------
 
@@ -95,17 +146,45 @@ class InMemoryStore(LearningStore):
     # ---- Policy snapshots -----------------------------------------
 
     def store_policy(self, policy: PolicySnapshot) -> str:
-        self._policies[(policy.id, policy.agent_id)] = policy
-        return policy.id
+        stored = PolicySnapshot.from_dict(policy.to_dict())
+        self._policies[(stored.id, stored.agent_id)] = stored
+        self._active_policies[(stored.agent_id, stored.task_id)] = stored.id
+        return stored.id
 
     def get_policy(self, policy_id: str, agent_id: str) -> Optional[PolicySnapshot]:
-        return self._policies.get((policy_id, agent_id))
+        policy = self._policies.get((policy_id, agent_id))
+        return PolicySnapshot.from_dict(policy.to_dict()) if policy else None
 
-    def get_latest_policy(self, agent_id: str) -> Optional[PolicySnapshot]:
-        candidates = [p for (pid, aid), p in self._policies.items() if aid == agent_id]
+    def list_policies(
+        self,
+        agent_id: str,
+        task_id: str,
+        *,
+        limit: int = 100,
+    ) -> List[PolicySnapshot]:
+        candidates = [
+            policy
+            for (_, aid), policy in self._policies.items()
+            if aid == agent_id and policy.task_id == task_id
+        ]
+        candidates.sort(key=lambda policy: (policy.version, policy.created_at), reverse=True)
+        return [PolicySnapshot.from_dict(policy.to_dict()) for policy in candidates[:limit]]
+
+    def get_latest_policy(
+        self, agent_id: str, task_id: str = "default"
+    ) -> Optional[PolicySnapshot]:
+        candidates = self.list_policies(agent_id, task_id, limit=1)
         if not candidates:
             return None
-        return max(candidates, key=lambda p: p.version)
+        return candidates[0]
+
+    def get_active_policy(
+        self, agent_id: str, task_id: str
+    ) -> Optional[PolicySnapshot]:
+        policy_id = self._active_policies.get((agent_id, task_id))
+        if policy_id is None:
+            return self.get_latest_policy(agent_id, task_id)
+        return self.get_policy(policy_id, agent_id)
 
     # ---- Training runs --------------------------------------------
 

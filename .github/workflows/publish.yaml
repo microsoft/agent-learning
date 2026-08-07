@@ -1,7 +1,9 @@
-name: Publish to PyPI
+name: Release and Publish
 
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
   workflow_dispatch:
@@ -19,8 +21,105 @@ permissions:
   contents: read
 
 jobs:
+  release-metadata:
+    name: Resolve release metadata
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      tag-exists: ${{ steps.existing-tag.outputs.exists }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Resolve package version
+        id: version
+        shell: bash
+        run: |
+          python - <<'PY'
+          import ast
+          import os
+          import re
+          import tomllib
+          from pathlib import Path
+
+          with Path("pyproject.toml").open("rb") as project_file:
+              package_version = tomllib.load(project_file)["project"]["version"]
+
+          version_tree = ast.parse(
+              Path("src/agent_learning/_version.py").read_text(encoding="utf-8")
+          )
+          runtime_version = None
+          for node in version_tree.body:
+              if not isinstance(node, ast.Assign):
+                  continue
+              if not any(
+                  isinstance(target, ast.Name) and target.id == "__version__"
+                  for target in node.targets
+              ):
+                  continue
+              if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                  runtime_version = node.value.value
+                  break
+
+          if package_version != runtime_version:
+              raise SystemExit(
+                  "pyproject.toml and src/agent_learning/_version.py must use the same version"
+              )
+          if not re.fullmatch(
+              r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
+              r"(?:(?:a|b|rc)(?:0|[1-9]\d*)|\.(?:post|dev)(?:0|[1-9]\d*))?",
+              package_version,
+          ):
+              raise SystemExit(f"Unsupported release version: {package_version!r}")
+
+          tag = f"v{package_version}"
+          if os.environ.get("GITHUB_REF_TYPE") == "tag":
+              pushed_tag = os.environ["GITHUB_REF_NAME"]
+              if pushed_tag != tag:
+                  raise SystemExit(
+                      f"Tag {pushed_tag!r} does not match package version {package_version!r}"
+                  )
+
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
+              output.write(f"version={package_version}\n")
+              output.write(f"tag={tag}\n")
+          PY
+
+      - name: Reject a version already tagged at another commit
+        id: existing-tag
+        if: github.event_name == 'push' || inputs.target == 'pypi'
+        shell: bash
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          existing_sha="$(
+            git ls-remote origin "refs/tags/${TAG}^{}" | awk 'NR == 1 { print $1 }'
+          )"
+          if [[ -z "$existing_sha" ]]; then
+            existing_sha="$(
+              git ls-remote origin "refs/tags/${TAG}" | awk 'NR == 1 { print $1 }'
+            )"
+          fi
+
+          if [[ -n "$existing_sha" && "$existing_sha" != "$(git rev-parse HEAD)" ]]; then
+            echo "::error::${TAG} already points to ${existing_sha}; bump the package version."
+            exit 1
+          fi
+
+          if [[ -n "$existing_sha" ]]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
     name: Build sdist + wheel
+    needs: release-metadata
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,26 +130,85 @@ jobs:
           python-version: "3.12"
 
       - name: Install build tooling
-        run: python -m pip install --upgrade pip build
+        run: python -m pip install --upgrade pip build twine
 
       - name: Build distributions
         run: python -m build
 
       - name: Verify metadata
-        run: |
-          python -m pip install --upgrade twine
-          python -m twine check dist/*
+        run: python -m twine check dist/*
 
-      - name: Upload artifact
+      - name: Upload distributions
         uses: actions/upload-artifact@v4
         with:
-          name: dist
+          name: python-distributions-${{ needs.release-metadata.outputs.version }}
           path: dist/
+          if-no-files-found: error
+          overwrite: true
+
+  build-windows:
+    name: Build Windows release
+    needs: release-metadata
+    if: github.event_name == 'push' || inputs.target == 'pypi'
+    uses: ./.github/workflows/windows-installer.yaml
+    with:
+      app_version: ${{ needs.release-metadata.outputs.version }}
+
+  github-release:
+    name: Create GitHub release
+    needs:
+      - release-metadata
+      - build
+      - build-windows
+    if: >-
+      github.repository == 'microsoft/agents-learning-sdk' &&
+      (github.event_name == 'push' || inputs.target == 'pypi')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: agents-learning-sdk-windows-installer-${{ needs.release-metadata.outputs.version }}
+          path: release-assets
+
+      - name: Create release and attach executables
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release-metadata.outputs.tag }}
+          TAG_EXISTS: ${{ needs.release-metadata.outputs.tag-exists }}
+        run: |
+          mapfile -t assets < <(find release-assets -type f -name '*.exe' -print | sort)
+          if [[ ! -f "release-assets/dist/agent-learn.exe" ]]; then
+            echo "::error::The Windows build did not produce agent-learn.exe."
+            exit 1
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${assets[@]}" --clobber
+          elif [[ "$TAG_EXISTS" == "true" ]]; then
+            gh release create "$TAG" "${assets[@]}" \
+              --verify-tag \
+              --title "$TAG" \
+              --generate-notes
+          else
+            gh release create "$TAG" "${assets[@]}" \
+              --target "$GITHUB_SHA" \
+              --title "$TAG" \
+              --generate-notes
+          fi
 
   publish-testpypi:
     name: Publish to TestPyPI
-    needs: build
-    if: ${{ github.repository == 'microsoft/agents-learning-sdk' && github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi' }}
+    needs:
+      - release-metadata
+      - build
+    if: >-
+      github.repository == 'microsoft/agents-learning-sdk' &&
+      github.event_name == 'workflow_dispatch' &&
+      inputs.target == 'testpypi'
     runs-on: ubuntu-latest
     environment:
       name: testpypi
@@ -60,8 +218,9 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: dist
+          name: python-distributions-${{ needs.release-metadata.outputs.version }}
           path: dist/
+
       - name: Publish to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
@@ -70,8 +229,13 @@ jobs:
 
   publish-pypi:
     name: Publish to PyPI
-    needs: build
-    if: ${{ github.repository == 'microsoft/agents-learning-sdk' && (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi')) }}
+    needs:
+      - release-metadata
+      - build
+      - github-release
+    if: >-
+      github.repository == 'microsoft/agents-learning-sdk' &&
+      (github.event_name == 'push' || inputs.target == 'pypi')
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -81,8 +245,9 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: dist
+          name: python-distributions-${{ needs.release-metadata.outputs.version }}
           path: dist/
+
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:

@@ -1,6 +1,6 @@
 """Intent resolution metric wrapper.
 
-Score range from the underlying judge is ``1`` (very poor) to ``5``
+Score range from the underlying scorer is ``1`` (very poor) to ``5``
 (excellent). We normalise to ``[0, 1]`` via ``(score - 1) / 4`` so
 that a perfect intent resolution becomes a maximum positive reward
 signal after shaping.
@@ -23,8 +23,8 @@ class IntentResolutionMetric(MetricEvaluator):
         from azure.ai.evaluation import IntentResolutionEvaluator  # type: ignore
 
         return IntentResolutionEvaluator(
-            model_config=self._judge_config.to_model_config(),
-            threshold=self._judge_config.threshold,
+            model_config=self._score_config.to_model_config(),
+            threshold=self._score_config.threshold,
         )
 
     def _build_kwargs(self, request: MetricRequest) -> Dict[str, Any]:
@@ -37,7 +37,7 @@ class IntentResolutionMetric(MetricEvaluator):
         return kwargs
 
     def _normalize(self, raw: Dict[str, Any]) -> Optional[float]:
-        # Judge produces an integer 1..5
+        # The scorer produces an integer 1..5
         from .base import _extract_score  # type: ignore
 
         score = _extract_score(raw, self.NAME)

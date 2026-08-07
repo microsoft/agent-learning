@@ -60,3 +60,43 @@ def test_policy_versioning() -> None:
     latest = store.get_latest_policy("dq")
     assert latest is not None
     assert latest.version == 1
+
+
+def test_task_policy_history_and_active_pointer() -> None:
+    store = InMemoryStore()
+    first = PolicySnapshot(agent_id="dq", task_id="chat", version=0)
+    second = PolicySnapshot(agent_id="dq", task_id="chat", version=1)
+    other = PolicySnapshot(agent_id="dq", task_id="animation", version=5)
+    store.store_policy(first)
+    store.store_policy(second)
+    store.store_policy(other)
+
+    assert [policy.id for policy in store.list_policies("dq", "chat")] == [
+        second.id,
+        first.id,
+    ]
+    assert store.get_active_policy("dq", "chat") == second
+
+
+def test_agent_task_discovery_and_full_episode_count() -> None:
+    store = InMemoryStore()
+    store.store_episode(
+        Episode(
+            agent_id="dq",
+            agent_name="Demo Agent",
+            task_id="chat",
+            task_name="Chat",
+            intent_summary="answer a question",
+            action_id="answer",
+            expected_outcome="an answer",
+            execution_status="completed",
+            result_summary="answered",
+        )
+    )
+    store.store_episode(Episode(agent_id="dq", task_id="animation"))
+
+    assert store.list_agents()[0].name == "Demo Agent"
+    assert [task.id for task in store.list_agent_tasks("dq")] == ["animation", "chat"]
+    assert store.count_episodes("dq") == 2
+    assert store.count_episodes("dq", full_only=True) == 1
+    assert len(store.query_episodes("dq", task_id="chat")) == 1

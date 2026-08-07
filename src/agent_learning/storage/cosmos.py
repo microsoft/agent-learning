@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import os
 from typing import Any, Dict, Iterable, List, Optional
+from urllib.parse import quote
 
 try:  # azure-cosmos is required only when the Cosmos backend is used.
     from azure.cosmos import CosmosClient, PartitionKey  # type: ignore
@@ -31,7 +32,15 @@ except ImportError:  # pragma: no cover
     IDENTITY_AVAILABLE = False
 
 from ..config import CosmosConfig
-from ..types import Episode, MetricResult, PolicySnapshot, Reward, TrainingRun
+from ..types import (
+    AgentSummary,
+    AgentTaskSummary,
+    Episode,
+    MetricResult,
+    PolicySnapshot,
+    Reward,
+    TrainingRun,
+)
 from .base import LearningStore
 
 logger = logging.getLogger(__name__)
@@ -158,6 +167,57 @@ class CosmosStore(LearningStore):
             return []
 
     # ------------------------------------------------------------------
+    # Discovery
+    # ------------------------------------------------------------------
+
+    def list_agents(self) -> List[AgentSummary]:
+        names: Dict[str, str] = {}
+        episode_docs = self._query(
+            "episodes",
+            "SELECT c.agent_id, c.agent_name FROM c",
+            cross_partition=True,
+        )
+        for doc in episode_docs:
+            agent_id = str(doc.get("agent_id", "default"))
+            names.setdefault(agent_id, agent_id)
+            if doc.get("agent_name"):
+                names[agent_id] = str(doc["agent_name"])
+        policy_docs = self._query(
+            "policies",
+            "SELECT c.agent_id FROM c WHERE NOT IS_DEFINED(c.record_type)",
+            cross_partition=True,
+        )
+        for doc in policy_docs:
+            agent_id = str(doc.get("agent_id", "default"))
+            names.setdefault(agent_id, agent_id)
+        return [AgentSummary(id=agent_id, name=names[agent_id]) for agent_id in sorted(names)]
+
+    def list_agent_tasks(self, agent_id: str) -> List[AgentTaskSummary]:
+        names: Dict[str, str] = {}
+        episode_docs = self._query(
+            "episodes",
+            "SELECT c.task_id, c.task_name FROM c WHERE c.agent_id = @agent_id",
+            [{"name": "@agent_id", "value": agent_id}],
+            partition_key=agent_id,
+        )
+        for doc in episode_docs:
+            task_id = str(doc.get("task_id", "default"))
+            names.setdefault(task_id, task_id)
+            if doc.get("task_name"):
+                names[task_id] = str(doc["task_name"])
+        policy_docs = self._query(
+            "policies",
+            "SELECT c.task_id FROM c WHERE c.agent_id = @agent_id "
+            "AND NOT IS_DEFINED(c.record_type)",
+            [{"name": "@agent_id", "value": agent_id}],
+            partition_key=agent_id,
+        )
+        for doc in policy_docs:
+            task_id = str(doc.get("task_id", "default"))
+            names.setdefault(task_id, task_id)
+        return [AgentTaskSummary(id=task_id, name=names[task_id]) for task_id in sorted(names)]
+
+    # ------------------------------------------------------------------
     # Episodes
     # ------------------------------------------------------------------
 
@@ -177,6 +237,7 @@ class CosmosStore(LearningStore):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         policy_id: Optional[str] = None,
+        task_id: Optional[str] = None,
     ) -> List[Episode]:
         clauses = ["c.agent_id = @agent_id"]
         params: List[Dict[str, Any]] = [{"name": "@agent_id", "value": agent_id}]
@@ -189,6 +250,12 @@ class CosmosStore(LearningStore):
         if policy_id:
             clauses.append("c.policy_id = @policy_id")
             params.append({"name": "@policy_id", "value": policy_id})
+        if task_id:
+            if task_id == "default":
+                clauses.append("(NOT IS_DEFINED(c.task_id) OR c.task_id = @task_id)")
+            else:
+                clauses.append("c.task_id = @task_id")
+            params.append({"name": "@task_id", "value": task_id})
 
         query = (
             "SELECT * FROM c WHERE "
@@ -198,6 +265,36 @@ class CosmosStore(LearningStore):
         )
         docs = self._query("episodes", query, params, partition_key=agent_id)
         return [Episode.from_dict(d) for d in docs]
+
+    def count_episodes(
+        self,
+        agent_id: str,
+        *,
+        task_id: Optional[str] = None,
+        full_only: bool = False,
+    ) -> int:
+        clauses = ["c.agent_id = @agent_id"]
+        params: List[Dict[str, Any]] = [{"name": "@agent_id", "value": agent_id}]
+        if task_id:
+            if task_id == "default":
+                clauses.append("(NOT IS_DEFINED(c.task_id) OR c.task_id = @task_id)")
+            else:
+                clauses.append("c.task_id = @task_id")
+            params.append({"name": "@task_id", "value": task_id})
+        if full_only:
+            clauses.extend(
+                [
+                    "IS_STRING(c.intent_summary) AND c.intent_summary != ''",
+                    "((IS_STRING(c.action_id) AND c.action_id != '') OR "
+                    "(IS_STRING(c.action_name) AND c.action_name != ''))",
+                    "IS_STRING(c.expected_outcome) AND c.expected_outcome != ''",
+                    "IS_STRING(c.execution_status) AND c.execution_status != ''",
+                    "IS_STRING(c.result_summary) AND c.result_summary != ''",
+                ]
+            )
+        query = "SELECT VALUE COUNT(1) FROM c WHERE " + " AND ".join(clauses)
+        counts = self._query("episodes", query, params, partition_key=agent_id)
+        return int(counts[0]) if counts else 0
 
     # ------------------------------------------------------------------
     # Metric results
@@ -259,19 +356,64 @@ class CosmosStore(LearningStore):
 
     def store_policy(self, policy: PolicySnapshot) -> str:
         self._upsert("policies", policy.to_dict())
+        self._upsert(
+            "policies",
+            {
+                "id": f"active:{quote(policy.task_id, safe='')}",
+                "agent_id": policy.agent_id,
+                "task_id": policy.task_id,
+                "policy_id": policy.id,
+                "record_type": "active_policy",
+            },
+        )
         return policy.id
 
     def get_policy(self, policy_id: str, agent_id: str) -> Optional[PolicySnapshot]:
         doc = self._read("policies", policy_id, agent_id)
         return PolicySnapshot.from_dict(doc) if doc else None
 
-    def get_latest_policy(self, agent_id: str) -> Optional[PolicySnapshot]:
-        query = (
-            "SELECT TOP 1 * FROM c WHERE c.agent_id = @agent_id ORDER BY c.version DESC"
+    def list_policies(
+        self,
+        agent_id: str,
+        task_id: str,
+        *,
+        limit: int = 100,
+    ) -> List[PolicySnapshot]:
+        task_clause = (
+            "(NOT IS_DEFINED(c.task_id) OR c.task_id = @task_id)"
+            if task_id == "default"
+            else "c.task_id = @task_id"
         )
-        params = [{"name": "@agent_id", "value": agent_id}]
+        query = (
+            "SELECT * FROM c WHERE c.agent_id = @agent_id "
+            "AND NOT IS_DEFINED(c.record_type) "
+            f"AND {task_clause} "
+            "ORDER BY c.version DESC "
+            f"OFFSET 0 LIMIT {int(limit)}"
+        )
+        params = [
+            {"name": "@agent_id", "value": agent_id},
+            {"name": "@task_id", "value": task_id},
+        ]
         docs = self._query("policies", query, params, partition_key=agent_id)
-        return PolicySnapshot.from_dict(docs[0]) if docs else None
+        return [PolicySnapshot.from_dict(doc) for doc in docs]
+
+    def get_latest_policy(
+        self, agent_id: str, task_id: str = "default"
+    ) -> Optional[PolicySnapshot]:
+        policies = self.list_policies(agent_id, task_id, limit=1)
+        return policies[0] if policies else None
+
+    def get_active_policy(
+        self, agent_id: str, task_id: str
+    ) -> Optional[PolicySnapshot]:
+        pointer = self._read("policies", f"active:{quote(task_id, safe='')}", agent_id)
+        if not pointer:
+            return self.get_latest_policy(agent_id, task_id)
+        policy = self.get_policy(str(pointer.get("policy_id", "")), agent_id)
+        if policy is None or policy.task_id != task_id:
+            return self.get_latest_policy(agent_id, task_id)
+        return policy
 
     # ------------------------------------------------------------------
     # Training runs

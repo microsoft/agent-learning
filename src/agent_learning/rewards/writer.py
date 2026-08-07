@@ -18,7 +18,7 @@ class RewardWriter:
 
     The writer stores one ``Reward`` per metric (``source=METRIC``)
     plus a single aggregate reward (``source=AGGREGATE``) that the
-    learner consumes. Storing per-metric values keeps the audit trail
+    learner consumes. Storing per-metric values keeps the learning history
     complete and lets downstream analytics decompose the aggregate.
     """
 

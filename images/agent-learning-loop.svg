@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 330" role="img" aria-labelledby="title description">
   <title id="title">Agent learning loop</title>
-  <desc id="description">A three-second animation showing a policy choosing an action, judges scoring the episode, and a learner updating the policy.</desc>
+  <desc id="description">A three-second animation showing a policy choosing an action, a score evaluating the episode, and a learner updating the policy.</desc>
   <style>
     .stage {
       opacity: 0.48;
@@ -8,7 +8,7 @@
       transform-origin: center;
     }
     .policy-stage { animation: policy-stage 3s ease-in-out infinite; }
-    .judges-stage { animation: judges-stage 3s ease-in-out infinite; }
+    .score-stage { animation: score-stage 3s ease-in-out infinite; }
     .learner-stage { animation: learner-stage 3s ease-in-out infinite; }
     .flow {
       fill: none;
@@ -30,14 +30,14 @@
     }
     .feedback-label { animation: feedback-label 3s ease-in-out infinite; }
     .policy-bars rect { animation: policy-bars 3s ease-in-out infinite; transform-box: fill-box; transform-origin: left; }
-    .judge-bars rect { animation: judge-bars 3s ease-in-out infinite; transform-box: fill-box; transform-origin: left; }
+    .score-bars rect { animation: score-bars 3s ease-in-out infinite; transform-box: fill-box; transform-origin: left; }
     .chart-line { animation: chart-line 3s ease-in-out infinite; stroke-dasharray: 150; stroke-dashoffset: 150; }
 
     @keyframes policy-stage {
       0%, 22% { opacity: 1; transform: translateY(-5px); }
       32%, 100% { opacity: 0.48; transform: translateY(0); }
     }
-    @keyframes judges-stage {
+    @keyframes score-stage {
       0%, 27% { opacity: 0.48; transform: translateY(0); }
       34%, 56% { opacity: 1; transform: translateY(-5px); }
       66%, 100% { opacity: 0.48; transform: translateY(0); }
@@ -71,7 +71,7 @@
       0% { transform: scaleX(0.25); }
       18%, 100% { transform: scaleX(1); }
     }
-    @keyframes judge-bars {
+    @keyframes score-bars {
       0%, 34% { transform: scaleX(0.2); }
       53%, 100% { transform: scaleX(1); }
     }
@@ -80,7 +80,7 @@
       87%, 100% { stroke-dashoffset: 0; }
     }
     @media (prefers-reduced-motion: reduce) {
-      .stage, .flow, .feedback, .feedback-label, .policy-bars rect, .judge-bars rect, .chart-line {
+      .stage, .flow, .feedback, .feedback-label, .policy-bars rect, .score-bars rect, .chart-line {
         animation: none;
       }
       .stage { opacity: 1; }
@@ -113,12 +113,12 @@
     <text x="331" y="207" fill="#8b949e" font-family="Consolas, monospace" font-size="13" text-anchor="end">softmax</text>
   </g>
 
-  <g class="stage judges-stage">
+  <g class="stage score-stage">
     <rect x="450" y="82" width="300" height="144" rx="8" fill="#1b1722" stroke="#c792ea" stroke-width="2"/>
     <rect x="450" y="82" width="7" height="144" rx="3" fill="#c792ea"/>
-    <text x="481" y="122" fill="#c792ea" font-family="Segoe UI, sans-serif" font-size="27" font-weight="700">Judges</text>
-    <text x="481" y="149" fill="#c9d1d9" font-family="Segoe UI, sans-serif" font-size="16">score the episode</text>
-    <g class="judge-bars">
+    <text x="481" y="122" fill="#c792ea" font-family="Segoe UI, sans-serif" font-size="27" font-weight="700">Score</text>
+    <text x="481" y="149" fill="#c9d1d9" font-family="Segoe UI, sans-serif" font-size="16">evaluate the episode</text>
+    <g class="score-bars">
       <rect x="481" y="174" width="70" height="9" rx="4" fill="#e8a24c"/>
       <rect x="566" y="174" width="70" height="9" rx="4" fill="#5fb878"/>
       <rect x="651" y="174" width="70" height="9" rx="4" fill="#c792ea"/>

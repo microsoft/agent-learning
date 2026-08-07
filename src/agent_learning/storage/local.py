@@ -32,7 +32,15 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Union
 from urllib.parse import quote
 
-from ..types import Episode, MetricResult, PolicySnapshot, Reward, TrainingRun
+from ..types import (
+    AgentSummary,
+    AgentTaskSummary,
+    Episode,
+    MetricResult,
+    PolicySnapshot,
+    Reward,
+    TrainingRun,
+)
 from .base import LearningStore
 
 logger = logging.getLogger(__name__)
@@ -119,6 +127,50 @@ class LocalFileStore(LearningStore):
                 docs.append(doc)
         return docs
 
+    def _read_all_docs(self, kind: str) -> List[Dict[str, Any]]:
+        root = self._root / kind
+        if not root.is_dir():
+            return []
+        docs: List[Dict[str, Any]] = []
+        for directory in root.iterdir():
+            if not directory.is_dir():
+                continue
+            for entry in directory.iterdir():
+                if entry.suffix != ".json" or not entry.is_file():
+                    continue
+                doc = self._read_json(entry)
+                if isinstance(doc, dict):
+                    docs.append(doc)
+        return docs
+
+    # ------------------------------------------------------------------
+    # Discovery
+    # ------------------------------------------------------------------
+
+    def list_agents(self) -> List[AgentSummary]:
+        names: Dict[str, str] = {}
+        for doc in self._read_all_docs("episodes"):
+            agent_id = str(doc.get("agent_id", "default"))
+            names.setdefault(agent_id, agent_id)
+            if doc.get("agent_name"):
+                names[agent_id] = str(doc["agent_name"])
+        for doc in self._read_all_docs("policies"):
+            agent_id = str(doc.get("agent_id", "default"))
+            names.setdefault(agent_id, agent_id)
+        return [AgentSummary(id=agent_id, name=names[agent_id]) for agent_id in sorted(names)]
+
+    def list_agent_tasks(self, agent_id: str) -> List[AgentTaskSummary]:
+        names: Dict[str, str] = {}
+        for doc in self._read_dir_docs("episodes", agent_id):
+            task_id = str(doc.get("task_id", "default"))
+            names.setdefault(task_id, task_id)
+            if doc.get("task_name"):
+                names[task_id] = str(doc["task_name"])
+        for doc in self._read_dir_docs("policies", agent_id):
+            task_id = str(doc.get("task_id", "default"))
+            names.setdefault(task_id, task_id)
+        return [AgentTaskSummary(id=task_id, name=names[task_id]) for task_id in sorted(names)]
+
     # ------------------------------------------------------------------
     # Episodes
     # ------------------------------------------------------------------
@@ -141,6 +193,7 @@ class LocalFileStore(LearningStore):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         policy_id: Optional[str] = None,
+        task_id: Optional[str] = None,
     ) -> List[Episode]:
         results = [
             ep
@@ -148,9 +201,24 @@ class LocalFileStore(LearningStore):
             if (start_date is None or ep.created_at >= start_date)
             and (end_date is None or ep.created_at <= end_date)
             and (policy_id is None or ep.policy_id == policy_id)
+            and (task_id is None or ep.task_id == task_id)
         ]
         results.sort(key=lambda ep: ep.created_at, reverse=True)
         return results[:limit]
+
+    def count_episodes(
+        self,
+        agent_id: str,
+        *,
+        task_id: Optional[str] = None,
+        full_only: bool = False,
+    ) -> int:
+        return sum(
+            1
+            for doc in self._read_dir_docs("episodes", agent_id)
+            if (task_id is None or doc.get("task_id", "default") == task_id)
+            and (not full_only or Episode.from_dict(doc).is_full)
+        )
 
     # ------------------------------------------------------------------
     # Metric results
@@ -213,18 +281,51 @@ class LocalFileStore(LearningStore):
         self._write_json(
             self._path("policies", policy.agent_id, policy.id), policy.to_dict()
         )
+        self._write_json(
+            self._path("active-policies", policy.agent_id, policy.task_id),
+            {
+                "agent_id": policy.agent_id,
+                "task_id": policy.task_id,
+                "policy_id": policy.id,
+            },
+        )
         return policy.id
 
     def get_policy(self, policy_id: str, agent_id: str) -> Optional[PolicySnapshot]:
         doc = self._read_json(self._path("policies", agent_id, policy_id))
         return PolicySnapshot.from_dict(doc) if doc else None
 
-    def get_latest_policy(self, agent_id: str) -> Optional[PolicySnapshot]:
-        docs = self._read_dir_docs("policies", agent_id)
-        if not docs:
-            return None
-        latest = max(docs, key=lambda d: int(d.get("version", 0)))
-        return PolicySnapshot.from_dict(latest)
+    def list_policies(
+        self,
+        agent_id: str,
+        task_id: str,
+        *,
+        limit: int = 100,
+    ) -> List[PolicySnapshot]:
+        policies = [
+            PolicySnapshot.from_dict(doc)
+            for doc in self._read_dir_docs("policies", agent_id)
+            if doc.get("task_id", "default") == task_id
+        ]
+        policies.sort(key=lambda policy: (policy.version, policy.created_at), reverse=True)
+        return policies[:limit]
+
+    def get_latest_policy(
+        self, agent_id: str, task_id: str = "default"
+    ) -> Optional[PolicySnapshot]:
+        policies = self.list_policies(agent_id, task_id, limit=1)
+        return policies[0] if policies else None
+
+    def get_active_policy(
+        self, agent_id: str, task_id: str
+    ) -> Optional[PolicySnapshot]:
+        pointer = self._read_json(self._path("active-policies", agent_id, task_id))
+        if not pointer:
+            return self.get_latest_policy(agent_id, task_id)
+        policy = self.get_policy(str(pointer.get("policy_id", "")), agent_id)
+        if policy is None or policy.task_id != task_id:
+            return self.get_latest_policy(agent_id, task_id)
+        return policy
 
     # ------------------------------------------------------------------
     # Training runs

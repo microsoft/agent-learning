@@ -7,7 +7,7 @@ native, in-process learner. The SDK is organised into five layers:
   ``Reward``, ``PolicySnapshot``, ...).
 - ``agent_learning.storage``  - pluggable persistence (Cosmos DB,
   local file system, and in-memory).
-- ``agent_learning.metrics``  - judge-based metrics that wrap the
+- ``agent_learning.metrics``  - score-based metrics that wrap the
   Azure AI Evaluation evaluators for Intent Resolution, Task
   Adherence, and Task Completion.
 - ``agent_learning.rewards``  - reward shaping + persistence.
@@ -25,40 +25,50 @@ Quick start::
     )
 
     actions = [Action(id="prompt_A"), Action(id="prompt_B")]
-    policy = SoftmaxPolicy.from_actions(actions, agent_id="dq")
+    policy = SoftmaxPolicy.from_actions(actions, agent_id="dq", task_id="sales-summary")
 
     # Capture
     capture = EpisodeCapture()
     decision = policy.choose()
     ctx = capture.start(
         "Tell me my Q3 sales summary",
+        task_id="sales-summary",
+        intent_summary="Summarize Q3 sales",
+        action_type="chat",
+        action_name=decision.action.id,
+        expected_outcome="An accurate Q3 sales summary",
         policy_id=policy.snapshot().id,
         policy_version=policy.snapshot().version,
         action_id=decision.action.id,
         action_logprob=decision.logprob,
     )
     # ... agent runs, records tool calls, produces output ...
-    episode = capture.end(ctx, assistant_output="...")
+    episode = capture.end(
+        ctx,
+        assistant_output="...",
+        execution_status="completed",
+        result_summary="Returned the sales summary",
+    )
 
     # Train
     runner = LearningRunner(policy=policy)
-    run = runner.run_offline_batch("dq", episode_limit=200)
+    run = runner.run_offline_batch("dq", task_id="sales-summary", episode_limit=200)
 """
 
 from ._version import __version__
 from .capture import CaptureContext, EpisodeCapture, get_capture
 from .classifiers import (
-    AdherenceJudge,
+    AdherenceScorer,
     Classifier,
     ClassifierResult,
-    CompletionJudge,
-    IntentJudge,
+    CompletionScorer,
+    IntentScorer,
     RouterClassifier,
 )
 from .config import (
     CaptureConfig,
     CosmosConfig,
-    JudgeConfig,
+    ScoreConfig,
     LearnerConfig,
     ShapingConfig,
 )
@@ -84,6 +94,8 @@ from .storage import (
 from .training import LearningRunner
 from .types import (
     Action,
+    AgentSummary,
+    AgentTaskSummary,
     Episode,
     MetricName,
     MetricResult,
@@ -97,21 +109,23 @@ from .types import (
 
 __all__ = [
     "Action",
-    "AdherenceJudge",
+    "AdherenceScorer",
+    "AgentSummary",
+    "AgentTaskSummary",
     "CaptureConfig",
     "CaptureContext",
     "Classifier",
     "ClassifierResult",
-    "CompletionJudge",
+    "CompletionScorer",
     "ContextualSoftmaxPolicy",
     "CosmosConfig",
     "CosmosStore",
     "Episode",
     "EpisodeCapture",
     "InMemoryStore",
-    "IntentJudge",
+    "IntentScorer",
     "IntentResolutionMetric",
-    "JudgeConfig",
+    "ScoreConfig",
     "Learner",
     "LearnerConfig",
     "LearnerResult",

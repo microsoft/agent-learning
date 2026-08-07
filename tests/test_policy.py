@@ -25,6 +25,8 @@ def test_apply_update_changes_logits_and_version() -> None:
     policy.apply_update({"a": 1.0, "b": -1.0}, baseline=0.1, episodes_seen=5)
     after = policy.snapshot()
     assert after.version == before.version + 1
+    assert after.id != before.id
+    assert after.task_id == before.task_id
     assert after.logits["a"] > before.logits["a"]
     assert after.logits["b"] < before.logits["b"]
     assert after.baseline == 0.1

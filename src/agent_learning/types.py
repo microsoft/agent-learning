@@ -38,7 +38,7 @@ def _new_id() -> str:
 
 
 class MetricName(str, Enum):
-    """Identifiers for the supported native judge metrics."""
+    """Identifiers for the supported native score metrics."""
 
     INTENT_RESOLUTION = "intent_resolution"
     TASK_ADHERENCE = "task_adherence"
@@ -48,7 +48,7 @@ class MetricName(str, Enum):
 class RewardSource(str, Enum):
     """Source of a reward record."""
 
-    METRIC = "metric"  # Derived from a single judge metric
+    METRIC = "metric"  # Derived from a single score metric
     AGGREGATE = "aggregate"  # Combined scalar reward across multiple metrics
     HUMAN_APPROVAL = "human_approval"
     TEST_RESULT = "test_result"
@@ -64,6 +64,27 @@ class TrainingStatus(str, Enum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     CANCELLED = "cancelled"
+
+
+# ---------------------------------------------------------------------------
+# Agent and task discovery
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class AgentSummary:
+    """A discovered agent identity."""
+
+    id: str
+    name: str
+
+
+@dataclass(frozen=True)
+class AgentTaskSummary:
+    """A task identity owned by an agent."""
+
+    id: str
+    name: str
 
 
 # ---------------------------------------------------------------------------
@@ -131,13 +152,48 @@ class Episode:
     token_usage: Optional[Dict[str, int]] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
     created_at: str = field(default_factory=_utcnow_iso)
+    agent_name: Optional[str] = None
+    task_id: str = "default"
+    task_name: Optional[str] = None
+    intent_summary: Optional[str] = None
+    action_type: Optional[str] = None
+    action_name: Optional[str] = None
+    target: Optional[str] = None
+    input_summary: Optional[str] = None
+    expected_outcome: Optional[str] = None
+    execution_status: Optional[str] = None
+    result_summary: Optional[str] = None
+
+    @property
+    def is_full(self) -> bool:
+        """Whether the episode has the inputs and outcome needed for learning."""
+        return all(
+            (
+                self.intent_summary,
+                self.action_id or self.action_name,
+                self.expected_outcome,
+                self.execution_status,
+                self.result_summary,
+            )
+        )
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "id": self.id,
             "agent_id": self.agent_id,
+            "agent_name": self.agent_name,
+            "task_id": self.task_id,
+            "task_name": self.task_name,
             "user_input": self.user_input,
             "assistant_output": self.assistant_output,
+            "intent_summary": self.intent_summary,
+            "action_type": self.action_type,
+            "action_name": self.action_name,
+            "target": self.target,
+            "input_summary": self.input_summary,
+            "expected_outcome": self.expected_outcome,
+            "execution_status": self.execution_status,
+            "result_summary": self.result_summary,
             "system_message": self.system_message,
             "conversation_history": self.conversation_history,
             "tool_calls": [tc.to_dict() for tc in self.tool_calls],
@@ -160,8 +216,19 @@ class Episode:
         return cls(
             id=data["id"],
             agent_id=data.get("agent_id", "default"),
+            agent_name=data.get("agent_name"),
+            task_id=data.get("task_id", "default"),
+            task_name=data.get("task_name"),
             user_input=data.get("user_input", ""),
             assistant_output=data.get("assistant_output", ""),
+            intent_summary=data.get("intent_summary"),
+            action_type=data.get("action_type"),
+            action_name=data.get("action_name"),
+            target=data.get("target"),
+            input_summary=data.get("input_summary"),
+            expected_outcome=data.get("expected_outcome"),
+            execution_status=data.get("execution_status"),
+            result_summary=data.get("result_summary"),
             system_message=data.get("system_message"),
             conversation_history=data.get("conversation_history", []),
             tool_calls=[ToolCall.from_dict(tc) for tc in data.get("tool_calls", [])],
@@ -187,15 +254,15 @@ class Episode:
 
 @dataclass
 class MetricResult:
-    """The output of a single judge metric evaluation."""
+    """The output of a single score metric evaluation."""
 
     metric: MetricName
-    score: Optional[float]  # Raw judge score (e.g. 1-5 or 0/1); None if skipped
+    score: Optional[float]  # Raw evaluator score (e.g. 1-5 or 0/1); None if skipped
     normalized: Optional[float]  # Mapped to [0, 1]; None if skipped
     status: str  # "completed" | "skipped"
     reason: Optional[str] = None
     properties: Optional[Dict[str, Any]] = None
-    evaluator: Optional[str] = None  # Judge model deployment used
+    evaluator: Optional[str] = None  # Scorer model deployment used
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -327,11 +394,19 @@ class PolicySnapshot:
     updates_applied: int = 0
     metadata: Dict[str, Any] = field(default_factory=dict)
     created_at: str = field(default_factory=_utcnow_iso)
+    task_id: str = "default"
+
+    def advance_version(self) -> None:
+        """Give an updated policy a new durable snapshot identity."""
+        self.id = _new_id()
+        self.version += 1
+        self.created_at = _utcnow_iso()
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "id": self.id,
             "agent_id": self.agent_id,
+            "task_id": self.task_id,
             "version": self.version,
             "actions": [a.to_dict() for a in self.actions],
             "logits": self.logits,
@@ -347,6 +422,7 @@ class PolicySnapshot:
         return cls(
             id=data["id"],
             agent_id=data.get("agent_id", "default"),
+            task_id=data.get("task_id", "default"),
             version=int(data.get("version", 0)),
             actions=[Action.from_dict(a) for a in data.get("actions", [])],
             logits={k: float(v) for k, v in data.get("logits", {}).items()},
@@ -375,11 +451,13 @@ class TrainingRun:
     completed_at: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
     created_at: str = field(default_factory=_utcnow_iso)
+    task_id: str = "default"
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "id": self.id,
             "agent_id": self.agent_id,
+            "task_id": self.task_id,
             "policy_id": self.policy_id,
             "algorithm": self.algorithm,
             "status": self.status.value,
@@ -398,6 +476,7 @@ class TrainingRun:
         return cls(
             id=data["id"],
             agent_id=data.get("agent_id", "default"),
+            task_id=data.get("task_id", "default"),
             policy_id=data.get("policy_id", ""),
             algorithm=data.get("algorithm", "reinforce"),
             status=TrainingStatus(data.get("status", "pending")),
@@ -414,6 +493,8 @@ class TrainingRun:
 
 __all__ = [
     "Action",
+    "AgentSummary",
+    "AgentTaskSummary",
     "Episode",
     "MetricName",
     "MetricResult",

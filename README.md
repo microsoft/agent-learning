@@ -1,181 +1,78 @@
-<p align="center">
-  <img src="images/362d5160ecde885f.png" alt="Agent Learning — Native reinforcement learning for AI agents" width="640" style="max-width:100%; height:auto;" />
-</p>
-
 # agents-learning-sdk
 
 Native reinforcement learning SDK for AI agents. An in-process
-learner optimizes a small, interpretable policy over discrete agent
-configuration choices (prompt variants, retrieval-k, tool selection
-strategies, …) using Azure AI Evaluation judge metrics as the reward
+learner optimizes a small, interpretable policy over discrete agent choices (e.g., "take action A", "take action B", "take action C") using AI Evaluation scores as the reward
 signal.
 
 <p align="center">
-  <img src="images/agent-learning-loop.svg" alt="Animated loop: Policy chooses an action, Judges score the episode, and Learner updates the policy" width="960" style="max-width:100%; height:auto;" />
+   <img src="images/agent-learning-loop.svg" alt="Animated loop: Policy chooses an action, Score evaluates the episode, and Learner updates the policy" width="960" style="max-width:100%; height:auto;" />
 </p>
 
 ## How it works
 
-The SDK improves agents without LLM weight fine-tuning. There are no
-GPU fine-tune jobs and no opaque update cycles — just three pieces
-that run in your existing Python process:
+The SDK improves agents without LLM weight fine-tuning. There are no GPU fine-tune jobs and no opaque update cycles — just three pieces that run in your existing Python process:
 
 1. The **policy** is a softmax distribution over `N` discrete
-   actions (e.g., "use prompt template A", "use template B"). It
-   lives in Python and updates in milliseconds.
+   actions (e.g., "take action A", "take action B", "take action C"). It lives in Python and updates in milliseconds.
 
    <img src="images/0f85e08d0c47cd01.png" alt="Policy selects one of N discrete actions" width="360" style="max-width:100%; height:auto;" />
 
-2. Each episode is **judged** by three Azure AI Evaluation
+2. Each episode is **evaluated** by three AI Evaluation
    evaluators — `IntentResolutionEvaluator`, `TaskAdherenceEvaluator`,
-   and `TaskCompletionEvaluator` — whose scores are combined into a
-   single scalar reward.
+   and `TaskCompletionEvaluator` — whose scores are combined into a single scalar reward.
 
-   <img src="images/246d112f995b785a.png" alt="Three judge evaluators feed a single scalar reward" width="360" style="max-width:100%; height:auto;" />
+   <img src="images/246d112f995b785a.png" alt="Three evaluator scores feed a single scalar reward" width="360" style="max-width:100%; height:auto;" />
 
-3. A **REINFORCE-with-baseline** learner updates the policy logits
-   directly from logged episodes. Updates are tiny gradient steps
-   that run on CPU and persist through a pluggable store — in-memory
-   or local files by default, with Cosmos DB optional.
+3. A **Reinforce-with-baseline** learner updates the policy logits
+   directly from stored episodes. Updates are tiny gradient steps
+   that run on local compute and persist through a pluggable store — in-memory
+   or local files by default, with Azure Cosmos DB optional.
 
    <img src="images/cc970c453583c982.png" alt="Policy quality improves with every batch of episodes" width="360" style="max-width:100%; height:auto;" />
 
 Every episode, reward, run, and deployment is captured by the
-configured store — in-memory or local files by default, or Cosmos DB —
+configured store — in-memory or local files by default, or Azure Cosmos DB —
 giving you a complete lineage and audit trail of how the policy
 evolved over time.
 
 ## Install
 
+### Windows CLI
+
+For a Python-independent installation, download `agent-learn.exe` or the
+standalone installer from the
+[latest GitHub release](https://github.com/microsoft/agents-learning-sdk/releases/latest).
+The installer can add its installation directory to your user `PATH`, so
+`agent-learn` works from PowerShell or Command Prompt without Python or `pip`.
+
+```powershell
+agent-learn.exe --help
+```
+
+### Python SDK
+
 Released versions are published to PyPI:
 <https://pypi.org/project/agents-learning-sdk/>.
 
-```bash
-pip install agents-learning-sdk
+```powershell
+py -m pip install agents-learning-sdk
+agent-learn.exe --help
 ```
 
-For local development against a checkout of this repository:
+`pip` installs `agent-learn.exe` into the active Python environment's
+`Scripts` directory.
 
-```bash
-pip install -e .
-```
+## Usage
 
-## Configure
+The `agent-learn` CLI provides the current task-learning-loop operations:
 
-The SDK reads its configuration from environment variables. Every
-variable is optional — with no configuration the SDK runs against an
-in-memory store. The most important ones are:
-
-| Variable | Purpose | Default |
-| --- | --- | --- |
-| `AGENT_LEARNING_STORE_BACKEND` | Storage backend: `memory`, `cosmos`, or `local` | `memory` |
-| `AGENT_LEARNING_COSMOS_ENDPOINT` | Cosmos DB account URL (only used when backend is `cosmos`) | unset |
-| `AGENT_LEARNING_COSMOS_DATABASE` | Cosmos DB database name (only used when backend is `cosmos`) | `dq_rl` |
-| `AGENT_LEARNING_LOCAL_STORE_DIR` | Directory for the `local` file backend | `./data/agent-learning/store` |
-| `AGENT_LEARNING_JUDGE_ENDPOINT` | Azure OpenAI endpoint used by the judge | unset |
-| `AGENT_LEARNING_JUDGE_DEPLOYMENT` | Judge deployment name | unset |
-| `AGENT_LEARNING_W_INTENT` | Weight for intent-resolution reward | `0.4` |
-| `AGENT_LEARNING_W_ADHERENCE` | Weight for task-adherence reward | `0.3` |
-| `AGENT_LEARNING_W_COMPLETION` | Weight for task-completion reward | `0.3` |
-| `AGENT_LEARNING_LR` | REINFORCE learning rate | `0.05` |
-| `AGENT_LEARNING_BASELINE_DECAY` | EMA decay on the value baseline | `0.9` |
-
-By default the SDK uses a volatile in-memory store. Set
-`AGENT_LEARNING_STORE_BACKEND=cosmos` (together with the Cosmos
-variables above) for durable Cosmos DB persistence, or `=local` to
-persist to JSON files on disk. When the judge configuration is
-missing, the SDK skips evaluations so unit tests still pass.
-
-## Use it
-
-```python
-from agent_learning import (
-    Action, EpisodeCapture, LearningRunner, SoftmaxPolicy,
-)
-
-actions = [
-    Action(id="concise"),
-    Action(id="detailed"),
-]
-policy = SoftmaxPolicy.from_actions(actions, agent_id="nba")
-
-# At inference time
-decision = policy.choose()
-capture = EpisodeCapture()
-ctx = capture.start(
-    user_input="Summarise Q3 sales",
-    policy_id=policy.snapshot().id,
-    policy_version=policy.snapshot().version,
-    action_id=decision.action.id,
-    action_logprob=decision.logprob,
-)
-# … run your agent, then call:
-capture.end(ctx, assistant_output="…")
-
-# Periodically (cron, manual, event-driven)
-runner = LearningRunner(policy=policy)
-run = runner.run_offline_batch("nba", episode_limit=500)
-```
-
-The included CLI exposes the same flow:
-
-```bash
-agent-learn init-policy --agent-id dq --actions ./actions.json
-agent-learn train --agent-id dq --limit 500
-agent-learn policy --agent-id dq
-```
-
-## Examples
-
-Three runnable examples in [examples/](examples/) build on each other.
-All run in-process against the in-memory store with **no Azure
-credentials** required.
-
-| Example | Reward source | Objects it showcases |
-| --- | --- | --- |
-| [quickstart.py](examples/quickstart.py) | Stubbed constant | `SoftmaxPolicy`, built-in `ReinforceLearner`, `RewardShaper`, `LearningRunner` |
-| [next_best_action.py](examples/next_best_action.py) | Simulated outcome | `ContextualSoftmaxPolicy` (contextual bandit), a contextual policy-gradient learner |
-| [judged_optimization.py](examples/judged_optimization.py) | **Real Tier 1 judges** | `build_judges` (tiered judges), `JudgeScore`→`MetricResult`, routing + hallucination **shaping** penalties, rich `Episode` records |
-
-Start with [judged_optimization.py](examples/judged_optimization.py) to
-see the SDK's judge layer, reward shaping, metrics, policy, learner, and
-episode capture working together end to end:
-
-```bash
-python examples/judged_optimization.py
-```
-
-## Layout
-
-```
-src/agent_learning/
-├── types.py            # Durable record types
-├── config.py           # Env-driven configuration
-├── capture.py          # Episode capture hook
-├── storage/            # LearningStore (Cosmos + local file + in-memory)
-├── metrics/            # IntentResolution/TaskAdherence/TaskCompletion
-├── rewards/            # Shaping + writer
-├── policy/             # SoftmaxPolicy
-├── learners/           # REINFORCE
-├── training/           # End-to-end runner
-└── cli.py              # `agent-learn` command-line
-```
-
-## Unit Testing
-
-```bash
-pytest -q
-```
-
-The test suite covers types, the in-memory store, the policy,
-reward shaping, the REINFORCE learner, and an end-to-end training
-loop with a stubbed metric evaluator.
-
-## Use
-
-```bash
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-
+```text
+agent-learn list
+agent-learn tasks-list <agent_id>
+agent-learn task-episodes-count <agent_id> [--task-id <task_id>]
+agent-learn task-episodes-list <agent_id> [--task-id <task_id>] [--limit <1-500>] [--include-incomplete]
+agent-learn task-policy-init --agent-id <agent_id> --task-id <task_id> --actions ./actions.json
+agent-learn score --agent-id <agent_id> [--task-id <task_id>] [--limit <1-500>]
+agent-learn train --agent-id <agent_id> [--task-id <task_id>] [--limit <1-500>] [--start-date <date>] [--end-date <date>] [--skip-scoring]
+agent-learn task-policy --agent-id <agent_id> --task-id <task_id>
 ```

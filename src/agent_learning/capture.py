@@ -65,6 +65,15 @@ class CaptureContext:
     correlation_id: Optional[str] = None
     session_id: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
+    agent_name: Optional[str] = None
+    task_id: str = "default"
+    task_name: Optional[str] = None
+    intent_summary: Optional[str] = None
+    action_type: Optional[str] = None
+    action_name: Optional[str] = None
+    target: Optional[str] = None
+    input_summary: Optional[str] = None
+    expected_outcome: Optional[str] = None
 
 
 class EpisodeCapture:
@@ -103,6 +112,14 @@ class EpisodeCapture:
         self,
         user_input: str,
         *,
+        task_id: Optional[str] = None,
+        task_name: Optional[str] = None,
+        intent_summary: Optional[str] = None,
+        action_type: Optional[str] = None,
+        action_name: Optional[str] = None,
+        target: Optional[str] = None,
+        input_summary: Optional[str] = None,
+        expected_outcome: Optional[str] = None,
         system_message: Optional[str] = None,
         conversation_history: Optional[List[Dict[str, str]]] = None,
         model_deployment: Optional[str] = None,
@@ -118,8 +135,17 @@ class EpisodeCapture:
         return CaptureContext(
             episode_id=str(uuid.uuid4()),
             agent_id=self._config.agent_id,
+            agent_name=self._config.agent_name,
+            task_id=task_id or self._config.task_id,
+            task_name=task_name or self._config.task_name,
             start_time=time.time(),
             user_input=user_input,
+            intent_summary=intent_summary,
+            action_type=action_type,
+            action_name=action_name,
+            target=target,
+            input_summary=input_summary,
+            expected_outcome=expected_outcome,
             system_message=system_message,
             conversation_history=conversation_history or [],
             policy_id=policy_id,
@@ -173,6 +199,8 @@ class EpisodeCapture:
         ctx: CaptureContext,
         assistant_output: str,
         *,
+        execution_status: Optional[str] = None,
+        result_summary: Optional[str] = None,
         token_usage: Optional[Dict[str, int]] = None,
         extra_metadata: Optional[Dict[str, Any]] = None,
     ) -> Optional[Episode]:
@@ -191,8 +219,19 @@ class EpisodeCapture:
         episode = Episode(
             id=ctx.episode_id,
             agent_id=ctx.agent_id,
+            agent_name=ctx.agent_name,
+            task_id=ctx.task_id,
+            task_name=ctx.task_name,
             user_input=ctx.user_input,
             assistant_output=output or "",
+            intent_summary=ctx.intent_summary,
+            action_type=ctx.action_type,
+            action_name=ctx.action_name,
+            target=ctx.target,
+            input_summary=ctx.input_summary,
+            expected_outcome=ctx.expected_outcome,
+            execution_status=execution_status,
+            result_summary=result_summary,
             system_message=ctx.system_message,
             conversation_history=ctx.conversation_history,
             tool_calls=ctx.tool_calls,

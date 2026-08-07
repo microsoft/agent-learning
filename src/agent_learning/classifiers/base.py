@@ -1,4 +1,4 @@
-"""Base types shared by the router and the three judges."""
+"""Base types shared by the router and the three scorers."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ class ClassifierResult:
     """Output of any classifier in this package.
 
     ``label`` is the predicted class id (a ``str`` for the router,
-    ``"pass"`` / ``"fail"`` for the judges). ``confidence`` is the
+    ``"pass"`` / ``"fail"`` for the scorers). ``confidence`` is the
     model's calibrated probability for that label, in ``[0, 1]``.
     ``features`` exposes the per-feature contribution so callers can
     persist a per-decision explainability trace.
@@ -24,7 +24,7 @@ class ClassifierResult:
 
 
 class Classifier(Protocol):
-    """Common surface across the router and the three judges.
+    """Common surface across the router and the three scorers.
 
     Implementations are deterministic — given the same fit input
     they produce the same weights, and given the same predict

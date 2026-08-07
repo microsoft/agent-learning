@@ -2,7 +2,7 @@
 
 The :class:`LearningRunner` ties together the four moving parts:
 
-1. ``MetricEvaluator``s score each episode against the three judges.
+1. ``MetricEvaluator``s evaluate each episode with the three scorers.
 2. ``RewardShaper`` collapses metrics into a scalar reward.
 3. ``RewardWriter`` persists per-metric and aggregate rewards.
 4. ``Learner`` consumes recent episodes + their aggregate rewards
@@ -19,7 +19,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Dict, Iterable, List, Optional
 
-from ..config import JudgeConfig, LearnerConfig, ShapingConfig
+from ..config import LearnerConfig, ScoreConfig, ShapingConfig
 from ..learners.base import Learner, LearnerResult
 from ..learners.reinforce import ReinforceLearner
 from ..metrics.base import MetricEvaluator
@@ -46,13 +46,13 @@ class LearningRunner:
         shaper: Optional[RewardShaper] = None,
         writer: Optional[RewardWriter] = None,
         learner: Optional[Learner] = None,
-        judge_config: Optional[JudgeConfig] = None,
+        score_config: Optional[ScoreConfig] = None,
         learner_config: Optional[LearnerConfig] = None,
         shaping_config: Optional[ShapingConfig] = None,
     ) -> None:
         self._store = store or get_default_store()
         self._policy = policy
-        self._metrics = list(metrics) if metrics is not None else default_metrics(judge_config)
+        self._metrics = list(metrics) if metrics is not None else default_metrics(score_config)
         self._shaper = shaper or RewardShaper(shaping_config)
         self._writer = writer or RewardWriter(self._store)
         self._learner = learner or ReinforceLearner(learner_config)
@@ -79,6 +79,7 @@ class LearningRunner:
         self,
         agent_id: str,
         *,
+        task_id: str = "default",
         episode_limit: int = 200,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
@@ -90,6 +91,7 @@ class LearningRunner:
 
         run = TrainingRun(
             agent_id=agent_id,
+            task_id=task_id,
             policy_id=self._policy.snapshot().id,
             algorithm=type(self._learner).__name__,
             status=TrainingStatus.RUNNING,
@@ -103,6 +105,7 @@ class LearningRunner:
                 limit=episode_limit,
                 start_date=start_date,
                 end_date=end_date,
+                task_id=task_id,
             )
             rewards = self._collect_rewards(agent_id, episodes, score_missing=score_missing)
 
@@ -117,6 +120,7 @@ class LearningRunner:
             run.metadata.update(
                 {
                     "policy_version": policy_snapshot.version,
+                    "task_id": task_id,
                     "score_missing": score_missing,
                 }
             )
