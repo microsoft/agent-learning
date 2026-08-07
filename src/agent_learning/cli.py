@@ -25,7 +25,7 @@ import logging
 import os
 import sys
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .capture import redact
 from .policy.base import Policy
@@ -36,7 +36,6 @@ from .storage.cosmos import get_default_store
 from .storage.local import LocalFileStore
 from .training.runner import LearningRunner
 from .types import Action, Episode, PolicySnapshot
-
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +142,7 @@ def _policy_from_snapshot(snapshot: PolicySnapshot) -> Policy:
     return SoftmaxPolicy.from_snapshot(snapshot)
 
 
-def _load_context(raw: str) -> Dict[str, Any]:
+def _load_context(raw: str) -> dict[str, Any]:
     try:
         if raw.startswith("@"):
             with open(raw[1:], "r", encoding="utf-8") as handle:
@@ -156,7 +155,7 @@ def _load_context(raw: str) -> Dict[str, Any]:
     if isinstance(value, list):
         return {"phi": value}
     if not isinstance(value, dict):
-        raise ValueError("--context must contain a JSON object or feature-vector array")
+        raise TypeError("--context must contain a JSON object or feature-vector array")
     return value
 
 
@@ -241,7 +240,7 @@ def _cmd_task_intent(args: argparse.Namespace) -> int:
 
     try:
         context = _redact_json(_load_context(args.context))
-    except ValueError as exc:
+    except (TypeError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
         return 2
 
@@ -263,7 +262,7 @@ def _cmd_task_intent(args: argparse.Namespace) -> int:
         return 2
 
     policy = _policy_from_snapshot(snapshot)
-    state: Optional[Any] = None
+    state: Any | None = None
     if isinstance(policy, ContextualSoftmaxPolicy):
         state = context.get("phi")
         if state is None:
@@ -362,7 +361,7 @@ def _cmd_task_complete(args: argparse.Namespace) -> int:
     return 0
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s - %(message)s")
     parser = _build_arg_parser()
     args = parser.parse_args(argv)
