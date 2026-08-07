@@ -8,12 +8,12 @@ ships the classifier implementations themselves:
   multi-class classifier over a context vector. Used to route an
   incoming request to one of a known set of class ids before the
   policy chooses an action.
-- :class:`agent_learning.classifiers.judges.intent.IntentJudge`,
-  :class:`~agent_learning.classifiers.judges.adherence.AdherenceJudge`,
+- :class:`agent_learning.classifiers.scorers.intent.IntentScorer`,
+  :class:`~agent_learning.classifiers.scorers.adherence.AdherenceScorer`,
   and
-  :class:`~agent_learning.classifiers.judges.completion.CompletionJudge`
+  :class:`~agent_learning.classifiers.scorers.completion.CompletionScorer`
   — binary ``{pass, fail}`` classifiers over a ``(context, action)``
-  pair. Drop-in replacements for LLM-based judges with the same
+  pair. Drop-in replacements for LLM-based scorers with the same
   call surface.
 
 All classes here are deterministic, dependency-free (stdlib only),
@@ -24,14 +24,14 @@ through the same image as the rest of the SDK.
 """
 
 from .base import Classifier, ClassifierResult
-from .judges import AdherenceJudge, CompletionJudge, IntentJudge
 from .router import RouterClassifier
+from .scorers import AdherenceScorer, CompletionScorer, IntentScorer
 
 __all__ = [
-    "AdherenceJudge",
+  "AdherenceScorer",
     "Classifier",
     "ClassifierResult",
-    "CompletionJudge",
-    "IntentJudge",
+    "CompletionScorer",
+    "IntentScorer",
     "RouterClassifier",
 ]

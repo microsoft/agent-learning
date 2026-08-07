@@ -1,6 +1,6 @@
 ---
 title: Mathematical reference for the agent-learning SDK
-description: Consolidated linear-algebra and probability formulas behind the policies, REINFORCE learner, reward shaper, logistic-regression classifiers, router, and judges of the agent-learning SDK.
+description: Consolidated linear-algebra and probability formulas behind the policies, REINFORCE learner, reward shaper, logistic-regression classifiers, router, and scorers of the agent-learning SDK.
 author: Microsoft
 ms.date: 2026-07-27
 ms.topic: reference
@@ -189,7 +189,7 @@ $$
 
 Source: [../src/agent_learning/rewards/shaping.py](../src/agent_learning/rewards/shaping.py)
 
-Each judge produces a normalized score $s_m \in [0, 1]$. The shaper maps it to a signed contribution in $[-1, 1]$ and forms a weighted sum with behavioural penalties, then clamps:
+Each scorer produces a normalized score $s_m \in [0, 1]$. The shaper maps it to a signed contribution in $[-1, 1]$ and forms a weighted sum with behavioural penalties, then clamps:
 
 $$
 \text{signed}_m = 2 s_m - 1
@@ -205,7 +205,7 @@ where $w_m$ are the per-metric weights and $p_j$ are additive penalty/bonus term
 
 Source: [../src/agent_learning/classifiers/base.py](../src/agent_learning/classifiers/base.py)
 
-These pure-Python primitives back the router and every stdlib/NLP judge.
+These pure-Python primitives back the router and every stdlib/NLP scorer.
 
 ### Numerically stable sigmoid
 
@@ -290,11 +290,11 @@ $$
 
 Norms are floored at $1$ (via `or 1.0`) to avoid division by zero on all-zero vectors.
 
-## Binary judges
+## Binary scorers
 
-Source: [../src/agent_learning/classifiers/judges/_base.py](../src/agent_learning/classifiers/judges/_base.py)
+Source: [../src/agent_learning/classifiers/scorers/_base.py](../src/agent_learning/classifiers/scorers/_base.py)
 
-Each judge is a binary logistic-regression classifier over a feature vector that concatenates the context, a one-hot action encoding, and a bias term:
+Each scorer is a binary logistic-regression classifier over a feature vector that concatenates the context, a one-hot action encoding, and a bias term:
 
 $$
 x = \big[\,\phi \ \Vert \ \mathbf{onehot}(a) \ \Vert \ 1\,\big] \in \mathbb{R}^{d + K + 1}
@@ -315,7 +315,7 @@ with confidence $p$ when passing and $1 - p$ when failing.
 
 ### Hashing-trick bag-of-words (Tier 1 stdlib)
 
-Source: [../src/agent_learning/judges/stdlib/_text.py](../src/agent_learning/judges/stdlib/_text.py)
+Source: [../src/agent_learning/scorers/stdlib/_text.py](../src/agent_learning/scorers/stdlib/_text.py)
 
 Tokens are hashed into a fixed number of buckets $D$, removing the need to persist a vocabulary. For token $t$, the bucket is derived from the first 32 bits of its MD5 digest:
 
@@ -329,13 +329,13 @@ $$
 v_i = \sum_{t \in \text{tokens}} \mathbb{1}\big[h(t) = i\big], \qquad i \in [0, D)
 $$
 
-(In binary mode, $v_i = \mathbb{1}[\exists\, t : h(t) = i]$.) The intent judge concatenates the query and response token streams before hashing.
+(In binary mode, $v_i = \mathbb{1}[\exists\, t : h(t) = i]$.) The intent scorer concatenates the query and response token streams before hashing.
 
 ### TF-IDF + logistic regression (Tier 2 NLP)
 
-Source: [../src/agent_learning/judges/nlp_text/_base.py](../src/agent_learning/judges/nlp_text/_base.py)
+Source: [../src/agent_learning/scorers/nlp_text/_base.py](../src/agent_learning/scorers/nlp_text/_base.py)
 
-Tier 2 judges delegate to scikit-learn's `TfidfVectorizer` (unigram+bigram) feeding a `LogisticRegression` head. The term-frequency–inverse-document-frequency weight of term $t$ in document $\delta$ over corpus $\mathcal{D}$ is:
+Tier 2 scorers delegate to scikit-learn's `TfidfVectorizer` (unigram+bigram) feeding a `LogisticRegression` head. The term-frequency–inverse-document-frequency weight of term $t$ in document $\delta$ over corpus $\mathcal{D}$ is:
 
 $$
 \text{tfidf}(t, \delta) = \text{tf}(t, \delta)\cdot\log\!\frac{|\mathcal{D}|}{1 + |\{\delta' : t \in \delta'\}|}
@@ -345,7 +345,7 @@ $$
 
 Source: [../src/agent_learning/metrics/](../src/agent_learning/metrics/)
 
-Judges emit scores on heterogeneous scales; each metric normalizes to $[0, 1]$ before shaping.
+Scorers emit scores on heterogeneous scales; each metric normalizes to $[0, 1]$ before shaping.
 
 | Metric | Raw range | Normalization |
 | --- | --- | --- |
@@ -353,4 +353,4 @@ Judges emit scores on heterogeneous scales; each metric normalizes to $[0, 1]$ b
 | Task adherence | $[0, 1]$ | $\operatorname{clip}(s, 0, 1)$ |
 | Task completion | $[0, 1]$ | $\operatorname{clip}(s, 0, 1)$ |
 
-The intent-resolution mapping sends a perfect score of $5$ to $1.0$ and the worst score of $1$ to $0.0$, so a perfect judgment becomes the maximum positive reward signal after shaping.
+The intent-resolution mapping sends a perfect score of $5$ to $1.0$ and the worst score of $1$ to $0.0$, so a perfect evaluation becomes the maximum positive reward signal after shaping.

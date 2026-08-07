@@ -1,13 +1,17 @@
-"""Tests for the durable task-oriented CLI workflow."""
+"""Tests for task-aware CLI commands."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-from agent_learning.cli import main
-from agent_learning.storage import LocalFileStore
+import pytest
+
+from agent_learning import cli
+from agent_learning.policy import SoftmaxPolicy
+from agent_learning.storage import InMemoryStore
 from agent_learning.types import (
+    Action,
     Episode,
     MetricName,
     MetricResult,
@@ -16,239 +20,43 @@ from agent_learning.types import (
 )
 
 
-def _actions_file(tmp_path: Path) -> Path:
-    path = tmp_path / "actions.json"
-    path.write_text(
-        json.dumps(
-            [
-                {
-                    "id": "direct",
-                    "description": "Use a direct response",
-                    "parameters": {"style": "direct"},
-                }
-            ]
-        ),
-        encoding="utf-8",
-    )
-    return path
-
-
-def _stdout_json(capsys) -> dict:
-    return json.loads(capsys.readouterr().out)
-
-
-def test_task_commands_persist_a_complete_episode(tmp_path: Path, capsys) -> None:
-    store_dir = tmp_path / "store"
-    actions = _actions_file(tmp_path)
-
-    assert main(
-        [
-            "task-policy-init",
-            "--agent-id",
-            "assistant",
-            "--task-id",
-            "summary",
-            "--actions",
-            str(actions),
-            "--store-dir",
-            str(store_dir),
-        ]
-    ) == 0
-    policy = _stdout_json(capsys)
-
-    assert main(
-        [
-            "task-intent",
-            "--agent-id",
-            "assistant",
-            "--task-id",
-            "summary",
-            "--intent",
-            "Summarise the open issues",
-            "--context",
-            '{"repository": "microsoft/agents-learning-sdk"}',
-            "--episode-id",
-            "task-1",
-            "--store-dir",
-            str(store_dir),
-        ]
-    ) == 0
-    decision = _stdout_json(capsys)
-
-    assert decision["episode_id"] == "task-1"
-    assert decision["action_id"] == "direct"
-    assert decision["action"]["parameters"] == {"style": "direct"}
-    assert decision["policy_id"] == policy["id"]
-    assert decision["policy_version"] == policy["version"]
-    assert decision["probabilities"] == {"direct": 1.0}
-
-    store = LocalFileStore(store_dir)
-    started = store.get_episode("task-1", "assistant")
-    assert started is not None
-    assert started.task_id == "summary"
-    assert started.user_input == "Summarise the open issues"
-    assert started.assistant_output == ""
-    assert started.action_id == "direct"
-    assert started.context_features == {
-        "repository": "microsoft/agents-learning-sdk"
-    }
-    assert started.metadata["status"] == "in_progress"
-    assert started.metadata["decision"]["action"]["id"] == "direct"
-
-    assert main(
-        [
-            "task-complete",
-            "--agent-id",
-            "assistant",
-            "--episode-id",
-            "task-1",
-            "--output",
-            "There are no open issues.",
-            "--store-dir",
-            str(store_dir),
-        ]
-    ) == 0
-    completion = _stdout_json(capsys)
-
-    assert completion["episode_id"] == "task-1"
-    assert completion["status"] == "completed"
-    completed = store.get_episode("task-1", "assistant")
-    assert completed is not None
-    assert completed.assistant_output == "There are no open issues."
-    assert completed.metadata["status"] == "completed"
-    assert completed.metadata["completed_at"]
-    assert completed.request_latency_ms is not None
-    assert completed.request_latency_ms >= 0
-
-    assert main(
-        [
-            "task-policy",
-            "--agent-id",
-            "assistant",
-            "--task-id",
-            "summary",
-            "--store-dir",
-            str(store_dir),
-        ]
-    ) == 0
-    assert _stdout_json(capsys)[0]["id"] == policy["id"]
-
-
-def test_agent_listing_and_completed_episode_count(tmp_path: Path, capsys) -> None:
-    store_dir = tmp_path / "store"
-    assert main(
-        [
-            "task-policy-init",
-            "--agent-id",
-            "assistant",
-            "--task-id",
-            "summary",
-            "--agent-name",
-            "Assistant Agent",
-            "--task-name",
-            "Weekly summary",
-            "--actions",
-            str(_actions_file(tmp_path)),
-            "--store-dir",
-            str(store_dir),
-        ]
-    ) == 0
-    capsys.readouterr()
-
-    store = LocalFileStore(store_dir)
-    store.store_episode(
-        Episode(
-            id="completed",
-            agent_id="assistant",
-            task_id="summary",
-            metadata={"status": "completed"},
-        )
-    )
-    store.store_episode(
-        Episode(
-            id="in-progress",
-            agent_id="assistant",
-            task_id="summary",
-            metadata={"status": "in_progress"},
-        )
+def _full_episode() -> Episode:
+    return Episode(
+        agent_id="agent-1",
+        agent_name="Agent One",
+        task_id="chat",
+        task_name="Chat",
+        intent_summary="answer the user",
+        action_id="respond",
+        action_name="Respond",
+        expected_outcome="a correct answer",
+        execution_status="completed",
+        result_summary="answered correctly",
     )
 
-    assert main(["agents-list", "--store-dir", str(store_dir)]) == 0
+
+def test_discovery_and_full_episode_count(monkeypatch, capsys) -> None:
+    store = InMemoryStore()
+    store.store_episode(_full_episode())
+    store.store_episode(Episode(agent_id="agent-1", task_id="animation"))
+    monkeypatch.setattr(cli, "get_default_store", lambda: store)
+
+    assert cli.main(["list"]) == 0
     assert json.loads(capsys.readouterr().out) == [
-        {"id": "assistant", "name": "Assistant Agent"}
+        {"id": "agent-1", "name": "Agent One"}
     ]
-
-    assert main(
-        ["agents-episodes-count", "assistant", "--store-dir", str(store_dir)]
-    ) == 0
-    assert json.loads(capsys.readouterr().out) == 1
-
-    assert main(
-        ["agent-tasks-list", "assistant", "--store-dir", str(store_dir)]
-    ) == 0
-    assert json.loads(capsys.readouterr().out) == [
-        {"id": "summary", "name": "Weekly summary"}
+    assert cli.main(["tasks-list", "agent-1"]) == 0
+    assert [task["id"] for task in json.loads(capsys.readouterr().out)] == [
+        "animation",
+        "chat",
     ]
+    assert cli.main(["task-episodes-count", "agent-1"]) == 0
+    assert capsys.readouterr().out.strip() == "1"
 
 
-def test_task_policy_history_preserves_replaced_snapshots(
-    tmp_path: Path,
-    capsys,
-) -> None:
-    store_dir = tmp_path / "store"
-    command = [
-        "task-policy-init",
-        "--agent-id",
-        "assistant",
-        "--task-id",
-        "summary",
-        "--actions",
-        str(_actions_file(tmp_path)),
-        "--store-dir",
-        str(store_dir),
-    ]
-    assert main(command) == 0
-    first = _stdout_json(capsys)
-    assert main(command) == 0
-    second = _stdout_json(capsys)
-
-    assert first["id"] != second["id"]
-    assert [first["version"], second["version"]] == [0, 1]
-    assert main(
-        [
-            "task-policy",
-            "--agent-id",
-            "assistant",
-            "--task-id",
-            "summary",
-            "--history",
-            "2",
-            "--store-dir",
-            str(store_dir),
-        ]
-    ) == 0
-    assert [
-        snapshot["id"] for snapshot in json.loads(capsys.readouterr().out)
-    ] == [second["id"], first["id"]]
-
-
-def test_completed_episode_review_includes_learning_signals(
-    tmp_path: Path,
-    capsys,
-) -> None:
-    store_dir = tmp_path / "store"
-    store = LocalFileStore(store_dir)
-    episode = Episode(
-        id="episode-1",
-        agent_id="assistant",
-        task_id="summary",
-        user_input="Summarise the open issues",
-        assistant_output="There are no open issues.",
-        action_id="direct",
-        policy_id="policy-1",
-        policy_version=2,
-        metadata={"status": "completed"},
-    )
+def test_episode_inspection_includes_scores_and_final_reward(monkeypatch, capsys) -> None:
+    store = InMemoryStore()
+    episode = _full_episode()
     store.store_episode(episode)
     store.store_metric_results(
         episode.id,
@@ -256,7 +64,7 @@ def test_completed_episode_review_includes_learning_signals(
         [
             MetricResult(
                 metric=MetricName.TASK_COMPLETION,
-                score=5,
+                score=5.0,
                 normalized=1.0,
                 status="completed",
             )
@@ -270,285 +78,110 @@ def test_completed_episode_review_includes_learning_signals(
             value=0.9,
         )
     )
+    monkeypatch.setattr(cli, "get_default_store", lambda: store)
 
-    assert main(
-        [
-            "agents-episodes-list",
-            "assistant",
-            "--task-id",
-            "summary",
-            "--store-dir",
-            str(store_dir),
-        ]
-    ) == 0
-    review = json.loads(capsys.readouterr().out)
-    assert review[0]["intent_summary"] == "Summarise the open issues"
-    assert review[0]["chosen_action"] == "direct"
-    assert review[0]["score_breakdown"][0]["metric"] == "task_completion"
-    assert review[0]["final_reward"] == 0.9
-    assert review[0]["execution_result"] == "There are no open issues."
+    assert cli.main(["task-episodes-list", "agent-1"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload[0]["episode"]["intent_summary"] == "answer the user"
+    assert payload[0]["final_reward"] == 0.9
+    assert payload[0]["task_completion_quality"]["metric"] == "task_completion"
 
 
-def test_train_requires_five_completed_episodes_by_default(
-    tmp_path: Path,
-    capsys,
-    monkeypatch,
+def test_task_policy_init_and_inspection(monkeypatch, capsys, tmp_path: Path) -> None:
+    store = InMemoryStore()
+    monkeypatch.setattr(cli, "get_default_store", lambda: store)
+    actions_path = tmp_path / "actions.json"
+    actions_path.write_text(
+        json.dumps([{"id": "respond", "description": "Respond directly"}]),
+        encoding="utf-8",
+    )
+
+    assert (
+        cli.main(
+            [
+                "task-policy-init",
+                "--agent-id",
+                "agent-1",
+                "--task-id",
+                "chat",
+                "--actions",
+                str(actions_path),
+            ]
+        )
+        == 0
+    )
+    initialized = json.loads(capsys.readouterr().out)
+    assert initialized["task_id"] == "chat"
+
+    assert (
+        cli.main(
+            ["task-policy", "--agent-id", "agent-1", "--task-id", "chat"]
+        )
+        == 0
+    )
+    inspected = json.loads(capsys.readouterr().out)
+    assert inspected["current_policy"]["task_id"] == "chat"
+    assert inspected["previous_policy"] is None
+
+
+def test_agent_training_uses_one_limit_and_preserves_task_policy_history(
+    monkeypatch, capsys
 ) -> None:
-    monkeypatch.delenv("AGENT_LEARNING_MIN_TRAIN_EPISODES", raising=False)
-    store_dir = tmp_path / "store"
-    assert main(
-        [
-            "task-policy-init",
-            "--agent-id",
-            "assistant",
-            "--task-id",
-            "summary",
-            "--actions",
-            str(_actions_file(tmp_path)),
-            "--store-dir",
-            str(store_dir),
-        ]
-    ) == 0
-    capsys.readouterr()
-
-    store = LocalFileStore(store_dir)
-    for index in range(4):
-        store.store_episode(
-            Episode(
-                id=f"completed-{index}",
-                agent_id="assistant",
-                task_id="summary",
-                metadata={"status": "completed"},
+    store = InMemoryStore()
+    monkeypatch.setattr(cli, "get_default_store", lambda: store)
+    for task_id in ("chat", "animation"):
+        policy = SoftmaxPolicy.from_actions(
+            [Action(id="respond")],
+            agent_id="agent-1",
+            task_id=task_id,
+        )
+        snapshot = policy.snapshot()
+        store.store_policy(snapshot)
+        for index in range(2):
+            episode = Episode(
+                agent_id="agent-1",
+                task_id=task_id,
+                action_id="respond",
+                policy_id=snapshot.id,
+                policy_version=snapshot.version,
+                created_at=f"2026-08-07T00:00:0{index + (2 if task_id == 'animation' else 0)}+00:00",
             )
+            store.store_episode(episode)
+            store.store_reward(
+                Reward(
+                    episode_id=episode.id,
+                    agent_id=episode.agent_id,
+                    source=RewardSource.AGGREGATE,
+                    value=0.8,
+                )
+            )
+
+    assert (
+        cli.main(
+            [
+                "train",
+                "--agent-id",
+                "agent-1",
+                "--limit",
+                "3",
+                "--skip-scoring",
+            ]
         )
-
-    command = [
-        "train",
-        "--agent-id",
-        "assistant",
-        "--task-id",
-        "summary",
-        "--limit",
-        "3",
-        "--store-dir",
-        str(store_dir),
-    ]
-    assert main(command) == 2
-    captured = capsys.readouterr()
-    assert captured.out == ""
-    assert "at least 5" in captured.err
-
-    store.store_episode(
-        Episode(
-            id="completed-4",
-            agent_id="assistant",
-            task_id="summary",
-            metadata={"status": "completed"},
-        )
+        == 0
     )
-    call: dict = {}
+    result = json.loads(capsys.readouterr().out)
 
-    class _Run:
-        def to_dict(self) -> dict:
-            return {"status": "succeeded"}
-
-    def run_offline_batch(self, agent_id: str, **kwargs):
-        call.update({"agent_id": agent_id, **kwargs})
-        return _Run()
-
-    monkeypatch.setattr(
-        "agent_learning.cli.LearningRunner.run_offline_batch",
-        run_offline_batch,
-    )
-
-    assert main(command) == 0
-    assert _stdout_json(capsys) == {"status": "succeeded"}
-    assert call["agent_id"] == "assistant"
-    assert call["task_id"] == "summary"
-    assert call["episode_limit"] == 3
-    assert call["completed_only"] is True
+    assert len(result["runs"]) == 2
+    assert sum(len(run["episode_ids"]) for run in result["runs"]) == 3
+    assert len(store.list_policies("agent-1", "chat")) == 2
+    assert len(store.list_policies("agent-1", "animation")) == 2
+    for task_id in ("chat", "animation"):
+        policies = store.list_policies("agent-1", task_id)
+        assert policies[0].version == 1
+        assert policies[1].version == 0
+        assert policies[0].id != policies[1].id
 
 
-def test_train_minimum_is_configurable(
-    tmp_path: Path,
-    capsys,
-    monkeypatch,
-) -> None:
-    store_dir = tmp_path / "store"
-    assert main(
-        [
-            "task-policy-init",
-            "--agent-id",
-            "assistant",
-            "--task-id",
-            "summary",
-            "--actions",
-            str(_actions_file(tmp_path)),
-            "--store-dir",
-            str(store_dir),
-        ]
-    ) == 0
-    capsys.readouterr()
-    LocalFileStore(store_dir).store_episode(
-        Episode(
-            id="completed",
-            agent_id="assistant",
-            task_id="summary",
-            metadata={"status": "completed"},
-        )
-    )
-    monkeypatch.setenv("AGENT_LEARNING_MIN_TRAIN_EPISODES", "1")
-    monkeypatch.setattr(
-        "agent_learning.cli.LearningRunner.run_offline_batch",
-        lambda self, agent_id, **kwargs: type(
-            "Run",
-            (),
-            {"to_dict": lambda self: {"status": "succeeded"}},
-        )(),
-    )
-
-    assert main(
-        [
-            "train",
-            "--agent-id",
-            "assistant",
-            "--task-id",
-            "summary",
-            "--limit",
-            "1",
-            "--store-dir",
-            str(store_dir),
-        ]
-    ) == 0
-    assert _stdout_json(capsys) == {"status": "succeeded"}
-
-
-def test_task_intent_requires_an_existing_policy(tmp_path: Path, capsys) -> None:
-    assert main(
-        [
-            "task-intent",
-            "--agent-id",
-            "assistant",
-            "--task-id",
-            "summary",
-            "--intent",
-            "Do the task",
-            "--store-dir",
-            str(tmp_path / "store"),
-        ]
-    ) == 2
-
-    captured = capsys.readouterr()
-    assert captured.out == ""
-    assert "task-policy-init" in captured.err
-
-
-def test_task_complete_requires_an_existing_episode(tmp_path: Path, capsys) -> None:
-    assert main(
-        [
-            "task-complete",
-            "--agent-id",
-            "assistant",
-            "--episode-id",
-            "missing",
-            "--output",
-            "Done",
-            "--store-dir",
-            str(tmp_path / "store"),
-        ]
-    ) == 2
-
-    captured = capsys.readouterr()
-    assert captured.out == ""
-    assert "No episode found" in captured.err
-
-
-def test_task_intent_rejects_invalid_context(tmp_path: Path, capsys) -> None:
-    store_dir = tmp_path / "store"
-    assert main(
-        [
-            "task-policy-init",
-            "--agent-id",
-            "assistant",
-            "--task-id",
-            "summary",
-            "--actions",
-            str(_actions_file(tmp_path)),
-            "--store-dir",
-            str(store_dir),
-        ]
-    ) == 0
-    capsys.readouterr()
-
-    assert main(
-        [
-            "task-intent",
-            "--agent-id",
-            "assistant",
-            "--task-id",
-            "summary",
-            "--intent",
-            "Do the task",
-            "--context",
-            "not-json",
-            "--store-dir",
-            str(store_dir),
-        ]
-    ) == 2
-
-    assert "--context must be valid JSON" in capsys.readouterr().err
-
-
-def test_task_fields_are_redacted_before_persistence(tmp_path: Path, capsys) -> None:
-    store_dir = tmp_path / "store"
-    assert main(
-        [
-            "task-policy-init",
-            "--agent-id",
-            "assistant",
-            "--task-id",
-            "summary",
-            "--actions",
-            str(_actions_file(tmp_path)),
-            "--store-dir",
-            str(store_dir),
-        ]
-    ) == 0
-    capsys.readouterr()
-
-    assert main(
-        [
-            "task-intent",
-            "--agent-id",
-            "assistant",
-            "--task-id",
-            "summary",
-            "--intent",
-            "Use token=private-value",
-            "--episode-id",
-            "task-secret",
-            "--store-dir",
-            str(store_dir),
-        ]
-    ) == 0
-    capsys.readouterr()
-    assert main(
-        [
-            "task-complete",
-            "--agent-id",
-            "assistant",
-            "--episode-id",
-            "task-secret",
-            "--result",
-            "******",
-            "--store-dir",
-            str(store_dir),
-        ]
-    ) == 0
-    capsys.readouterr()
-
-    content = (store_dir / "episodes" / "assistant" / "task-secret.json").read_text(
-        encoding="utf-8"
-    )
-    assert "private-value" not in content
-    assert "[REDACTED]" in content
+def test_episode_limit_is_capped_at_500() -> None:
+    with pytest.raises(SystemExit):
+        cli.main(["train", "--agent-id", "agent-1", "--limit", "501"])

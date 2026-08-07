@@ -1,6 +1,6 @@
 """Task adherence metric wrapper.
 
-The underlying judge emits a binary score ``0`` (material failure) or
+The underlying scorer emits a binary score ``0`` (material failure) or
 ``1`` (pass). It is already in ``[0, 1]`` so normalisation is a no-op.
 """
 
@@ -20,7 +20,7 @@ class TaskAdherenceMetric(MetricEvaluator):
     def _build_evaluator(self) -> Any:
         from azure.ai.evaluation import TaskAdherenceEvaluator  # type: ignore
 
-        return TaskAdherenceEvaluator(model_config=self._judge_config.to_model_config())
+        return TaskAdherenceEvaluator(model_config=self._score_config.to_model_config())
 
     def _build_kwargs(self, request: MetricRequest) -> Dict[str, Any]:
         return {

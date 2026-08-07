@@ -1,98 +1,82 @@
 ---
-title: Scout automation for agent learning
-description: Use the agent-learn CLI to inspect completed episodes, train task policies, and review policy changes from a Scout automation.
+title: Scout agent-learning automation
+description: Review complete episodes and train each agent task policy from recorded outcomes
 author: Microsoft
 ms.date: 2026-08-07
 ms.topic: how-to
-keywords:
-  - scout
-  - automation
-  - agent learning
-  - policy training
-  - episodes
-estimated_reading_time: 6
 ---
 
-## Run the learning automation
+# Scout agent-learning automation
 
-Run this automation periodically against the same local store used to capture
-task episodes. Repeated tasks are additional learning episodes, not duplicates.
+Run this automation periodically to improve repeated tasks from their recorded outcomes. Set the minimum number of full episodes before training; the default is `5`. A training batch is capped at `500` episodes.
 
-### 1. List agents
+Configure every automation step to use the same durable local store:
 
-```bash
-agent-learn agents-list
+```text
+AGENT_LEARNING_STORE_BACKEND=local
+AGENT_LEARNING_LOCAL_STORE_DIR=./data/agent-learning/store
 ```
 
-The command returns each agent's `id` and `name`. Process every returned agent.
+The environment variables must remain the same across capture, review, and training processes.
 
-### 2. Count completed episodes
+## 1. Discover agents
 
-```bash
-agent-learn agents-episodes-count <agent_id>
+```shell
+agent-learn list
 ```
 
-The command returns the number of full, completed episodes for the agent as an
-integer. Do not train until the count is at least five. Five is the default
-threshold; configure it with `AGENT_LEARNING_MIN_TRAIN_EPISODES` or the
-`train --min-episodes` option.
+The command returns the `id` and `name` of each agent. Run the remaining steps once for each returned agent.
 
-List the agent's tasks before selecting a policy:
+## 2. Discover the agent's tasks
 
-```bash
-agent-learn agent-tasks-list <agent_id>
+```shell
+agent-learn tasks-list <agent_id>
 ```
 
-### 3. Review episodes and train
+Policies belong to an agent task. Use each returned task ID when inspecting policy state.
 
-Before training, print the completed episodes for each task:
+## 3. Count full episodes
 
-```bash
-agent-learn agents-episodes-list <agent_id> --task-id <task_id> --limit 500
+```shell
+agent-learn task-episodes-count <agent_id>
 ```
 
-For each episode, inspect:
+The command prints the number of full episodes. Continue only when the count is greater than or equal to the configured minimum.
 
-- differences in intent handling and the recorded `intent_summary`;
-- the `chosen_action`;
-- the `score_breakdown` for intent resolution, task adherence, and task
-  completion;
-- the `final_reward`;
-- the `execution_result`; and
-- differences in task-completion quality across repeated tasks.
+## 4. Inspect the episodes
 
-This review is the core of the learning loop: repeated tasks should become more
-reliable because the system records outcomes and updates the applicable policy.
-
-Train with at most 500 completed episodes:
-
-```bash
-agent-learn train --agent-id <agent_id> --task-id <task_id> --limit 500
+```shell
+agent-learn task-episodes-list <agent_id> --limit 500
 ```
 
-When an agent has exactly one task, `--task-id` can be omitted:
+Before training, print and compare the episodes. Review:
 
-```bash
+- differences in intent handling;
+- the recorded intent summary;
+- the chosen action;
+- the intent resolution, task adherence, and task completion score breakdown;
+- the final aggregate reward;
+- the execution status and result summary;
+- differences in task completion quality.
+
+Compare repeated episodes for the same task. Repetition is the learning signal: recorded outcomes should make recurring tasks more reliable as their policies are updated.
+
+## 5. Train the agent's task policies
+
+```shell
 agent-learn train --agent-id <agent_id> --limit 500
 ```
 
-Training is task-scoped. If a task has fewer than the configured minimum number
-of completed episodes, leave its policy unchanged.
+Training runs at the agent level and updates each task independently from that task's episodes and active policy. The CLI rejects limits greater than `500`.
 
-### 4. Inspect the updated policy
+## 6. Inspect each updated task policy
 
-Print the active policy and its predecessor:
+For every task returned by `tasks-list`, run:
 
-```bash
-agent-learn task-policy \
-  --agent-id <agent_id> \
-  --task-id <task_id> \
-  --history 2
+```shell
+agent-learn task-policy --agent-id <agent_id> --task-id <task_id>
 ```
 
-The first snapshot is active. Compare it with the previous snapshot, including
-action logits, baseline, episode count, and update count, to understand what
-the task will now favor.
+The output includes the active policy, the previous snapshot, and their differences. Review changes in action logits and action probabilities to understand which actions the task now favors.
 
-Policy snapshots are debugging aids. They do not replace explicit intent
-capture, execution-result capture, or completion scoring.
+The store can retain any number of policy snapshot JSON files, but exactly one policy is active for each agent task. Use policy snapshots for learning-loop debugging. They do not replace explicit intent capture or intent resolution, task adherence, and task completion scoring.

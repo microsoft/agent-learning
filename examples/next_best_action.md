@@ -34,7 +34,7 @@ Each use-case file declares five blocks the engine reads at startup:
   $$\Delta W_k = \eta \,(R - b)\,(\mathbb{1}[k=\text{chosen}] - \pi_k)\,\phi$$
 
   with an **entropy bonus** (prevents collapse to a "safe" action) and a **batch-mean baseline** `b` (low-variance credit assignment).
-- **Reused pipeline** — `LearningRunner` + `RewardShaper` + `RewardWriter` + `InMemoryStore`. A runner subclass converts the simulated outcome into the three judge metrics, so **no Azure credentials** are needed.
+- **Reused pipeline** — `LearningRunner` + `RewardShaper` + `RewardWriter` + `InMemoryStore`. A runner subclass converts the simulated outcome into the three metric scores, so **no Azure credentials** are needed.
 
 ## Training Loop
 Each round: sample fresh contexts → policy picks an action → simulate outcome → one batched contextual REINFORCE update. The retention use case runs 200 rounds × 150 episodes.

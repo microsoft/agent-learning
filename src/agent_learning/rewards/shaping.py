@@ -49,10 +49,10 @@ class RewardShaper:
         routing_correct: Optional[bool] = None,
         hallucinated_class: bool = False,
     ) -> ShapedReward:
-        """Combine judges + behavioural signals into a single scalar.
+        """Combine scores + behavioural signals into a single scalar.
 
         Args:
-            results: Per-judge metric outputs.
+            results: Per-score metric outputs.
             latency_ms: Episode latency in milliseconds; if above the
                 configured threshold the latency penalty is applied.
             routing_correct: ``True`` if the calling system routed the

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from agent_learning.types import (
     Action,
-    AgentTaskInfo,
+    AgentTaskSummary,
     Episode,
     MetricName,
     MetricResult,
@@ -37,18 +37,17 @@ def test_episode_roundtrip() -> None:
     assert other.action_logprob == -0.5
 
 
-def test_episode_completion_state() -> None:
-    assert Episode(metadata={"status": "completed"}).is_complete is True
-    assert (
-        Episode(
-            user_input="task",
-            assistant_output="partial",
-            metadata={"status": "in_progress"},
-        ).is_complete
-        is False
+def test_episode_full_state() -> None:
+    full = Episode(
+        intent_summary="Complete the task",
+        action_id="respond",
+        expected_outcome="The task is complete",
+        execution_status="completed",
+        result_summary="Completed successfully",
     )
-    assert Episode(user_input="task", assistant_output="done").is_complete is True
-    assert Episode(user_input="task").is_complete is False
+    assert full.is_full is True
+    full.result_summary = None
+    assert full.is_full is False
 
 
 def test_reward_roundtrip() -> None:
@@ -113,6 +112,7 @@ def test_training_run_roundtrip() -> None:
     assert other.episode_ids == ["ep1", "ep2"]
 
 
-def test_agent_task_info_uses_task_name() -> None:
-    task = AgentTaskInfo.from_metadata("weekly-summary", {"task_name": "Weekly summary"})
-    assert task.to_dict() == {"id": "weekly-summary", "name": "Weekly summary"}
+def test_agent_task_summary_uses_task_name() -> None:
+    task = AgentTaskSummary(id="weekly-summary", name="Weekly summary")
+    assert task.id == "weekly-summary"
+    assert task.name == "Weekly summary"

@@ -54,6 +54,7 @@ class SoftmaxPolicy(Policy):
         actions: Sequence[Action],
         *,
         agent_id: str = "default",
+        task_id: str = "default",
         rng: Optional[random.Random] = None,
         max_logit_abs: float = 10.0,
         initial_logits: Optional[Dict[str, float]] = None,
@@ -65,6 +66,7 @@ class SoftmaxPolicy(Policy):
                     logits[action_id] = float(value)
         snapshot = PolicySnapshot(
             agent_id=agent_id,
+            task_id=task_id,
             version=0,
             actions=list(actions),
             logits=logits,
@@ -135,7 +137,7 @@ class SoftmaxPolicy(Policy):
         self._snapshot.baseline = float(baseline)
         self._snapshot.episodes_seen = int(episodes_seen)
         self._snapshot.updates_applied += 1
-        self._snapshot.version += 1
+        self._snapshot.advance_version()
 
     # ------------------------------------------------------------------
     # Internals

@@ -10,8 +10,8 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Literal, Optional
 
-JudgeMode = Literal["nlp", "llm"]
-JudgeTier = Literal["stdlib", "nlp", "slm", "llm"]
+ScoreMode = Literal["nlp", "llm"]
+ScoreTier = Literal["stdlib", "nlp", "slm", "llm"]
 CredentialMode = Literal[
     "default",
     "managed-identity",
@@ -23,7 +23,7 @@ CredentialMode = Literal[
 _VALID_CREDENTIAL_MODES: frozenset[str] = frozenset(
     {"default", "managed-identity", "workload-identity", "environment", "azure-cli", "none"}
 )
-_VALID_JUDGE_TIERS: frozenset[str] = frozenset(
+_VALID_SCORE_TIERS: frozenset[str] = frozenset(
     {"stdlib", "nlp", "slm", "llm"}
 )
 
@@ -37,8 +37,8 @@ def _env_bool(name: str, default: bool) -> bool:
 
 
 def _env_credential_mode() -> Optional[CredentialMode]:
-    """Read AGENT_LEARNING_JUDGE_CREDENTIAL_MODE and validate."""
-    raw = os.getenv("AGENT_LEARNING_JUDGE_CREDENTIAL_MODE")
+    """Read AGENT_LEARNING_SCORE_CREDENTIAL_MODE and validate."""
+    raw = os.getenv("AGENT_LEARNING_SCORE_CREDENTIAL_MODE")
     if raw is None or raw == "":
         return None
     value = raw.strip().lower()
@@ -106,13 +106,13 @@ class CosmosConfig:
 
 
 # ---------------------------------------------------------------------------
-# Judge / evaluator model
+# Score / evaluator model
 # ---------------------------------------------------------------------------
 
 
 @dataclass
-class JudgeConfig:
-    """Configuration for the LLM judge used by metric evaluators.
+class ScoreConfig:
+    """Configuration for the LLM scorer used by metric evaluators.
 
     Authentication paths, in priority order:
 
@@ -128,29 +128,29 @@ class JudgeConfig:
     3. ``api_key`` (legacy path). Used only when no credential is
        resolved.
 
-    Environment variables ``AGENT_LEARNING_JUDGE_CREDENTIAL_MODE`` and
-    ``AGENT_LEARNING_JUDGE_USER_ASSIGNED_CLIENT_ID`` mirror the two
+    Environment variables ``AGENT_LEARNING_SCORE_CREDENTIAL_MODE`` and
+    ``AGENT_LEARNING_SCORE_USER_ASSIGNED_CLIENT_ID`` mirror the two
     string fields so the same SDK build switches between developer
     laptop, CI, and production AKS without code changes.
     """
 
-    azure_endpoint: str = field(default_factory=lambda: os.getenv("AGENT_LEARNING_JUDGE_ENDPOINT", ""))
-    azure_deployment: str = field(default_factory=lambda: os.getenv("AGENT_LEARNING_JUDGE_DEPLOYMENT", ""))
-    api_key: Optional[str] = field(default_factory=lambda: os.getenv("AGENT_LEARNING_JUDGE_API_KEY") or None)
-    api_version: str = field(default_factory=lambda: os.getenv("AGENT_LEARNING_JUDGE_API_VERSION", "2024-10-21"))
+    azure_endpoint: str = field(default_factory=lambda: os.getenv("AGENT_LEARNING_SCORE_ENDPOINT", ""))
+    azure_deployment: str = field(default_factory=lambda: os.getenv("AGENT_LEARNING_SCORE_DEPLOYMENT", ""))
+    api_key: Optional[str] = field(default_factory=lambda: os.getenv("AGENT_LEARNING_SCORE_API_KEY") or None)
+    api_version: str = field(default_factory=lambda: os.getenv("AGENT_LEARNING_SCORE_API_VERSION", "2024-10-21"))
     # Pass-through threshold for IntentResolutionEvaluator (defaults to its own default)
     threshold: int = field(default_factory=lambda: _env_int("AGENT_LEARNING_INTENT_THRESHOLD", 3))
     # Managed-identity / TokenCredential authentication (optional).
     credential: Optional[Any] = field(default=None, repr=False)
     credential_mode: Optional[CredentialMode] = field(default_factory=_env_credential_mode)
     user_assigned_client_id: Optional[str] = field(
-        default_factory=lambda: os.getenv("AGENT_LEARNING_JUDGE_USER_ASSIGNED_CLIENT_ID") or None
+        default_factory=lambda: os.getenv("AGENT_LEARNING_SCORE_USER_ASSIGNED_CLIENT_ID") or None
     )
     # Azure AD token scope for the resolved credential. Defaults to the
     # Cognitive Services scope used by Azure OpenAI and Azure AI Foundry.
     credential_scope: str = field(
         default_factory=lambda: os.getenv(
-            "AGENT_LEARNING_JUDGE_CREDENTIAL_SCOPE",
+            "AGENT_LEARNING_SCORE_CREDENTIAL_SCOPE",
             "https://cognitiveservices.azure.com/.default",
         )
     )
@@ -176,7 +176,7 @@ class JudgeConfig:
             import azure.identity as az_id  # type: ignore[import-not-found]
         except ImportError as exc:
             raise ImportError(
-                "Credential-based auth for the LLM judge requires the optional "
+                "Credential-based auth for the LLM scorer requires the optional "
                 "'azure-identity' package. Install it with: pip install azure-identity"
             ) from exc
         if mode == "default":
@@ -220,7 +220,7 @@ class JudgeConfig:
                 )
             except ImportError as exc:
                 raise ImportError(
-                    "Credential-based auth for the LLM judge requires the optional "
+                    "Credential-based auth for the LLM scorer requires the optional "
                     "'azure-identity' package. Install it with: pip install azure-identity"
                 ) from exc
             cfg["azure_ad_token_provider"] = get_bearer_token_provider(
@@ -232,10 +232,10 @@ class JudgeConfig:
 
 
 @dataclass
-class NlpJudgeConfig:
-    """Configuration for the in-SDK NLP judge stack (Tier 0, pure stdlib).
+class NlpScoreConfig:
+    """Configuration for the in-SDK NLP scoring stack (Tier 0, pure stdlib).
 
-    The NLP judges read their fitted weights from ``snapshot_dir`` at
+    The NLP scorers read their fitted weights from ``snapshot_dir`` at
     load time and fall back to an unfitted (always-pass) policy when no
     snapshot is present. Optional dependencies (scikit-learn,
     sentence-transformers, etc.) are detected at import time. Tier 0
@@ -244,7 +244,7 @@ class NlpJudgeConfig:
 
     snapshot_dir: str = field(
         default_factory=lambda: os.getenv(
-            "AGENT_LEARNING_NLP_JUDGE_DIR", "./data/agent-learning/nlp-judges"
+            "AGENT_LEARNING_NLP_SCORE_DIR", "./data/agent-learning/nlp-scores"
         )
     )
     pass_threshold: float = field(
@@ -255,8 +255,8 @@ class NlpJudgeConfig:
     )
 
 
-def _env_judge_mode(default: JudgeMode = "llm") -> JudgeMode:
-    raw = os.getenv("AGENT_LEARNING_JUDGE_MODE")
+def _env_score_mode(default: ScoreMode = "llm") -> ScoreMode:
+    raw = os.getenv("AGENT_LEARNING_SCORE_MODE")
     if raw is None or raw == "":
         return default
     value = raw.strip().lower()
@@ -265,37 +265,37 @@ def _env_judge_mode(default: JudgeMode = "llm") -> JudgeMode:
     return default
 
 
-def _env_judge_tier() -> Optional[JudgeTier]:
-    """Read AGENT_LEARNING_JUDGE_TIER and validate.
+def _env_score_tier() -> Optional[ScoreTier]:
+    """Read AGENT_LEARNING_SCORE_TIER and validate.
 
     Returns one of ``"stdlib"``, ``"nlp"``, ``"slm"``, ``"llm"`` or
     ``None`` when the env var is unset or invalid. The factory in
-    :mod:`agent_learning.judges` falls back to ``mode`` when ``tier``
+    scoring factory falls back to ``mode`` when ``tier``
     is None.
     """
-    raw = os.getenv("AGENT_LEARNING_JUDGE_TIER")
+    raw = os.getenv("AGENT_LEARNING_SCORE_TIER")
     if raw is None or raw == "":
         return None
     value = raw.strip().lower()
-    if value in _VALID_JUDGE_TIERS:
+    if value in _VALID_SCORE_TIERS:
         return value  # type: ignore[return-value]
     return None
 
 
 @dataclass
-class StdlibJudgeConfig:
-    """Configuration for the Tier 1 stdlib judges.
+class StdlibScoreConfig:
+    """Configuration for the Tier 1 stdlib scorers.
 
-    All Tier 1 judges run on the Python standard library alone. The
-    intent judge optionally loads fitted bag-of-words weights from
-    ``snapshot_dir``; the adherence and completion judges are pure
+    All Tier 1 scorers run on the Python standard library alone. The
+    intent scorer optionally loads fitted bag-of-words weights from
+    ``snapshot_dir``; the adherence and completion scorers are pure
     rule engines with no persisted state.
     """
 
     snapshot_dir: str = field(
         default_factory=lambda: os.getenv(
-            "AGENT_LEARNING_STDLIB_JUDGE_DIR",
-            "./data/agent-learning/stdlib-judges",
+            "AGENT_LEARNING_STDLIB_SCORE_DIR",
+            "./data/agent-learning/stdlib-scores",
         )
     )
     pass_threshold: float = field(
@@ -311,14 +311,14 @@ class StdlibJudgeConfig:
 
 
 @dataclass
-class NlpTextJudgeConfig:
-    """Configuration for the Tier 2 NLP text judges.
+class NlpTextScoreConfig:
+    """Configuration for the Tier 2 NLP text scorers.
 
     Tier 2 wraps a TF-IDF vectorizer + scikit-learn logistic
     regression around the response text. The fitted vectorizer and
     classifier are persisted to ``{snapshot_dir}/{name}.nlp_text.joblib``
     with a sibling JSON header at ``{name}.nlp_text.json``. When no
-    snapshot is present the judges fall back to a rule-engine signal
+    snapshot is present the scorers fall back to a rule-engine signal
     only (adherence, completion) or the pass threshold (intent).
 
     Requires the ``[nlp]`` extra (``pip install
@@ -327,8 +327,8 @@ class NlpTextJudgeConfig:
 
     snapshot_dir: str = field(
         default_factory=lambda: os.getenv(
-            "AGENT_LEARNING_NLP_TEXT_JUDGE_DIR",
-            "./data/agent-learning/nlp-text-judges",
+            "AGENT_LEARNING_NLP_TEXT_SCORE_DIR",
+            "./data/agent-learning/nlp-text-scores",
         )
     )
     pass_threshold: float = field(
@@ -350,13 +350,13 @@ class NlpTextJudgeConfig:
 
 
 @dataclass
-class SlmJudgeConfig:
-    """Configuration for the Tier 3 small-language-model judges.
+class SlmScoreConfig:
+    """Configuration for the Tier 3 small-language-model scorers.
 
     Tier 3 wraps a locally-hosted instance of Microsoft
     Phi-4-mini-instruct (3.8 B parameters, 4-bit ONNX) via
     ``onnxruntime-genai``. The model is loaded from ``model_dir`` on
-    first use and reused across the three judges in the same process.
+    first use and reused across the three scorers in the same process.
 
     Requires the ``[slm]`` extra (``pip install
     agents-learning-sdk[slm]``). The default ``model_dir``
@@ -389,8 +389,8 @@ class SlmJudgeConfig:
 
 
 @dataclass
-class JudgeRuntimeConfig:
-    """Top-level switch across the four judge tiers.
+class ScoreRuntimeConfig:
+    """Top-level switch across the four scoring tiers.
 
     Two selectors exist, in priority order:
 
@@ -399,22 +399,22 @@ class JudgeRuntimeConfig:
        ``"slm"`` (Tier 3, Phi-4-mini-instruct ONNX, ``[slm]`` extra),
        or ``"llm"`` (Tier 4, azure-ai-evaluation, ``[llm]`` extra).
     2. ``mode`` (legacy). One of ``"nlp"`` (the existing phi+action_id
-       :class:`BinaryJudge` stack) or ``"llm"`` (Azure AI Evaluation).
+    binary scoring stack) or ``"llm"`` (Azure AI Evaluation).
        Used when ``tier`` is ``None``.
 
     The default ``mode`` stays at ``"llm"`` for backwards compatibility
     with callers already wired through azure-ai-evaluation. Set
-    ``AGENT_LEARNING_JUDGE_TIER=stdlib`` to opt in to the new Tier 1
-    text-based judges.
+    ``AGENT_LEARNING_SCORE_TIER=stdlib`` to opt in to the new Tier 1
+    text-based scorers.
     """
 
-    mode: JudgeMode = field(default_factory=_env_judge_mode)
-    tier: Optional[JudgeTier] = field(default_factory=_env_judge_tier)
-    stdlib: StdlibJudgeConfig = field(default_factory=StdlibJudgeConfig)
-    nlp: NlpJudgeConfig = field(default_factory=NlpJudgeConfig)
-    nlp_text: NlpTextJudgeConfig = field(default_factory=NlpTextJudgeConfig)
-    slm: SlmJudgeConfig = field(default_factory=SlmJudgeConfig)
-    llm: JudgeConfig = field(default_factory=JudgeConfig)
+    mode: ScoreMode = field(default_factory=_env_score_mode)
+    tier: Optional[ScoreTier] = field(default_factory=_env_score_tier)
+    stdlib: StdlibScoreConfig = field(default_factory=StdlibScoreConfig)
+    nlp: NlpScoreConfig = field(default_factory=NlpScoreConfig)
+    nlp_text: NlpTextScoreConfig = field(default_factory=NlpTextScoreConfig)
+    slm: SlmScoreConfig = field(default_factory=SlmScoreConfig)
+    llm: ScoreConfig = field(default_factory=ScoreConfig)
 
 
 # ---------------------------------------------------------------------------
@@ -428,6 +428,13 @@ class CaptureConfig:
 
     enabled: bool = field(default_factory=lambda: _env_bool("AGENT_LEARNING_ENABLE_CAPTURE", False))
     agent_id: str = field(default_factory=lambda: os.getenv("AGENT_LEARNING_AGENT_ID", "default"))
+    agent_name: Optional[str] = field(
+        default_factory=lambda: os.getenv("AGENT_LEARNING_AGENT_NAME") or None
+    )
+    task_id: str = field(default_factory=lambda: os.getenv("AGENT_LEARNING_TASK_ID", "default"))
+    task_name: Optional[str] = field(
+        default_factory=lambda: os.getenv("AGENT_LEARNING_TASK_NAME") or None
+    )
     local_fallback_dir: str = field(
         default_factory=lambda: os.getenv("AGENT_LEARNING_DATA_DIR", "./data/agent-learning")
     )
@@ -504,14 +511,14 @@ __all__ = [
     "CaptureConfig",
     "CosmosConfig",
     "CredentialMode",
-    "JudgeConfig",
-    "JudgeMode",
-    "JudgeRuntimeConfig",
-    "JudgeTier",
+    "ScoreConfig",
+    "ScoreMode",
+    "ScoreRuntimeConfig",
+    "ScoreTier",
     "LearnerConfig",
-    "NlpJudgeConfig",
-    "NlpTextJudgeConfig",
+    "NlpScoreConfig",
+    "NlpTextScoreConfig",
     "ShapingConfig",
-    "SlmJudgeConfig",
-    "StdlibJudgeConfig",
+    "SlmScoreConfig",
+    "StdlibScoreConfig",
 ]

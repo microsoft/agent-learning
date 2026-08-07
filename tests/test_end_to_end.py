@@ -124,9 +124,9 @@ def test_end_to_end_offline_batch_improves_policy() -> None:
     assert run.status.value == "succeeded"
     assert after.logits["good"] > before.logits["good"]
     assert after.logits["bad"] < before.logits["bad"]
-    policy_history = store.list_policies("dq")
+    policy_history = store.list_policies("dq", "default")
     assert len(policy_history) == 2
-    assert policy_history[0].id == run.metadata["result_policy_id"]
+    assert policy_history[0].id == after.id
     assert policy_history[1].id == before.id
 
     # After a single batch the policy must already lean toward "good".
@@ -135,3 +135,30 @@ def test_end_to_end_offline_batch_improves_policy() -> None:
     probs = policy.probabilities()
     good_idx = next(i for i, a in enumerate(policy.actions()) if a.id == "good")
     assert probs[good_idx] > 0.55
+
+
+def test_offline_batch_only_uses_selected_task() -> None:
+    actions = [Action(id="good"), Action(id="bad")]
+    store = InMemoryStore()
+    policy = SoftmaxPolicy.from_actions(actions, agent_id="dq", task_id="chat")
+    store.store_policy(policy.snapshot())
+    store.store_episode(
+        Episode(agent_id="dq", task_id="chat", action_id="good", assistant_output="ok")
+    )
+    store.store_episode(
+        Episode(agent_id="dq", task_id="animation", action_id="bad", assistant_output="bad")
+    )
+
+    class _TaskRunner(LearningRunner):
+        def evaluate_episode(self, episode: Episode):  # type: ignore[override]
+            return [
+                MetricResult(metric=name, score=1.0, normalized=1.0, status="completed")
+                for name in MetricName
+            ]
+
+    runner = _TaskRunner(store=store, policy=policy, metrics=[])
+    run = runner.run_offline_batch("dq", task_id="chat")
+
+    assert run.task_id == "chat"
+    assert len(run.episode_ids) == 1
+    assert store.get_active_policy("dq", "chat") is not None

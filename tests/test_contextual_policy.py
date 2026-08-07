@@ -62,6 +62,8 @@ def test_apply_update_vector_delta_changes_weights_and_version() -> None:
     )
     after_snap = policy.snapshot()
     assert after_snap.version == before_snap.version + 1
+    assert after_snap.id != before_snap.id
+    assert after_snap.task_id == before_snap.task_id
     assert after_snap.baseline == 0.2
     assert after_snap.episodes_seen == 7
     w = after_snap.metadata["context_weights"]

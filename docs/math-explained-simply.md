@@ -131,7 +131,7 @@ So it puts old memories on a scale: memories that still match how it thinks toda
 
 > Grown-up name: **reward shaping**. See [math.md](math.md#reward-shaping).
 
-The robot gets graded by several "judges" on different things (Did it understand the question? Did it stay on task? Did it finish the job?). Each judge gives a grade from **0 to 1**. We need to squish all those into **one** final score.
+The robot gets graded by several scorers on different things (Did it understand the question? Did it stay on task? Did it finish the job?). Each scorer returns a grade from **0 to 1**. We need to squish all those into **one** final score.
 
 **Step A — turn grades into good/bad points.** A grade of 0.5 is "meh" (zero points). Above 0.5 is good (plus points); below is bad (minus points):
 
@@ -139,7 +139,7 @@ The robot gets graded by several "judges" on different things (Did it understand
 - Grade 0.5 → **0 points** (meh)
 - Grade 0.3 → **−0.4 points** (not great)
 
-**Step B — add them up, but some judges matter more.** Each judge has a "weight" (importance). Multiply and add.
+**Step B — add them up, but some scores matter more.** Each scorer has a "weight" (importance). Multiply and add.
 
 **Step C — add bonuses and penalties.** Was it too slow? Small penalty. Did it route the request correctly? Small bonus.
 
@@ -240,9 +240,9 @@ TF-IDF gives each word an importance score using two ideas:
 
 > Grown-up name: **normalization**. See [math.md](math.md#metric-normalization).
 
-Different judges grade on different scales. One gives stars from **1 to 5**; another gives **0 or 1**. To compare fairly, we stretch everyone onto the same **0-to-1** ruler.
+Different scorers produce values on different scales. One gives stars from **1 to 5**; another gives **0 or 1**. To compare fairly, we stretch every value onto the same **0-to-1** ruler.
 
-For the 1-to-5 judge, we slide it down and shrink it:
+For the 1-to-5 score, we slide it down and shrink it:
 
 - 5 stars → **1.0** (perfect)
 - 3 stars → **0.5** (middle)
@@ -259,7 +259,7 @@ Here's the whole robot in one breath:
 1. A situation comes in, written as numbers (**phi**, Step 2).
 2. The robot scores each choice and turns scores into chances (**softmax**, Step 1).
 3. It draws from a weighted raffle to pick (**sampling**, Step 3).
-4. The result gets graded by judges (**sigmoid** yes/no answers, Step 9), each grade stretched onto the same ruler (**normalization**, Step 16).
+4. The result gets evaluated by scorers (**sigmoid** yes/no answers, Step 9), with each score stretched onto the same ruler (**normalization**, Step 16).
 5. The grades are mixed into one reward (**reward shaping**, Step 8).
 6. The robot compares that reward to its usual (**baseline**, Steps 4 & 6) and nudges itself to do more of what worked (**learning**, Steps 4 & 11), while staying a little curious (**entropy**, Step 5).
 7. Over many rounds, it gets steadily better.

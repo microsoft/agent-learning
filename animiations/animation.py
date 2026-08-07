@@ -9,7 +9,7 @@ README. Each act on screen maps to one README bullet:
              (e.g. "use prompt template A / B / C"). It lives in
              Python and updates in milliseconds.
 
-2. JUDGES  — every episode is scored by three Azure AI Evaluation
+2. SCORE   — every episode is evaluated by three Azure AI Evaluation
              evaluators — ``IntentResolutionEvaluator``,
              ``TaskAdherenceEvaluator`` and ``TaskCompletionEvaluator``
              — whose scores are shaped into a single scalar reward.
@@ -20,7 +20,7 @@ README. Each act on screen maps to one README bullet:
              (in-memory / local files / Cosmos DB).
 
 The script runs a small, self-contained softmax-bandit simulation so
-the probability bars, judge scores, rewards and logit updates shown on
+the probability bars, score results, rewards and logit updates shown on
 screen are *real* numbers produced by the same REINFORCE update the
 SDK ships (see ``src/agent_learning``). No Azure credentials, no log
 file and no LaTeX toolchain are required — every label is drawn with
@@ -52,12 +52,12 @@ ACTIONS = ["Prompt A", "Prompt B", "Prompt C"]
 ACTION_SHORT = ["A", "B", "C"]
 
 # Hidden "true quality" of each template — unknown to the policy; it is
-# what the judges implicitly measure and what the learner discovers.
+# what the scorers implicitly measure and what the learner discovers.
 TRUE_QUALITY = [0.35, 0.55, 0.82]
 
-# Judge colours + names (three Azure AI Evaluation evaluators).
-JUDGE_NAMES = ["IntentResolution", "TaskAdherence", "TaskCompletion"]
-JUDGE_COLORS = ["#e8a24c", "#5fb878", "#c792ea"]
+# Score colours + names (three Azure AI Evaluation evaluators).
+SCORE_NAMES = ["IntentResolution", "TaskAdherence", "TaskCompletion"]
+SCORE_COLORS = ["#e8a24c", "#5fb878", "#c792ea"]
 
 # Reward-shaping weights — match src/agent_learning/config.py
 # ShapingConfig defaults (biased toward task completion).
@@ -110,8 +110,8 @@ class SoftmaxSim:
                 return i
         return self.n - 1
 
-    def judge(self, action: int) -> Tuple[float, float, float]:
-        """Three normalised judge scores in [0, 1] for the chosen action."""
+    def score(self, action: int) -> Tuple[float, float, float]:
+        """Three normalized scores in [0, 1] for the chosen action."""
         q = TRUE_QUALITY[action]
 
         def score() -> float:
@@ -120,7 +120,7 @@ class SoftmaxSim:
         return score(), score(), score()
 
     def shape(self, scores: Tuple[float, float, float]) -> float:
-        """Weighted sum of signed judge scores, clamped to [-1, 1]."""
+        """Weighted sum of signed scores, clamped to [-1, 1]."""
         intent, adhere, complete = scores
         total = (
             W_INTENT * (2.0 * intent - 1.0)
@@ -161,7 +161,7 @@ class AgentLearning(Scene):
 
         self.sim = SoftmaxSim(len(ACTIONS), LR_DISPLAY, BASELINE_DECAY, ENTROPY_BONUS, seed=7)
         self.logit_trackers = [ValueTracker(0.0) for _ in ACTIONS]
-        self.judge_trackers = [ValueTracker(0.0) for _ in range(3)]
+        self.score_trackers = [ValueTracker(0.0) for _ in range(3)]
         self.reward_tracker = ValueTracker(0.0)
         self.baseline_tracker = ValueTracker(0.0)
         self.redraws: list = []
@@ -171,7 +171,7 @@ class AgentLearning(Scene):
 
         self._intro()
         self._act_policy()
-        self._act_judges()
+        self._act_score()
         self._act_learner()
         self._closing()
 
@@ -260,7 +260,7 @@ class AgentLearning(Scene):
         steps = VGroup(
             Text("policy", font=SANS, font_size=26, color=ACTION_COLORS[0], weight=BOLD),
             Text("→", font=SANS, font_size=26, color=MUTED),
-            Text("judges", font=SANS, font_size=26, color=JUDGE_COLORS[2], weight=BOLD),
+            Text("score", font=SANS, font_size=26, color=SCORE_COLORS[2], weight=BOLD),
             Text("→", font=SANS, font_size=26, color=MUTED),
             Text("learner", font=SANS, font_size=26, color=LEARNER_COLOR, weight=BOLD),
         ).arrange(RIGHT, buff=0.28).next_to(grp, DOWN, buff=0.8)
@@ -366,10 +366,10 @@ class AgentLearning(Scene):
         self.wait(1.0)
         self._transition()
 
-    # ── Act 2 · Judges → reward ────────────────────────────────────
-    def _act_judges(self) -> None:
+    # ── Act 2 · Score → reward ─────────────────────────────────────
+    def _act_score(self) -> None:
         header = self._header(
-            2, "Judges", "three evaluators combine into one scalar reward", JUDGE_COLORS[2]
+            2, "Score", "three evaluators combine into one scalar reward", SCORE_COLORS[2]
         )
         self.play(FadeIn(header), run_time=0.5)
 
@@ -384,7 +384,7 @@ class AgentLearning(Scene):
         ).move_to(episode.get_center())
         self.play(FadeIn(VGroup(episode, ep_lbl), shift=DOWN * 0.2), run_time=0.6)
 
-        self.scores = self.sim.judge(self.chosen)
+        self.scores = self.sim.score(self.chosen)
         self.reward_value = self.sim.shape(self.scores)
         weights = [W_INTENT, W_ADHERE, W_COMPLETE]
         centers = [-4.5, 0.0, 4.5]
@@ -394,10 +394,10 @@ class AgentLearning(Scene):
         for i, cx in enumerate(centers):
             card = RoundedRectangle(
                 width=3.4, height=1.7, corner_radius=0.12,
-                stroke_color=JUDGE_COLORS[i], stroke_width=2,
-                fill_color=JUDGE_COLORS[i], fill_opacity=0.07,
+                stroke_color=SCORE_COLORS[i], stroke_width=2,
+                fill_color=SCORE_COLORS[i], fill_opacity=0.07,
             ).move_to([cx, 1.05, 0])
-            name = Text(JUDGE_NAMES[i], font=SANS, font_size=21, color=JUDGE_COLORS[i], weight=BOLD)
+            name = Text(SCORE_NAMES[i], font=SANS, font_size=21, color=SCORE_COLORS[i], weight=BOLD)
             name.move_to([cx, 1.55, 0])
             track = RoundedRectangle(
                 width=gauge_w, height=0.34, corner_radius=0.08,
@@ -410,7 +410,7 @@ class AgentLearning(Scene):
             self.redraws.append(fill)
             sval = always_redraw(
                 lambda i=i, cx=cx: Text(
-                    f"score = {self.judge_trackers[i].get_value():.2f}",
+                    f"score = {self.score_trackers[i].get_value():.2f}",
                     font=MONO, font_size=18, color=WHITE,
                 ).move_to([cx, 0.55, 0])
             )
@@ -421,7 +421,7 @@ class AgentLearning(Scene):
 
         self.play(FadeIn(cards, shift=UP * 0.2), run_time=0.7)
         self.play(
-            *[self.judge_trackers[i].animate.set_value(self.scores[i]) for i in range(3)],
+            *[self.score_trackers[i].animate.set_value(self.scores[i]) for i in range(3)],
             run_time=1.2,
         )
         self.wait(0.5)
@@ -464,10 +464,10 @@ class AgentLearning(Scene):
         self._transition()
 
     def _gauge_fill(self, i: int, left_x: float, y: float, width: float, height: float) -> Rectangle:
-        v = self.judge_trackers[i].get_value()
+        v = self.score_trackers[i].get_value()
         w = max(v * width, 0.02)
         r = Rectangle(width=w, height=height, stroke_width=0,
-                      fill_color=JUDGE_COLORS[i], fill_opacity=0.9)
+                      fill_color=SCORE_COLORS[i], fill_opacity=0.9)
         r.move_to([left_x, y, 0], aligned_edge=LEFT)
         return r
 
@@ -531,7 +531,7 @@ class AgentLearning(Scene):
         x_lbl.next_to(frame, DOWN, buff=0.12)
         self.play(Create(frame), Create(zero_line), FadeIn(y_top), FadeIn(x_lbl), run_time=0.6)
 
-        # First learner step uses the exact episode judged in Act 2.
+        # First learner step uses the exact episode evaluated in Act 2.
         step_lbl = Text(
             "learner.update(policy, episodes, rewards)",
             font=MONO, font_size=20, color=LEARNER_COLOR,
@@ -559,7 +559,7 @@ class AgentLearning(Scene):
             episodes = []
             for _ in range(ep_per_batch):
                 a = self.sim.choose()
-                sc = self.sim.judge(a)
+                sc = self.sim.score(a)
                 episodes.append((a, self.sim.shape(sc)))
             mean_r = self.sim.update_batch(episodes)
             keyframes.append((mean_r, list(self.sim.logits), self.sim.baseline))
@@ -617,12 +617,12 @@ class AgentLearning(Scene):
             return VGroup(box, t, s)
 
         policy = mini_card("Policy", "softmax over N actions", ACTION_COLORS[0])
-        judges = mini_card("Judges", "3 evaluators → reward", JUDGE_COLORS[2])
+        score = mini_card("Score", "3 evaluators → reward", SCORE_COLORS[2])
         learner = mini_card("Learner", "REINFORCE + baseline", LEARNER_COLOR)
-        row = VGroup(policy, judges, learner).arrange(RIGHT, buff=1.3).move_to(UP * 0.6)
+        row = VGroup(policy, score, learner).arrange(RIGHT, buff=1.3).move_to(UP * 0.6)
 
-        a1 = Arrow(policy.get_right(), judges.get_left(), buff=0.15, color=MUTED, stroke_width=4)
-        a2 = Arrow(judges.get_right(), learner.get_left(), buff=0.15, color=MUTED, stroke_width=4)
+        a1 = Arrow(policy.get_right(), score.get_left(), buff=0.15, color=MUTED, stroke_width=4)
+        a2 = Arrow(score.get_right(), learner.get_left(), buff=0.15, color=MUTED, stroke_width=4)
         back = CurvedArrow(
             learner.get_bottom() + DOWN * 0.15, policy.get_bottom() + DOWN * 0.15,
             angle=-TAU / 6, color=ACCENT, stroke_width=4,
@@ -631,7 +631,7 @@ class AgentLearning(Scene):
         back_lbl.next_to(back, DOWN, buff=0.1)
 
         self.play(FadeIn(policy), run_time=0.4)
-        self.play(GrowArrow(a1), FadeIn(judges), run_time=0.5)
+        self.play(GrowArrow(a1), FadeIn(score), run_time=0.5)
         self.play(GrowArrow(a2), FadeIn(learner), run_time=0.5)
         self.play(Create(back), FadeIn(back_lbl), run_time=0.7)
 

@@ -89,6 +89,7 @@ class ContextualSoftmaxPolicy(Policy):
         *,
         feature_dim: int,
         agent_id: str = "default",
+        task_id: str = "default",
         rng: Optional[random.Random] = None,
         max_weight_abs: float = 10.0,
         initial_weights: Optional[Dict[str, Sequence[float]]] = None,
@@ -110,6 +111,7 @@ class ContextualSoftmaxPolicy(Policy):
                     weights[action_id] = row_list
         snapshot = PolicySnapshot(
             agent_id=agent_id,
+            task_id=task_id,
             version=0,
             actions=list(actions),
             logits={a.id: 0.0 for a in actions},  # kept for back-compat, unused
@@ -222,7 +224,7 @@ class ContextualSoftmaxPolicy(Policy):
         self._snapshot.baseline = float(baseline)
         self._snapshot.episodes_seen = int(episodes_seen)
         self._snapshot.updates_applied += 1
-        self._snapshot.version += 1
+        self._snapshot.advance_version()
 
     # ------------------------------------------------------------------
     # Internals

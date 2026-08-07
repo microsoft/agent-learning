@@ -7,7 +7,7 @@
     PowerShell port of run_animation.sh. Creates a local virtual
     environment, installs the pinned requirements, and renders the
     three-act "AgentLearning" scene from animation.py that visualises
-    the SDK's policy → judges → learner loop.
+    the SDK's policy → score → learner loop.
 
 .PARAMETER Quality
     Manim render quality: l (480p15), m (720p30), h (1080p60),

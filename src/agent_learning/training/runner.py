@@ -2,7 +2,7 @@
 
 The :class:`LearningRunner` ties together the four moving parts:
 
-1. ``MetricEvaluator``s score each episode against the three judges.
+1. ``MetricEvaluator``s evaluate each episode with the three scorers.
 2. ``RewardShaper`` collapses metrics into a scalar reward.
 3. ``RewardWriter`` persists per-metric and aggregate rewards.
 4. ``Learner`` consumes recent episodes + their aggregate rewards
@@ -16,11 +16,10 @@ of :meth:`run_offline_batch` is one training step.
 from __future__ import annotations
 
 import logging
-import uuid
 from datetime import datetime, timezone
 from typing import Dict, Iterable, List, Optional
 
-from ..config import JudgeConfig, LearnerConfig, ShapingConfig
+from ..config import LearnerConfig, ScoreConfig, ShapingConfig
 from ..learners.base import Learner, LearnerResult
 from ..learners.reinforce import ReinforceLearner
 from ..metrics.base import MetricEvaluator
@@ -47,13 +46,13 @@ class LearningRunner:
         shaper: Optional[RewardShaper] = None,
         writer: Optional[RewardWriter] = None,
         learner: Optional[Learner] = None,
-        judge_config: Optional[JudgeConfig] = None,
+        score_config: Optional[ScoreConfig] = None,
         learner_config: Optional[LearnerConfig] = None,
         shaping_config: Optional[ShapingConfig] = None,
     ) -> None:
         self._store = store or get_default_store()
         self._policy = policy
-        self._metrics = list(metrics) if metrics is not None else default_metrics(judge_config)
+        self._metrics = list(metrics) if metrics is not None else default_metrics(score_config)
         self._shaper = shaper or RewardShaper(shaping_config)
         self._writer = writer or RewardWriter(self._store)
         self._learner = learner or ReinforceLearner(learner_config)
@@ -80,27 +79,20 @@ class LearningRunner:
         self,
         agent_id: str,
         *,
+        task_id: str = "default",
         episode_limit: int = 200,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         score_missing: bool = True,
-        completed_only: bool = False,
-        task_id: Optional[str] = None,
     ) -> TrainingRun:
         """Score (if missing) and update the policy over recent episodes."""
         if self._policy is None:
             raise RuntimeError("A Policy must be supplied before running a batch update.")
 
-        source_policy = self._policy.snapshot()
-        if task_id is not None and source_policy.task_id not in (None, task_id):
-            raise ValueError(
-                f"Policy task_id={source_policy.task_id!r} does not match task_id={task_id!r}."
-            )
-
         run = TrainingRun(
             agent_id=agent_id,
             task_id=task_id,
-            policy_id=source_policy.id,
+            policy_id=self._policy.snapshot().id,
             algorithm=type(self._learner).__name__,
             status=TrainingStatus.RUNNING,
             started_at=datetime.now(timezone.utc).isoformat(),
@@ -114,15 +106,11 @@ class LearningRunner:
                 start_date=start_date,
                 end_date=end_date,
                 task_id=task_id,
-                completed_only=completed_only,
             )
             rewards = self._collect_rewards(agent_id, episodes, score_missing=score_missing)
 
             result = self._learner.update(self._policy, episodes, rewards)
             policy_snapshot = self._policy.snapshot()
-            policy_snapshot.task_id = task_id or policy_snapshot.task_id
-            policy_snapshot.id = str(uuid.uuid4())
-            policy_snapshot.created_at = datetime.now(timezone.utc).isoformat()
             self._store.store_policy(policy_snapshot)
 
             run.status = TrainingStatus.SUCCEEDED
@@ -132,10 +120,8 @@ class LearningRunner:
             run.metadata.update(
                 {
                     "policy_version": policy_snapshot.version,
-                    "score_missing": score_missing,
-                    "completed_only": completed_only,
-                    "result_policy_id": policy_snapshot.id,
                     "task_id": task_id,
+                    "score_missing": score_missing,
                 }
             )
             self._store.store_run(run)

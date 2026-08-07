@@ -440,7 +440,7 @@ class ContextualReinforceLearner(Learner):
 # 4. Runner that scores each episode from the simulated outcome (no Azure).
 # ---------------------------------------------------------------------------
 class _SimulatedOutcomeRunner(LearningRunner):
-    """Turns the stored simulated success into the three judge metrics."""
+    """Turns the stored simulated success into the three score metrics."""
 
     def evaluate_episode(self, episode: Episode) -> List[MetricResult]:
         success = float(episode.metadata.get("_success", 0.0))
@@ -501,7 +501,7 @@ def run_use_case(uc: UseCase) -> ContextualSoftmaxPolicy:
     runner = _SimulatedOutcomeRunner(
         store=store,
         policy=policy,
-        metrics=[],  # no Azure judges; evaluate_episode is overridden above
+        metrics=[],  # no Azure scorers; evaluate_episode is overridden above
         shaper=RewardShaper(ShapingConfig()),
         writer=RewardWriter(store),
         learner=ContextualReinforceLearner(

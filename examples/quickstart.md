@@ -15,7 +15,7 @@ File: [quickstart.py](quickstart.py)
 ## How It Maps to the SDK
 - **`SoftmaxPolicy`** — a discrete softmax bandit over the two actions, with per-action logits.
 - **Built-in `ReinforceLearner`** — REINFORCE-with-baseline (EMA value baseline + entropy bonus), configured via `LearnerConfig(learning_rate=0.4, entropy_bonus=0.01)`.
-- **`LearningRunner` pipeline** — a `_DemoRunner` subclass overrides `evaluate_episode` to return stubbed judge metrics (Intent Resolution, Task Adherence, Task Completion), so **no Azure credentials** are needed. `RewardShaper` + `RewardWriter` + `InMemoryStore` handle shaping and persistence.
+- **`LearningRunner` pipeline** — a `_DemoRunner` subclass overrides `evaluate_episode` to return stubbed metric scores (Intent Resolution, Task Adherence, Task Completion), so **no Azure credentials** are needed. `RewardShaper` + `RewardWriter` + `InMemoryStore` handle shaping and persistence.
 
 ## Flow
 1. Build a `SoftmaxPolicy` from two `Action`s and store its snapshot.
