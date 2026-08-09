@@ -216,11 +216,11 @@ def _cmd_score(args: argparse.Namespace) -> int:
     )
     scored = 0
     for episode in episodes:
-        existing = store.get_rewards_for_episode(episode.id, args.agent_id)
-        if existing:
+        if runner.has_usable_reward(episode):
             continue
-        runner.score_and_record(episode)
-        scored += 1
+        rewards = runner.score_and_record(episode)
+        if any(reward.source == RewardSource.AGGREGATE for reward in rewards):
+            scored += 1
     print(json.dumps({"episodes_seen": len(episodes), "newly_scored": scored}, indent=2))
     return 0
 

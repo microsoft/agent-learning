@@ -89,3 +89,30 @@ def test_unknown_action_is_skipped() -> None:
     ]
     result = learner.update(policy, [ep], rewards)
     assert result.episodes_used == 0
+
+
+def test_most_recent_aggregate_reward_wins() -> None:
+    policy = SoftmaxPolicy.from_actions([Action(id="a"), Action(id="b")])
+    learner = ReinforceLearner(LearnerConfig(learning_rate=0.5, entropy_bonus=0.0))
+    episode = _make_episode("default", "a")
+    rewards = [
+        Reward(
+            episode_id=episode.id,
+            agent_id=episode.agent_id,
+            source=RewardSource.AGGREGATE,
+            value=0.0,
+            created_at="2026-08-09T00:00:00+00:00",
+        ),
+        Reward(
+            episode_id=episode.id,
+            agent_id=episode.agent_id,
+            source=RewardSource.AGGREGATE,
+            value=0.8,
+            created_at="2026-08-09T00:00:01+00:00",
+        ),
+    ]
+
+    result = learner.update(policy, [episode], rewards)
+
+    assert result.mean_reward == 0.8
+    assert policy.snapshot().logits["a"] > 0.0

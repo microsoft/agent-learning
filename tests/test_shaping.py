@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from agent_learning.config import ShapingConfig
+from agent_learning.rewards import RewardWriter
 from agent_learning.rewards.shaping import RewardShaper
-from agent_learning.types import MetricName, MetricResult
+from agent_learning.storage import InMemoryStore
+from agent_learning.types import Episode, MetricName, MetricResult, RewardSource
 
 
 def _result(metric: MetricName, normalized: float) -> MetricResult:
@@ -69,6 +71,26 @@ def test_skipped_metrics_are_ignored() -> None:
     )
     # Only intent (0.5) + completion (0.2) contribute. signed = 2*1-1 = 1
     assert abs(shaped.value - 0.7) < 1e-9
+
+
+def test_all_skipped_metrics_do_not_persist_aggregate() -> None:
+    store = InMemoryStore()
+    episode = Episode(agent_id="scout")
+    results = [
+        MetricResult(
+            metric=metric,
+            score=None,
+            normalized=None,
+            status="skipped",
+        )
+        for metric in MetricName
+    ]
+    shaped = RewardShaper().shape(results)
+
+    rewards = RewardWriter(store).write(episode, results, shaped)
+
+    assert not any(reward.source == RewardSource.AGGREGATE for reward in rewards)
+    assert store.get_rewards_for_episode(episode.id, episode.agent_id) == []
 
 
 def test_latency_penalty_applied() -> None:

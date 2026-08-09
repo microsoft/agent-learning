@@ -19,7 +19,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Dict, Iterable, List, Optional
 
-from ..config import LearnerConfig, ScoreConfig, ShapingConfig
+from ..config import LearnerConfig, ScoreConfig, ScoreRuntimeConfig, ShapingConfig
 from ..learners.base import Learner, LearnerResult
 from ..learners.reinforce import ReinforceLearner
 from ..metrics.base import MetricEvaluator
@@ -47,12 +47,17 @@ class LearningRunner:
         writer: Optional[RewardWriter] = None,
         learner: Optional[Learner] = None,
         score_config: Optional[ScoreConfig] = None,
+        score_runtime_config: Optional[ScoreRuntimeConfig] = None,
         learner_config: Optional[LearnerConfig] = None,
         shaping_config: Optional[ShapingConfig] = None,
     ) -> None:
         self._store = store or get_default_store()
         self._policy = policy
-        self._metrics = list(metrics) if metrics is not None else default_metrics(score_config)
+        self._metrics = (
+            list(metrics)
+            if metrics is not None
+            else default_metrics(score_config, score_runtime_config)
+        )
         self._shaper = shaper or RewardShaper(shaping_config)
         self._writer = writer or RewardWriter(self._store)
         self._learner = learner or ReinforceLearner(learner_config)
@@ -137,6 +142,19 @@ class LearningRunner:
     # Helpers
     # ------------------------------------------------------------------
 
+    def has_usable_reward(self, episode: Episode) -> bool:
+        """Return whether an episode has an aggregate backed by valid metrics."""
+        rewards = self._store.get_rewards_for_episode(episode.id, episode.agent_id)
+        if not any(reward.source.value == "aggregate" for reward in rewards):
+            return False
+        metrics = self._store.get_metric_results(episode.id, episode.agent_id)
+        if not metrics:
+            return True
+        return any(
+            result.status == "completed" and result.normalized is not None
+            for result in metrics
+        )
+
     def _collect_rewards(
         self,
         agent_id: str,
@@ -147,7 +165,7 @@ class LearningRunner:
         rewards: List[Reward] = []
         for episode in episodes:
             existing = self._store.get_rewards_for_episode(episode.id, agent_id)
-            if existing:
+            if self.has_usable_reward(episode):
                 rewards.extend(existing)
                 continue
             if not score_missing:

@@ -49,14 +49,14 @@ class ReinforceLearner(Learner):
 
         # Index rewards by episode id - we only consume aggregate rewards
         episode_list = list(episodes)
-        aggregate_rewards: Dict[str, float] = {}
+        aggregate_rewards: Dict[str, Reward] = {}
         for r in rewards:
             if r.source != RewardSource.AGGREGATE:
                 continue
-            # Keep the most recent aggregate per episode (sorted by created_at desc)
+            # Rescoring may append a replacement aggregate. Keep the newest.
             current = aggregate_rewards.get(r.episode_id)
-            if current is None:
-                aggregate_rewards[r.episode_id] = r.value
+            if current is None or r.created_at > current.created_at:
+                aggregate_rewards[r.episode_id] = r
 
         snapshot = policy.snapshot()
         baseline_before = snapshot.baseline
@@ -72,9 +72,10 @@ class ReinforceLearner(Learner):
         for episode in episode_list:
             if episode.action_id is None or episode.action_id not in action_index:
                 continue
-            reward_value = aggregate_rewards.get(episode.id)
-            if reward_value is None:
+            reward = aggregate_rewards.get(episode.id)
+            if reward is None:
                 continue
+            reward_value = reward.value
             advantage = reward_value - baseline_before
 
             # Importance sampling weight when the episode was logged under a

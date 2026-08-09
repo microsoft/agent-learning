@@ -98,7 +98,10 @@ class RewardWriter:
             except Exception as exc:  # pragma: no cover
                 logger.warning("Failed to persist %s penalty for %s: %s", kind, episode.id, exc)
 
-        # 4) Aggregate reward consumed by the learner
+        # 4) Aggregate reward consumed by the learner. Do not turn an
+        # all-skipped evaluation into a misleading neutral reward.
+        if not shaped.metric_contributions and not shaped.penalties:
+            return stored
         aggregate = Reward(
             episode_id=episode.id,
             agent_id=episode.agent_id,

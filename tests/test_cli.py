@@ -167,6 +167,96 @@ def test_task_episode_register_persists_full_episode(
     assert episode.is_full
 
 
+def test_score_uses_local_stdlib_without_configuration(
+    monkeypatch, capsys
+) -> None:
+    for name in (
+        "AGENT_LEARNING_SCORE_ENDPOINT",
+        "AGENT_LEARNING_SCORE_DEPLOYMENT",
+        "AGENT_LEARNING_SCORE_TIER",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    store = InMemoryStore()
+    monkeypatch.setattr(cli, "get_default_store", lambda: store)
+    episode = Episode(
+        agent_id="scout",
+        task_id="context-window",
+        user_input="What is the context window?",
+        assistant_output="The context window is 922,000 tokens.",
+        intent_summary="Report the context window",
+        action_id="inspect_context",
+        expected_outcome="Return the live context limit",
+        execution_status="completed",
+        result_summary="Returned the live limit",
+        metadata={
+            "correct_action_id": "inspect_context",
+            "task_completed": True,
+        },
+    )
+    store.store_episode(episode)
+
+    assert cli.main(["score", "--agent-id", "scout"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result == {"episodes_seen": 1, "newly_scored": 1}
+    metrics = store.get_metric_results(episode.id, episode.agent_id)
+    assert len(metrics) == 3
+    assert all(metric.status == "completed" for metric in metrics)
+    assert all((metric.evaluator or "").startswith("local:") for metric in metrics)
+    rewards = store.get_rewards_for_episode(episode.id, episode.agent_id)
+    aggregate = next(reward for reward in rewards if reward.source == RewardSource.AGGREGATE)
+    assert aggregate.value > 0.0
+
+
+def test_score_replaces_skipped_only_evaluation(monkeypatch, capsys) -> None:
+    store = InMemoryStore()
+    monkeypatch.setattr(cli, "get_default_store", lambda: store)
+    episode = Episode(
+        agent_id="scout",
+        task_id="context-window",
+        user_input="What is the context window?",
+        assistant_output="The context window is 922,000 tokens.",
+        action_id="inspect_context",
+        execution_status="completed",
+        metadata={"task_completed": True},
+    )
+    store.store_episode(episode)
+    store.store_metric_results(
+        episode.id,
+        episode.agent_id,
+        [
+            MetricResult(
+                metric=metric,
+                score=None,
+                normalized=None,
+                status="skipped",
+                reason="remote scorer was not configured",
+            )
+            for metric in MetricName
+        ],
+    )
+    store.store_reward(
+        Reward(
+            episode_id=episode.id,
+            agent_id=episode.agent_id,
+            source=RewardSource.AGGREGATE,
+            value=0.0,
+            created_at="2026-08-09T00:00:00+00:00",
+        )
+    )
+
+    assert cli.main(["score", "--agent-id", "scout"]) == 0
+    assert json.loads(capsys.readouterr().out)["newly_scored"] == 1
+    metrics = store.get_metric_results(episode.id, episode.agent_id)
+    assert sum(metric.status == "completed" for metric in metrics) == 3
+    aggregates = [
+        reward
+        for reward in store.get_rewards_for_episode(episode.id, episode.agent_id)
+        if reward.source == RewardSource.AGGREGATE
+    ]
+    assert len(aggregates) == 2
+    assert max(aggregates, key=lambda reward: reward.created_at).value > 0.0
+
+
 def test_agent_training_uses_one_limit_and_preserves_task_policy_history(
     monkeypatch, capsys
 ) -> None:

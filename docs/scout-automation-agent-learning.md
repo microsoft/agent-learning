@@ -12,14 +12,21 @@ instructions: |
   training; the recommended default is `5`. The CLI accepts a batch limit from `1`
   through `500` but does not enforce the automation's minimum threshold.
 
-  Configure every automation step to use the same durable local store:
+  ## 0. Establish the shared durable store
 
-  ```text
-  AGENT_LEARNING_STORE_BACKEND=local
-  AGENT_LEARNING_LOCAL_STORE_DIR=./data/agent-learning/store
+  Before invoking any `agent-learn` command, establish the same absolute store
+  used by episode capture. On Windows PowerShell, run these assignments in every
+  shell process that invokes the CLI:
+
+  ```powershell
+  $env:AGENT_LEARNING_STORE_BACKEND = "local"
+  $env:AGENT_LEARNING_LOCAL_STORE_DIR = Join-Path $env:LOCALAPPDATA "agent-learning\store"
   ```
 
-  The environment variables must remain the same across capture, review, and training processes.
+  The resolved default Windows location is
+  `%LOCALAPPDATA%\agent-learning\store`. Never substitute a path relative to the
+  automation's working directory. The environment variables and absolute path
+  must be identical across capture, review, and training processes.
 
   ## 1. Discover agents
 
@@ -27,7 +34,20 @@ instructions: |
   agent-learn list
   ```
 
-  The command returns the `id` and `name` of each agent. Run the remaining steps once for each returned agent.
+    The command returns the `id` and `name` of each agent. Run the remaining steps once for each returned agent.
+
+    If the command returns `[]`, stop. Do not report that training succeeded and do
+    not advance checkpoints. Diagnose capture first:
+
+    1. Confirm the skill and automation resolve the same absolute
+      `AGENT_LEARNING_LOCAL_STORE_DIR`.
+    2. Confirm `AGENT_LEARNING_STORE_BACKEND` is `local`, not the default `memory`.
+    3. Confirm the live Scout skill was invoked for the preceding request and ran
+      `task-policy-init` or `task-episode-register`.
+    4. Confirm the store contains `policies/` or `episodes/` JSON files.
+
+    Training only consumes existing records; it cannot reconstruct a user request
+    that the capture skill never registered.
 
   ## 2. Discover the agent's tasks
 
@@ -86,16 +106,19 @@ instructions: |
 
   ## 6. Ensure the selected episodes have rewards
 
-  `task-episode-register` persists episodes but does not score them. If any
-  selected episode has `final_reward: null`, either let `train` score missing
-  episodes or score the task explicitly first:
+  `task-episode-register` persists episodes but does not score them. The CLI uses
+  on-device stdlib scoring by default with no endpoint or environment variables.
+  If any selected episode has `final_reward: null`, `final_reward: 0.0` backed
+  only by skipped metrics, or fewer than three completed core metrics, either let
+  `train` score it or score the task explicitly first:
 
   ```shell
   agent-learn score --agent-id <agent_id> --task-id <task_id> --limit 500
   ```
 
-  Use a configured score backend. Re-list the episodes and verify that every
-  episode intended for learning has a non-null aggregate reward.
+  Re-list the episodes and verify that every episode intended for learning has
+  completed intent-resolution, task-adherence, and task-completion metrics plus
+  a non-null aggregate reward. A configured Azure scorer is optional.
 
   ## 7. Train one task policy
 
@@ -111,9 +134,10 @@ instructions: |
   agent-learn train --agent-id <agent_id> --task-id <task_id> --limit 500 --start-date <start_date> --end-date <end_date>
   ```
 
-  By default, `train` scores selected episodes that do not yet have rewards and
-  then updates the active policy. Add `--skip-scoring` only when every selected
-  episode already has a persisted aggregate reward:
+  By default, `train` locally scores selected episodes that do not yet have a
+  usable reward and then updates the active policy. Add `--skip-scoring` only
+  when every selected episode already has three completed core metrics and a
+  persisted aggregate reward:
 
   ```shell
   agent-learn train --agent-id <agent_id> --task-id <task_id> --limit 500 --start-date <start_date> --end-date <end_date> --skip-scoring

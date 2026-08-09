@@ -23,7 +23,7 @@ The agent-learning SDK is a reinforcement-learning toolkit for agents. Today the
 
 This document proposes a first-class scoring layer inside the SDK, organized as four capability tiers. Each tier is a self-contained scoring stack with a different cost, latency, and dependency profile. Callers pick the tier that matches their environment; the public `ScoreResult` shape, the reward shaper, the learner, and the storage layers stay unchanged across tiers.
 
-The two operational modes (`nlp` and `llm`) sit on top of the tier model. The `nlp` mode draws from Tiers 1 through 3 depending on which extras are installed. The `llm` mode is Tier 4. The default mode is `llm` for backwards compatibility.
+The two compatibility modes (`nlp` and `llm`) sit on top of the tier model. The `nlp` mode draws from Tiers 1 through 3 depending on which extras are installed. The `llm` mode is Tier 4. `ScoreRuntimeConfig.mode` remains `llm` for API compatibility, while CLI and `LearningRunner` scoring defaults to Tier 1 stdlib whenever no Azure model or explicit tier is configured.
 
 ## Goals and non-goals
 
@@ -199,7 +199,7 @@ Tiers 2 and 3 are trained, not handwritten. The corpus is the same set of captur
 
 ## Decisions
 
-* **Default mode is `"llm"`.** Existing callers must not see a behavior change when they upgrade. They pick local tiers only by opting in.
+* **Default CLI/runner scoring is `"stdlib"`.** Existing callers that pass a `ScoreConfig`, configure an Azure endpoint/deployment, or explicitly select the `llm` tier retain Azure AI evaluation.
 * **Tier 1 stays pure standard library.** Callers who refuse the `[nlp]` extra still get a working scorer, just a weaker one. No transitive dependency is allowed to creep into the base wheel.
 * **Scorers are independent.** Each of intent, adherence, and completion is its own snapshot. We do not train them jointly; that locks unrelated bugs together and complicates rollback.
 

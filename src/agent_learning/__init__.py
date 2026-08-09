@@ -7,9 +7,9 @@ native, in-process learner. The SDK is organised into five layers:
   ``Reward``, ``PolicySnapshot``, ...).
 - ``agent_learning.storage``  - pluggable persistence (Cosmos DB,
   local file system, and in-memory).
-- ``agent_learning.metrics``  - score-based metrics that wrap the
-  Azure AI Evaluation evaluators for Intent Resolution, Task
-  Adherence, and Task Completion.
+- ``agent_learning.metrics``  - on-device stdlib metrics by default,
+    with optional Azure AI evaluators for Intent Resolution, Task
+    Adherence, and Task Completion.
 - ``agent_learning.rewards``  - reward shaping + persistence.
 - ``agent_learning.policy``   - discrete softmax bandit policy.
 - ``agent_learning.learners`` - REINFORCE-with-baseline learner.

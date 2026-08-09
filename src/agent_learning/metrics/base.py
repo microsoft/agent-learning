@@ -42,6 +42,14 @@ class MetricRequest:
             system_message=episode.system_message,
             tool_calls=_format_tool_calls(episode),
             tool_definitions=episode.metadata.get("tool_definitions"),
+            extra={
+                "action_id": episode.action_id,
+                "context_features": episode.context_features,
+                "execution_status": episode.execution_status,
+                "expected_outcome": episode.expected_outcome,
+                "metadata": episode.metadata,
+                "result_summary": episode.result_summary,
+            },
         )
 
 

@@ -8,7 +8,7 @@ The SDK improves agents without LLM weight fine-tuning. There are no GPU fine-tu
 
 1. The **policy** is a softmax distribution over `N` discrete actions (e.g., "take action A", "take action B", "take action C"). It lives in Python and updates in milliseconds.
 
-2. Each episode is **evaluated** by three AI Evaluation evaluators — `IntentResolutionEvaluator`, `TaskAdherenceEvaluator`, and `TaskCompletionEvaluator` — whose scores are combined into a single scalar reward.
+2. Each episode is **evaluated** on-device by three stdlib scorers for intent resolution, task adherence, and task completion. Their scores are combined into a single scalar reward with no scoring endpoint or environment variables required. Azure AI evaluators remain available as an opt-in.
 
 3. A **REINFORCE-with-baseline** learner updates the policy logits directly from logged episodes. Updates are tiny gradient steps that run on local compute and persist through a pluggable store — in-memory or local files by default, with Azure Cosmos DB optional.
 

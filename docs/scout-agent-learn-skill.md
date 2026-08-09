@@ -1,25 +1,47 @@
 ---
 name: agent-learn
-description: "Use agent-learn whenever Scout executes a repeated task: resolve or initialize its task policy, choose an action from that policy, capture intent and completion, register the full episode with the chosen and correct action IDs, and persist scores and reward so later automation can train the policy."
+description: "MANDATORY for every Scout user request, including first-time questions, one-off chat answers, and tool calls: use agent-learn to resolve or initialize a task policy, choose an action, register the full episode with chosen and correct action IDs, and persist its scores and reward. Do not wait for the user to mention learning or repeat a task."
 instructions: |
   # Agent Learn
 
-  Use the following behavior whenever this skill is invoked.
+  Apply this workflow to every Scout user request, including the first occurrence
+  of a task. It is cross-cutting capture behavior: do not wait for a task to be
+  repeated, and do not skip it because another skill or tool answered the request.
 
-  Use one durable local store for capture, review, and training:
+  ## 0. Establish one durable store
 
-  ```text
-  AGENT_LEARNING_STORE_BACKEND=local
-  AGENT_LEARNING_LOCAL_STORE_DIR=./data/agent-learning/store
+  Before invoking any `agent-learn` command, establish the same absolute store
+  used by the training automation. On Windows PowerShell, run these assignments
+  in every shell process that invokes the CLI:
+
+  ```powershell
+  $env:AGENT_LEARNING_STORE_BACKEND = "local"
+  $env:AGENT_LEARNING_LOCAL_STORE_DIR = Join-Path $env:LOCALAPPDATA "agent-learning\store"
   ```
 
-  Do not use the default in-memory backend for work that spans multiple processes.
+  The resolved default Windows location is
+  `%LOCALAPPDATA%\agent-learning\store`. Use that exact absolute directory for
+  capture, review, and training. Do not use a path relative to Scout's working
+  directory. Do not use the default in-memory backend: each CLI invocation is a
+  separate process, so in-memory policies and episodes disappear before the next
+  command.
 
-  ## 0. Treat repeated tasks as learning opportunities
+  For a persistent configuration inherited by newly started Scout processes,
+  configure the user environment once and restart Scout:
 
-  If Scout repeats a task, do not treat it as a duplicate. Record it as another episode for the same stable task ID.
+  ```powershell
+  [Environment]::SetEnvironmentVariable("AGENT_LEARNING_STORE_BACKEND", "local", "User")
+  [Environment]::SetEnvironmentVariable("AGENT_LEARNING_LOCAL_STORE_DIR", (Join-Path $env:LOCALAPPDATA "agent-learning\store"), "User")
+  ```
 
-  ## 1. Treat every task as a policy-learning episode
+  ## 1. Treat every task as a learning opportunity
+
+  Register the first attempt and every repeated attempt as an episode under the
+  same stable task ID. A successful answer from another tool is still an episode.
+  For example, a question answered with `Get Context Usage` must be captured after
+  the tool result is returned.
+
+  ## 2. Resolve the task
 
   Before starting a task, determine its intent, action class, and expected completion criteria. Resolve its task ID by semantically comparing the requested work with the task names returned by:
 
@@ -46,7 +68,7 @@ instructions: |
 
   The SDK learns from discrete action choices and scored episodes, not raw logs.
 
-  ## 2. Initialize a task policy when no policy exists
+  ## 3. Initialize a task policy when no policy exists
 
   Inspect the active policy first:
 
@@ -86,7 +108,7 @@ instructions: |
 
   The store may retain unlimited policy snapshot JSON files. Only one policy is active at a time for a given `(agent_id, task_id)`.
 
-  ## 3. Choose and record the policy action
+  ## 4. Choose and record the policy action
 
   Read `current_policy` from `task-policy`. Choose only an `action_id` listed in
   `current_policy.actions`, using the current action probabilities. The CLI exposes
@@ -103,7 +125,7 @@ instructions: |
 
   Do not choose an action outside the initialized action space.
 
-  ## 4. Capture intent before execution
+  ## 5. Capture intent before execution
 
   Before Scout performs the action, start an episode through the SDK capture flow and record:
 
@@ -115,7 +137,7 @@ instructions: |
 
   For a zero-shot task or a task with no prior history, write an explicit intent summary. Do not record a vague placeholder.
 
-  ## 5. Record completion and the correct action
+  ## 6. Record completion and the correct action
 
   After Scout completes or attempts the task, capture:
 
@@ -140,7 +162,7 @@ instructions: |
   omit `correct_action_id` rather than guessing and explain the uncertainty in
   `result_summary`.
 
-  ## 6. Register the full episode
+  ## 7. Register the full episode
 
   After execution, write one JSON object such as `./episode.json`. The CLI supplies
   `agent_id`, `task_id`, and a generated episode `id` when they are omitted:
@@ -181,17 +203,20 @@ instructions: |
   If `agent_id` or `task_id` is present in the JSON, it must exactly match the
   command arguments. Keep the returned episode `id` for verification.
 
-  ## 7. Score and verify the registered episode
+  ## 8. Score and verify the registered episode
 
-  `task-episode-register` stores the episode but does not score it. With the score
-  backend configured, persist missing metric results and aggregate rewards:
+  `task-episode-register` stores the episode but does not score it. Persist
+  missing metric results and aggregate rewards with the zero-configuration local
+  stdlib scorer:
 
   ```shell
   agent-learn score --agent-id <agent_id> --task-id <task_id> --limit 100
   ```
 
-  The score command skips episodes that already have rewards, so it is safe when
-  the SDK capture flow has already written deterministic or external scores.
+  No scoring endpoint or environment variable is required. A configured Azure
+  scorer remains an optional override. The score command skips episodes that
+  already have usable rewards and automatically replaces prior evaluations whose
+  metrics were all skipped.
   Inspect the registered task afterward:
 
   ```shell
@@ -211,13 +236,13 @@ instructions: |
 
   Persist the score breakdown and final aggregate reward with the episode.
 
-  ## 8. Do not use the SDK as a black box
+  ## 9. Do not use the SDK as a black box
 
   Every episode must include a clear task description, action choice, expected outcome, and post-execution result summary. If any value is missing, pause and obtain the missing context before persisting a full episode.
 
   A policy snapshot is useful for debugging action preferences. It does not replace explicit intent capture or completion scoring.
 
-  ## 9. Use a consistent action taxonomy
+  ## 10. Use a consistent action taxonomy
 
   Use only these `action_type` values for Scout tasks:
 
@@ -239,15 +264,17 @@ instructions: |
 
   ## Execution sequence
 
-  1. Determine intent and resolve the agent task.
-  2. Inspect or initialize the task policy.
-  3. Choose an action from that policy's action space and retain the policy
+    1. Establish the absolute durable local store in the command process.
+    2. Determine intent and resolve the agent task.
+    3. Inspect or initialize the task policy.
+    4. Choose an action from that policy's action space and retain the policy
      decision metadata.
-  4. Capture intent and expected outcome before execution.
-  5. Execute the selected action.
-  6. Record completion and independently determine `correct_action_id` when the
+    5. Capture intent and expected outcome before execution.
+    6. Execute the selected action, including any other skill or tool calls.
+    7. Record completion and independently determine `correct_action_id` when the
      outcome supports one.
-  7. Register the full episode with `task-episode-register`.
-  8. Score intent resolution, task adherence, and task completion.
-  9. Verify that the episode has a final aggregate reward.
+    8. Register the full episode with `task-episode-register` before replying is
+      considered complete.
+    9. Score intent resolution, task adherence, and task completion.
+    10. Verify that the episode has a final aggregate reward.
 ---

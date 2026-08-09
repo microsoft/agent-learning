@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-learning"
-version = "0.4.1"
+version = "0.4.2"
 description = "Native, in-process reinforcement learning SDK for AI agents — in-memory and local-file storage by default."
 readme = "PYPI.md"
 requires-python = ">=3.10"

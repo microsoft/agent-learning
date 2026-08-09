@@ -11,7 +11,7 @@ in-memory store. The most important ones are:
 | `AGENT_LEARNING_COSMOS_DATABASE` | Cosmos DB database name (only used when backend is `cosmos`) | `dq_rl` |
 | `AGENT_LEARNING_LOCAL_STORE_DIR` | Directory for the `local` file backend | `./data/agent-learning/store` |
 | `AGENT_LEARNING_SCORE_MODE` | Compatibility scorer mode: `nlp` or `llm` | `llm` |
-| `AGENT_LEARNING_SCORE_TIER` | Preferred scorer tier: `stdlib`, `nlp`, `slm`, or `llm` | unset |
+| `AGENT_LEARNING_SCORE_TIER` | Preferred scorer tier: `stdlib`, `nlp`, `slm`, or `llm` | `stdlib` for CLI/runner scoring |
 | `AGENT_LEARNING_SCORE_ENDPOINT` | Azure OpenAI endpoint used by the scorer | unset |
 | `AGENT_LEARNING_SCORE_DEPLOYMENT` | Scorer deployment name | unset |
 | `AGENT_LEARNING_SCORE_API_KEY` | API key for the LLM scorer | unset |
@@ -28,8 +28,10 @@ in-memory store. The most important ones are:
 | `AGENT_LEARNING_LR` | REINFORCE learning rate | `0.05` |
 | `AGENT_LEARNING_BASELINE_DECAY` | EMA decay on the value baseline | `0.9` |
 
-By default the SDK uses a volatile in-memory store. Set
+By default the SDK uses a volatile in-memory store and scores episodes locally
+with the dependency-free stdlib tier. Set
 `AGENT_LEARNING_STORE_BACKEND=cosmos` (together with the Cosmos
 variables above) for durable Cosmos DB persistence, or `=local` to
-persist to JSON files on disk. When the score configuration is
-missing, the SDK skips evaluations so unit tests still pass.
+persist to JSON files on disk. To opt into Azure AI evaluation, configure
+`AGENT_LEARNING_SCORE_ENDPOINT` and `AGENT_LEARNING_SCORE_DEPLOYMENT`, or set
+the score tier to `llm` and pass an explicit `ScoreConfig`.
