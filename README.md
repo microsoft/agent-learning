@@ -163,7 +163,7 @@ operations:
 agent-learn list
 agent-learn --version
 agent-learn tasks-list <agent_id> [--decision-only]
-agent-learn task-episodes-count <agent_id> [--task-id <task_id>] [--start-date <date>] [--end-date <date>]
+agent-learn task-episodes-count <agent_id> [--task-id <task_id>] [--include-incomplete] [--start-date <date>] [--end-date <date>]
 agent-learn task-episodes-list <agent_id> [--task-id <task_id>] [--limit <1-500>] [--include-incomplete] [--start-date <date>] [--end-date <date>]
 agent-learn task-policy-init --agent-id <agent_id> --task-id <task_id> --decision-context <context> --actions ./actions.json
 agent-learn task-policy-decide --agent-id <agent_id> --task-id <task_id> [--history-limit <1-500>] [--greedy] [--seed <integer>]

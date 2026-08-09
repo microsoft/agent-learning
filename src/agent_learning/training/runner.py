@@ -111,6 +111,7 @@ class LearningRunner:
                 start_date=start_date,
                 end_date=end_date,
                 task_id=task_id,
+                full_only=True,
             )
             rewards = self._collect_rewards(agent_id, episodes, score_missing=score_missing)
 

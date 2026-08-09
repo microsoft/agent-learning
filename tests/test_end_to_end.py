@@ -66,9 +66,13 @@ def test_end_to_end_offline_batch_improves_policy() -> None:
             agent_id="dq",
             user_input="task",
             assistant_output="ok",
+                intent_summary="complete the task",
             policy_id=policy.snapshot().id,
             policy_version=policy.snapshot().version,
             action_id="good",
+                expected_outcome="produce the better result",
+                execution_status="completed",
+                result_summary="produced the better result",
         )
         store.store_episode(episode)
     for i in range(20):
@@ -77,9 +81,13 @@ def test_end_to_end_offline_batch_improves_policy() -> None:
             agent_id="dq",
             user_input="task",
             assistant_output="meh",
+                intent_summary="complete the task",
             policy_id=policy.snapshot().id,
             policy_version=policy.snapshot().version,
             action_id="bad",
+                expected_outcome="produce the better result",
+                execution_status="failed",
+                result_summary="produced the worse result",
         )
         store.store_episode(episode)
 
@@ -143,10 +151,28 @@ def test_offline_batch_only_uses_selected_task() -> None:
     policy = SoftmaxPolicy.from_actions(actions, agent_id="dq", task_id="chat")
     store.store_policy(policy.snapshot())
     store.store_episode(
-        Episode(agent_id="dq", task_id="chat", action_id="good", assistant_output="ok")
+        Episode(
+            agent_id="dq",
+            task_id="chat",
+            action_id="good",
+            assistant_output="ok",
+            intent_summary="complete the chat task",
+            expected_outcome="produce a good result",
+            execution_status="completed",
+            result_summary="produced a good result",
+        )
     )
     store.store_episode(
-        Episode(agent_id="dq", task_id="animation", action_id="bad", assistant_output="bad")
+        Episode(
+            agent_id="dq",
+            task_id="animation",
+            action_id="bad",
+            assistant_output="bad",
+            intent_summary="complete the animation task",
+            expected_outcome="produce a good result",
+            execution_status="failed",
+            result_summary="produced a bad result",
+        )
     )
 
     class _TaskRunner(LearningRunner):

@@ -62,6 +62,11 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     )
     count.add_argument("agent_id")
     count.add_argument("--task-id")
+    count.add_argument(
+        "--include-incomplete",
+        action="store_true",
+        help="Count pending and incomplete attempts as well as full learning episodes.",
+    )
     count.add_argument("--start-date", type=_iso_date)
     count.add_argument("--end-date", type=_iso_date)
 
@@ -166,7 +171,7 @@ def _cmd_agents_episodes_count(args: argparse.Namespace) -> int:
     count = get_default_store().count_episodes(
         args.agent_id,
         task_id=args.task_id,
-        full_only=True,
+        full_only=not args.include_incomplete,
         start_date=args.start_date,
         end_date=args.end_date,
     )
@@ -182,9 +187,8 @@ def _cmd_agents_episodes_list(args: argparse.Namespace) -> int:
         limit=_MAX_EPISODES,
         start_date=args.start_date,
         end_date=args.end_date,
+        full_only=not args.include_incomplete,
     )
-    if not args.include_incomplete:
-        episodes = [episode for episode in episodes if episode.is_full]
 
     payload = []
     for episode in episodes[: args.limit]:
@@ -223,6 +227,7 @@ def _cmd_train(args: argparse.Namespace) -> int:
         limit=args.limit,
         start_date=args.start_date,
         end_date=args.end_date,
+        full_only=True,
     )
     episode_limits = Counter(episode.task_id for episode in selected_episodes)
     runs: list[dict[str, Any]] = []
@@ -280,6 +285,7 @@ def _cmd_score(args: argparse.Namespace) -> int:
         args.agent_id,
         task_id=args.task_id,
         limit=args.limit,
+        full_only=True,
     )
     scored = 0
     for episode in episodes:

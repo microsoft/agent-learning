@@ -238,6 +238,7 @@ class CosmosStore(LearningStore):
         end_date: Optional[str] = None,
         policy_id: Optional[str] = None,
         task_id: Optional[str] = None,
+        full_only: bool = False,
     ) -> List[Episode]:
         clauses = ["c.agent_id = @agent_id"]
         params: List[Dict[str, Any]] = [{"name": "@agent_id", "value": agent_id}]
@@ -256,6 +257,19 @@ class CosmosStore(LearningStore):
             else:
                 clauses.append("c.task_id = @task_id")
             params.append({"name": "@task_id", "value": task_id})
+        if full_only:
+            clauses.extend(
+                [
+                    "IS_STRING(c.intent_summary) AND c.intent_summary != ''",
+                    (
+                        "((IS_STRING(c.action_id) AND c.action_id != '') OR "
+                        "(IS_STRING(c.action_name) AND c.action_name != ''))"
+                    ),
+                    "IS_STRING(c.expected_outcome) AND c.expected_outcome != ''",
+                    "IS_STRING(c.execution_status) AND c.execution_status != ''",
+                    "IS_STRING(c.result_summary) AND c.result_summary != ''",
+                ]
+            )
 
         query = (
             "SELECT * FROM c WHERE "
@@ -293,8 +307,10 @@ class CosmosStore(LearningStore):
             clauses.extend(
                 [
                     "IS_STRING(c.intent_summary) AND c.intent_summary != ''",
-                    "((IS_STRING(c.action_id) AND c.action_id != '') OR "
-                    "(IS_STRING(c.action_name) AND c.action_name != ''))",
+                    (
+                        "((IS_STRING(c.action_id) AND c.action_id != '') OR "
+                        "(IS_STRING(c.action_name) AND c.action_name != ''))"
+                    ),
                     "IS_STRING(c.expected_outcome) AND c.expected_outcome != ''",
                     "IS_STRING(c.execution_status) AND c.execution_status != ''",
                     "IS_STRING(c.result_summary) AND c.result_summary != ''",

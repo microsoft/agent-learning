@@ -74,6 +74,7 @@ class InMemoryStore(LearningStore):
         end_date: Optional[str] = None,
         policy_id: Optional[str] = None,
         task_id: Optional[str] = None,
+        full_only: bool = False,
     ) -> List[Episode]:
         results = [
             ep
@@ -83,6 +84,7 @@ class InMemoryStore(LearningStore):
             and (end_date is None or ep.created_at <= end_date)
             and (policy_id is None or ep.policy_id == policy_id)
             and (task_id is None or ep.task_id == task_id)
+            and (not full_only or ep.is_full)
         ]
         results.sort(key=lambda ep: ep.created_at, reverse=True)
         return results[:limit]

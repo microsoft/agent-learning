@@ -78,6 +78,23 @@ instructions: |
   present decision. Otherwise create a stable decision ID such as
   `choose-azure-workload` or `choose-answer-delegate`.
 
+  Resolve exactly one decision boundary for the request. Do not initialize
+  overlapping policies for different interpretations of the same question. For
+  example:
+
+  - `choose-azure-pubsub-message-processor`, with Functions, Container Apps,
+    and AKS actions, answers "which Azure compute workload should receive and
+    process these messages?";
+  - `choose-azure-pubsub-ingress`, with Event Grid, Service Bus, and Event Hubs
+    actions, answers "which Azure messaging layer should buffer, route, or fan
+    out these messages?"
+
+  A request to "receive and process" messages is the processor decision unless
+  the user explicitly asks for an intermediary messaging layer. Do not create
+  both policies for one request. If related policies exist and the boundary is
+  genuinely ambiguous, ask one clarifying question before selecting or creating
+  a policy.
+
   ## 3. Initialize a new decision policy
 
   Define at least two non-empty, unique action IDs. Each action must map to a real
@@ -134,29 +151,70 @@ instructions: |
   high completion/correctness scores. Execute `selected_action`; otherwise the
   recorded policy probability and feedback loop are not causally meaningful.
 
-  ## 5. Execute and evaluate user-visible quality
+  ## 5. Execute or preserve a pending recommendation
 
-  Perform the chosen delegation. The final response may answer a question, but
-  evaluation belongs to the delegated decision task. Assess whether the selected
-  delegate produced a correct, relevant, adherent, and complete result for the
-  user.
+  When Scout can perform the chosen delegation now, execute it and evaluate the
+  user-visible result. The final response may answer a question, but evaluation
+  belongs to the delegated decision task. Assess whether the selected delegate
+  produced a correct, relevant, adherent, and complete result for the user.
 
-  If the action is a recommendation rather than immediate delegation, record an
-  episode only after user acceptance/rejection or another independently observable
-  result. Until then, the recommendation is pending feedback and must not be
-  labeled correct merely because Scout produced it.
-
-  After execution, independently determine `correct_action_id` when evidence
-  supports one. It may differ from `action_id`. Do not call an action correct only
-  because Scout selected it. Record `task_completed` from the user-visible
-  outcome, not merely from successful tool invocation.
-
-  ## 6. Register the decision episode
-
-  Build a full episode using the decision command's policy fields:
+  When the action is a recommendation rather than immediate execution, preserve
+  the attempt immediately as an incomplete episode. Generate a stable episode
+  ID and register the decision fields, but omit `execution_status`,
+  `result_summary`, `metadata.correct_action_id`, and `metadata.task_completed`.
+  Those omissions keep the episode ineligible for scoring and training:
 
   ```json
   {
+    "id": "<stable episode UUID>",
+    "agent_name": "Scout",
+    "task_name": "<delegated decision name>",
+    "user_input": "<user request>",
+    "assistant_output": "<recommendation and rationale>",
+    "intent_summary": "<what the user needs to choose>",
+    "action_type": "recommendation",
+    "action_id": "<selected_action.id>",
+    "action_name": "<selected_action.description>",
+    "target": "<decision target>",
+    "input_summary": "<decision context and constraints>",
+    "expected_outcome": "<observable acceptance or execution criterion>",
+    "policy_id": "<policy_id from task-policy-decide>",
+    "policy_version": 0,
+    "action_logprob": -1.0986122886681098,
+    "metadata": {"feedback_status": "pending"}
+  }
+  ```
+
+  Register the pending episode against the marked policy:
+
+  ```shell
+  agent-learn task-episode-register --agent-id <agent_id> --task-id <decision_task_id> --episode ./pending-episode.json --require-decision-policy
+  ```
+
+  Tell the user that feedback is pending and ask for one of:
+
+  - `ACCEPT`, when the selected recommendation is endorsed;
+  - `REJECT`, plus the correct action when known;
+  - the observed execution or test result.
+
+  Five repeated recommendation prompts with no follow-up are five pending
+  attempts, not five trainable outcomes.
+
+  ## 6. Complete or register the decision episode
+
+  For immediate execution, build a full episode using the decision command's
+  policy fields. For a pending recommendation, retrieve the incomplete record
+  with `task-episodes-list --include-incomplete`, update the same episode ID,
+  and register it again. Never create a second episode for the feedback.
+
+  Independently determine `correct_action_id` when evidence supports one. It may
+  differ from `action_id`. Do not call an action correct only because Scout
+  selected it. Record `task_completed` from the user-visible outcome, not merely
+  from successful tool invocation.
+
+  ```json
+  {
+    "id": "<existing pending ID or new execution episode UUID>",
     "agent_name": "Scout",
     "task_name": "<delegated decision name>",
     "user_input": "<user request that created the decision context>",
@@ -174,6 +232,7 @@ instructions: |
     "policy_version": 0,
     "action_logprob": -0.6931471805599453,
     "metadata": {
+      "feedback_status": "observed",
       "correct_action_id": "<independently supported action id>",
       "task_completed": true
     }
@@ -185,6 +244,13 @@ instructions: |
   ```shell
   agent-learn task-episode-register --agent-id <agent_id> --task-id <decision_task_id> --episode ./episode.json --require-decision-policy
   ```
+
+  For an accepted recommendation, the selected action may become
+  `correct_action_id` and `task_completed: true`. For a rejected recommendation
+  with a known alternative, record that alternative as `correct_action_id`. If
+  the user rejects without identifying a correct action, omit
+  `correct_action_id`, set `task_completed: false`, and describe the rejection
+  in `result_summary`.
 
   ## 7. Score and verify execution feedback
 
@@ -202,10 +268,13 @@ instructions: |
   2. Establish the durable store.
   3. Resolve or initialize a marked delegated-decision policy.
   4. Call `task-policy-decide` and consume its learned feedback.
-  5. Execute the returned `selected_action` through the underlying delegate.
-  6. Evaluate user-visible correctness and completion.
-  7. Register with `--require-decision-policy`.
-  8. Score and verify the episode for the next decision.
+  5. Execute the returned `selected_action`, or register it as pending when it
+     is a recommendation.
+  6. Ask for acceptance, rejection, or an execution result when feedback is
+     pending.
+  7. Evaluate user-visible correctness and completion.
+  8. Complete the same episode ID with `--require-decision-policy`.
+  9. Score and verify the completed episode for the next decision.
 
   ## Smoke-test prompt
 
@@ -219,4 +288,10 @@ instructions: |
   This supplies alternatives, reusable context, an executed delegate, and an
   observable correctness criterion. Asking only "Sol vs Terra for my use case?"
   does not.
+
+  For a recommendation-only test such as "Which Azure workload should receive
+  and process these PubSub messages?", follow every recommendation with
+  `ACCEPT`, `REJECT; correct action is <action_id>`, or an execution result.
+  Asking the recommendation five times without those outcomes must produce five
+  pending attempts and zero trainable episodes.
 ---

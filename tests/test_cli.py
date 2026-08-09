@@ -60,6 +60,11 @@ def test_discovery_and_full_episode_count(monkeypatch, capsys) -> None:
     ]
     assert cli.main(["task-episodes-count", "agent-1"]) == 0
     assert capsys.readouterr().out.strip() == "1"
+    assert (
+        cli.main(["task-episodes-count", "agent-1", "--include-incomplete"])
+        == 0
+    )
+    assert capsys.readouterr().out.strip() == "2"
 
 
 def test_episode_count_and_list_use_the_training_date_window(
@@ -448,6 +453,122 @@ def test_decision_episode_registration_requires_marked_policy(
     assert "correct_action_id" in capsys.readouterr().err
 
 
+def test_pending_decision_episode_can_be_completed_in_place(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    store = InMemoryStore()
+    monkeypatch.setattr(cli, "get_default_store", lambda: store)
+    policy = SoftmaxPolicy.from_actions(
+        [Action(id="use_functions"), Action(id="use_container_apps")],
+        agent_id="scout",
+        task_id="choose-message-processor",
+    ).snapshot()
+    policy.metadata = {
+        "policy_scope": "delegated_decision",
+        "decision_context": "Choose a message-processing workload",
+    }
+    store.store_policy(policy)
+    episode_path = tmp_path / "pending-decision.json"
+    payload = {
+        "id": "pending-decision",
+        "policy_id": policy.id,
+        "policy_version": policy.version,
+        "action_id": "use_functions",
+        "intent_summary": "Choose a message-processing workload",
+        "expected_outcome": "The user accepts the recommendation or reports its result",
+        "metadata": {"feedback_status": "pending"},
+    }
+    episode_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    register = [
+        "task-episode-register",
+        "--agent-id",
+        "scout",
+        "--task-id",
+        "choose-message-processor",
+        "--episode",
+        str(episode_path),
+        "--require-decision-policy",
+    ]
+    assert cli.main(register) == 0
+    capsys.readouterr()
+    assert not store.get_episode("pending-decision", "scout").is_full
+    assert cli.main(["task-episodes-count", "scout"]) == 0
+    assert capsys.readouterr().out.strip() == "0"
+    assert (
+        cli.main(["task-episodes-count", "scout", "--include-incomplete"])
+        == 0
+    )
+    assert capsys.readouterr().out.strip() == "1"
+    assert (
+        cli.main(
+            [
+                "task-episodes-list",
+                "scout",
+                "--task-id",
+                "choose-message-processor",
+            ]
+        )
+        == 0
+    )
+    assert json.loads(capsys.readouterr().out) == []
+    assert (
+        cli.main(
+            [
+                "task-episodes-list",
+                "scout",
+                "--task-id",
+                "choose-message-processor",
+                "--include-incomplete",
+            ]
+        )
+        == 0
+    )
+    assert len(json.loads(capsys.readouterr().out)) == 1
+    assert (
+        cli.main(
+            [
+                "score",
+                "--agent-id",
+                "scout",
+                "--task-id",
+                "choose-message-processor",
+            ]
+        )
+        == 0
+    )
+    assert json.loads(capsys.readouterr().out) == {
+        "episodes_seen": 0,
+        "newly_scored": 0,
+    }
+    assert store.get_metric_results("pending-decision", "scout") == []
+    assert store.get_rewards_for_episode("pending-decision", "scout") == []
+
+    payload.update(
+        {
+            "execution_status": "completed",
+            "result_summary": "The user accepted the Azure Functions recommendation",
+            "metadata": {
+                "feedback_status": "accepted",
+                "correct_action_id": "use_functions",
+                "task_completed": True,
+            },
+        }
+    )
+    episode_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    assert cli.main(register) == 0
+    capsys.readouterr()
+    assert store.get_episode("pending-decision", "scout").is_full
+    assert cli.main(["task-episodes-count", "scout"]) == 0
+    assert capsys.readouterr().out.strip() == "1"
+    assert (
+        cli.main(["task-episodes-count", "scout", "--include-incomplete"])
+        == 0
+    )
+    assert capsys.readouterr().out.strip() == "1"
+
+
 def test_score_uses_local_stdlib_without_configuration(
     monkeypatch, capsys
 ) -> None:
@@ -496,8 +617,11 @@ def test_score_replaces_skipped_only_evaluation(monkeypatch, capsys) -> None:
         task_id="context-window",
         user_input="What is the context window?",
         assistant_output="The context window is 922,000 tokens.",
+        intent_summary="Report the context window",
         action_id="inspect_context",
+        expected_outcome="Return the live context limit",
         execution_status="completed",
+        result_summary="Returned the live context limit",
         metadata={"task_completed": True},
     )
     store.store_episode(episode)
@@ -555,7 +679,11 @@ def test_agent_training_uses_one_limit_and_preserves_task_policy_history(
             episode = Episode(
                 agent_id="agent-1",
                 task_id=task_id,
+                    intent_summary="complete the selected task",
                 action_id="respond",
+                    expected_outcome="return a completed result",
+                    execution_status="completed",
+                    result_summary="completed the selected task",
                 policy_id=snapshot.id,
                 policy_version=snapshot.version,
                 created_at=f"2026-08-07T00:00:0{index + (2 if task_id == 'animation' else 0)}+00:00",
@@ -622,6 +750,18 @@ def test_train_enforces_minimum_selected_episode_count(
                 value=0.8,
             )
         )
+    for index in range(2):
+        store.store_episode(
+            Episode(
+                id=f"pending-{index}",
+                agent_id="agent-1",
+                task_id="chat",
+                action_id="respond",
+                intent_summary="answer the user",
+                expected_outcome="await user feedback",
+                metadata={"feedback_status": "pending"},
+            )
+        )
 
     result = cli.main(
         [
@@ -630,6 +770,8 @@ def test_train_enforces_minimum_selected_episode_count(
             "agent-1",
             "--task-id",
             "chat",
+            "--limit",
+            "3",
             "--min-episodes",
             "5",
             "--skip-scoring",

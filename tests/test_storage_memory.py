@@ -91,12 +91,20 @@ def test_agent_task_discovery_and_full_episode_count() -> None:
             expected_outcome="an answer",
             execution_status="completed",
             result_summary="answered",
+            created_at="2026-08-09T10:00:00+00:00",
         )
     )
-    store.store_episode(Episode(agent_id="dq", task_id="animation"))
+    store.store_episode(
+        Episode(
+            agent_id="dq",
+            task_id="animation",
+            created_at="2026-08-09T11:00:00+00:00",
+        )
+    )
 
     assert store.list_agents()[0].name == "Demo Agent"
     assert [task.id for task in store.list_agent_tasks("dq")] == ["animation", "chat"]
     assert store.count_episodes("dq") == 2
     assert store.count_episodes("dq", full_only=True) == 1
     assert len(store.query_episodes("dq", task_id="chat")) == 1
+    assert store.query_episodes("dq", full_only=True, limit=1)[0].task_id == "chat"

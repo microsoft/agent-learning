@@ -64,10 +64,15 @@ instructions: |
 
   ```shell
   agent-learn task-episodes-count <agent_id> --task-id <task_id> --start-date <checkpoint_end_date> --end-date <end_date>
+  agent-learn task-episodes-count <agent_id> --task-id <task_id> --include-incomplete --start-date <checkpoint_end_date> --end-date <end_date>
   agent-learn task-episodes-list <agent_id> --task-id <task_id> --limit 500 --start-date <checkpoint_end_date> --end-date <end_date>
+  agent-learn task-episodes-list <agent_id> --task-id <task_id> --limit 500 --include-incomplete --start-date <checkpoint_end_date> --end-date <end_date>
   ```
 
-  The count and list length must agree when the count is at most `500`.
+  The default count and list are full, potentially trainable episodes. The
+  `--include-incomplete` count and list are all attempts, including pending
+  recommendations. Each count and its corresponding list length must agree when
+  the count is at most `500`. Pending count is all attempts minus full episodes.
 
   Never calculate `total episodes - current_policy.episodes_seen`.
   `episodes_seen` counts training usages, not unique records. Never reuse another
@@ -86,6 +91,11 @@ instructions: |
   Exclude unresolved comparisons and unexecuted recommendations. Repeating a
   prompt is not evidence by itself; each episode must represent an executed
   delegate, explicit user acceptance/rejection, or another observable outcome.
+
+  Do not hide pending attempts in the status report. If a policy has five
+  incomplete recommendations and no observed outcomes, report "0 trainable
+  episodes; 5 pending feedback" rather than only "0 eligible episodes." Never
+  train or advance a checkpoint for pending records.
 
   Rescore incomplete evaluations locally when needed:
 
@@ -133,7 +143,7 @@ instructions: |
   1. Establish the store and fixed cutoff.
   2. Discover with `tasks-list --decision-only`.
   3. Verify decision metadata and action space.
-  4. Count/list the exact task-local checkpoint window.
+  4. Count/list full episodes and all attempts in the exact task-local window.
   5. Verify or repair execution scores.
   6. Train with `--decision-only --min-episodes 5`.
   7. Verify policy update and next-execution feedback.

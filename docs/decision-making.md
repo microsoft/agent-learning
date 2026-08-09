@@ -55,6 +55,13 @@ only after the selected action is executed, the user accepts or rejects it, or
 another independent outcome can evaluate it. Repeating an unresolved question
 five times does not create five useful episodes.
 
+Preserve a recommendation immediately as an incomplete episode so the attempt
+and selected policy probability are not lost. Omit outcome fields while
+feedback is pending. When acceptance, rejection, or an execution result arrives,
+update the same episode ID with the observed result; only then score and train
+it. This makes automation able to distinguish pending attempts from trainable
+evidence without rewarding the agent for its own recommendation.
+
 ## The decision-improvement loop
 
 ### 1. Choose

@@ -56,8 +56,9 @@ class LearningStore(ABC):
         end_date: Optional[str] = None,
         policy_id: Optional[str] = None,
         task_id: Optional[str] = None,
+        full_only: bool = False,
     ) -> List[Episode]:
-        """List episodes filtered by optional time window, policy, or task."""
+        """List episodes filtered by time, policy, task, or completeness."""
 
     @abstractmethod
     def count_episodes(
