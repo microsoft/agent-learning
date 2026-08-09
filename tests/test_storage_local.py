@@ -135,6 +135,9 @@ def test_query_filters_and_limit(tmp_path: Path) -> None:
     # Filter by window
     windowed = store.query_episodes("dq", start_date="2024-05-01", end_date="2024-07-01")
     assert len(windowed) == 1
+    assert store.count_episodes(
+        "dq", start_date="2024-05-01", end_date="2024-07-01"
+    ) == 1
     # Limit
     assert len(store.query_episodes("dq", limit=1)) == 1
 

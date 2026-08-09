@@ -212,12 +212,16 @@ class LocalFileStore(LearningStore):
         *,
         task_id: Optional[str] = None,
         full_only: bool = False,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
     ) -> int:
         return sum(
             1
             for doc in self._read_dir_docs("episodes", agent_id)
             if (task_id is None or doc.get("task_id", "default") == task_id)
             and (not full_only or Episode.from_dict(doc).is_full)
+            and (start_date is None or doc.get("created_at", "") >= start_date)
+            and (end_date is None or doc.get("created_at", "") <= end_date)
         )
 
     # ------------------------------------------------------------------

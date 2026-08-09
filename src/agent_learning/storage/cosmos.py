@@ -272,6 +272,8 @@ class CosmosStore(LearningStore):
         *,
         task_id: Optional[str] = None,
         full_only: bool = False,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
     ) -> int:
         clauses = ["c.agent_id = @agent_id"]
         params: List[Dict[str, Any]] = [{"name": "@agent_id", "value": agent_id}]
@@ -281,6 +283,12 @@ class CosmosStore(LearningStore):
             else:
                 clauses.append("c.task_id = @task_id")
             params.append({"name": "@task_id", "value": task_id})
+        if start_date:
+            clauses.append("c.created_at >= @start_date")
+            params.append({"name": "@start_date", "value": start_date})
+        if end_date:
+            clauses.append("c.created_at <= @end_date")
+            params.append({"name": "@end_date", "value": end_date})
         if full_only:
             clauses.extend(
                 [

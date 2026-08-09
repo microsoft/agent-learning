@@ -8,6 +8,7 @@ import logging
 import sys
 import uuid
 from collections import Counter
+from datetime import datetime, timezone
 from typing import Any
 
 from .policy.softmax_bandit import SoftmaxPolicy
@@ -27,6 +28,16 @@ def _episode_limit(value: str) -> int:
     return limit
 
 
+def _iso_date(value: str) -> str:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"invalid ISO 8601 date: {value!r}") from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).isoformat()
+
+
 def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="agent-learn", description="Native RL CLI for AI agents.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -42,6 +53,8 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     )
     count.add_argument("agent_id")
     count.add_argument("--task-id")
+    count.add_argument("--start-date", type=_iso_date)
+    count.add_argument("--end-date", type=_iso_date)
 
     episodes = sub.add_parser(
         "task-episodes-list",
@@ -51,13 +64,16 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     episodes.add_argument("--task-id")
     episodes.add_argument("--limit", type=_episode_limit, default=_MAX_EPISODES)
     episodes.add_argument("--include-incomplete", action="store_true")
+    episodes.add_argument("--start-date", type=_iso_date)
+    episodes.add_argument("--end-date", type=_iso_date)
 
     train = sub.add_parser("train", help="Run one offline learning batch.")
     train.add_argument("--agent-id", required=True)
     train.add_argument("--task-id")
     train.add_argument("--limit", type=_episode_limit, default=200)
-    train.add_argument("--start-date")
-    train.add_argument("--end-date")
+    train.add_argument("--min-episodes", type=_episode_limit, default=1)
+    train.add_argument("--start-date", type=_iso_date)
+    train.add_argument("--end-date", type=_iso_date)
     train.add_argument(
         "--skip-scoring",
         action="store_true",
@@ -118,6 +134,8 @@ def _cmd_agents_episodes_count(args: argparse.Namespace) -> int:
         args.agent_id,
         task_id=args.task_id,
         full_only=True,
+        start_date=args.start_date,
+        end_date=args.end_date,
     )
     print(count)
     return 0
@@ -129,6 +147,8 @@ def _cmd_agents_episodes_list(args: argparse.Namespace) -> int:
         args.agent_id,
         task_id=args.task_id,
         limit=_MAX_EPISODES,
+        start_date=args.start_date,
+        end_date=args.end_date,
     )
     if not args.include_incomplete:
         episodes = [episode for episode in episodes if episode.is_full]
@@ -182,6 +202,17 @@ def _cmd_train(args: argparse.Namespace) -> int:
         episode_limit = episode_limits.get(task_id, 0)
         if episode_limit == 0:
             skipped.append({"task_id": task_id, "reason": "no episodes in selected batch"})
+            continue
+        if episode_limit < args.min_episodes:
+            skipped.append(
+                {
+                    "task_id": task_id,
+                    "reason": (
+                        f"selected batch has {episode_limit} episodes; "
+                        f"minimum is {args.min_episodes}"
+                    ),
+                }
+            )
             continue
         policy = SoftmaxPolicy.from_snapshot(snapshot)
         runner = LearningRunner(store=store, policy=policy)

@@ -72,25 +72,36 @@ instructions: |
 
   ## 4. Select and count new full episodes
 
+  Read the checkpoint for the current `(agent_id, task_id)` only. Choose one
+  fixed `end_date` before inspecting any task. Then ask the CLI for the exact
+  window that `train` will consume:
+
   ```shell
-  agent-learn task-episodes-count <agent_id> --task-id <task_id>
+  agent-learn task-episodes-count <agent_id> --task-id <task_id> --start-date <checkpoint_end_date> --end-date <end_date>
   ```
 
-  The command prints the task's total number of full episodes. To avoid repeatedly
-  training on the same records, maintain a checkpoint from the previous successful
-  batch and select only episodes after that checkpoint. Use the episode
-  `created_at` values returned by `task-episodes-list` to count new full episodes
-  inside the intended window. Continue only when that new count meets the
-  automation's configured minimum.
+  Omit `--start-date` when that task has no checkpoint. The returned number is
+  the authoritative eligible count. Continue only when it meets the configured
+  minimum.
 
-  Choose one fixed `end_date` at the start of the batch. After successful training,
-  advance the checkpoint to that cutoff. Use ISO 8601 timestamps for date filters.
+  Never calculate `total episodes - current_policy.episodes_seen`.
+  `episodes_seen` counts training usages, not unique episodes, so retraining or
+  rescoring a batch can make it larger than the number of stored records. Never
+  reuse one task's checkpoint as another task's `start_date`. Keep task-local
+  `start_date`, count, and result variables through the whole loop.
+
+  After successful training, advance only that task's checkpoint to the fixed
+  cutoff. Use ISO 8601 timestamps for all date filters.
 
   ## 5. Inspect the selected episodes
 
   ```shell
-  agent-learn task-episodes-list <agent_id> --task-id <task_id> --limit 500
+  agent-learn task-episodes-list <agent_id> --task-id <task_id> --limit 500 --start-date <checkpoint_end_date> --end-date <end_date>
   ```
+
+  Omit `--start-date` for a task without a checkpoint. The list length must equal
+  the windowed count when the count is at most `500`. If they differ, stop and do
+  not train or advance the checkpoint.
 
   Before training, print and compare the episodes. Review:
 
@@ -125,14 +136,18 @@ instructions: |
   The complete command contract is:
 
   ```shell
-  agent-learn train --agent-id <agent_id> [--task-id <task_id>] [--limit <1-500>] [--start-date <date>] [--end-date <date>] [--skip-scoring]
+  agent-learn train --agent-id <agent_id> [--task-id <task_id>] [--limit <1-500>] [--min-episodes <1-500>] [--start-date <date>] [--end-date <date>] [--skip-scoring]
   ```
 
   For periodic automation, prefer a task-scoped, checkpointed invocation:
 
   ```shell
-  agent-learn train --agent-id <agent_id> --task-id <task_id> --limit 500 --start-date <start_date> --end-date <end_date>
+  agent-learn train --agent-id <agent_id> --task-id <task_id> --limit 500 --min-episodes 5 --start-date <checkpoint_end_date> --end-date <end_date>
   ```
+
+  Omit `--start-date` when the task has no checkpoint. `--min-episodes 5`
+  independently prevents the CLI from updating a policy when the selected window
+  is smaller than the threshold, even if the automation counted incorrectly.
 
   By default, `train` locally scores selected episodes that do not yet have a
   usable reward and then updates the active policy. Add `--skip-scoring` only
@@ -140,7 +155,7 @@ instructions: |
   persisted aggregate reward:
 
   ```shell
-  agent-learn train --agent-id <agent_id> --task-id <task_id> --limit 500 --start-date <start_date> --end-date <end_date> --skip-scoring
+  agent-learn train --agent-id <agent_id> --task-id <task_id> --limit 500 --min-episodes 5 --start-date <checkpoint_end_date> --end-date <end_date> --skip-scoring
   ```
 
   Without `--task-id`, the CLI selects one agent-wide batch up to `--limit` and

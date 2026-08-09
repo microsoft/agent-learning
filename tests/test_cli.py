@@ -54,6 +54,48 @@ def test_discovery_and_full_episode_count(monkeypatch, capsys) -> None:
     assert capsys.readouterr().out.strip() == "1"
 
 
+def test_episode_count_and_list_use_the_training_date_window(
+    monkeypatch, capsys
+) -> None:
+    store = InMemoryStore()
+    monkeypatch.setattr(cli, "get_default_store", lambda: store)
+    for index, created_at in enumerate(
+        (
+            "2026-08-09T05:40:00+00:00",
+            "2026-08-09T06:07:25+00:00",
+            "2026-08-09T06:12:23+00:00",
+            "2026-08-09T06:13:10+00:00",
+            "2026-08-09T06:13:55+00:00",
+            "2026-08-09T06:14:37+00:00",
+            "2026-08-09T06:20:00+00:00",
+        )
+    ):
+        episode = _full_episode()
+        episode.id = f"episode-{index}"
+        episode.created_at = created_at
+        store.store_episode(episode)
+
+    window = [
+        "--task-id",
+        "chat",
+        "--start-date",
+        "2026-08-09T05:42:45.258Z",
+        "--end-date",
+        "2026-08-09T06:16:07.333Z",
+    ]
+    assert cli.main(["task-episodes-count", "agent-1", *window]) == 0
+    assert capsys.readouterr().out.strip() == "5"
+    assert cli.main(["task-episodes-list", "agent-1", *window]) == 0
+    listed = json.loads(capsys.readouterr().out)
+    assert len(listed) == 5
+    assert all(
+        "2026-08-09T05:42:45.258+00:00"
+        <= item["episode"]["created_at"]
+        <= "2026-08-09T06:16:07.333+00:00"
+        for item in listed
+    )
+
+
 def test_episode_inspection_includes_scores_and_final_reward(monkeypatch, capsys) -> None:
     store = InMemoryStore()
     episode = _full_episode()
@@ -318,3 +360,50 @@ def test_agent_training_uses_one_limit_and_preserves_task_policy_history(
 def test_episode_limit_is_capped_at_500() -> None:
     with pytest.raises(SystemExit):
         cli.main(["train", "--agent-id", "agent-1", "--limit", "501"])
+
+
+def test_train_enforces_minimum_selected_episode_count(
+    monkeypatch, capsys
+) -> None:
+    store = InMemoryStore()
+    monkeypatch.setattr(cli, "get_default_store", lambda: store)
+    policy = SoftmaxPolicy.from_actions(
+        [Action(id="respond")], agent_id="agent-1", task_id="chat"
+    )
+    store.store_policy(policy.snapshot())
+    for index in range(3):
+        episode = _full_episode()
+        episode.id = f"episode-{index}"
+        store.store_episode(episode)
+        store.store_reward(
+            Reward(
+                episode_id=episode.id,
+                agent_id=episode.agent_id,
+                source=RewardSource.AGGREGATE,
+                value=0.8,
+            )
+        )
+
+    result = cli.main(
+        [
+            "train",
+            "--agent-id",
+            "agent-1",
+            "--task-id",
+            "chat",
+            "--min-episodes",
+            "5",
+            "--skip-scoring",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert result == 2
+    assert output["runs"] == []
+    assert output["skipped"] == [
+        {
+            "task_id": "chat",
+            "reason": "selected batch has 3 episodes; minimum is 5",
+        }
+    ]
+    assert store.get_active_policy("agent-1", "chat").version == 0

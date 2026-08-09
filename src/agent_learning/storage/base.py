@@ -66,8 +66,10 @@ class LearningStore(ABC):
         *,
         task_id: Optional[str] = None,
         full_only: bool = False,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
     ) -> int:
-        """Count episodes, optionally limiting the count to full episodes."""
+        """Count episodes filtered by task, completeness, or time window."""
 
     # ---- Metric results -------------------------------------------
 

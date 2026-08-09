@@ -93,6 +93,8 @@ class InMemoryStore(LearningStore):
         *,
         task_id: Optional[str] = None,
         full_only: bool = False,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
     ) -> int:
         return sum(
             1
@@ -100,6 +102,8 @@ class InMemoryStore(LearningStore):
             if episode.agent_id == agent_id
             and (task_id is None or episode.task_id == task_id)
             and (not full_only or episode.is_full)
+            and (start_date is None or episode.created_at >= start_date)
+            and (end_date is None or episode.created_at <= end_date)
         )
 
     # ---- Metric results -------------------------------------------

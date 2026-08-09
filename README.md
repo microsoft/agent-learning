@@ -72,11 +72,11 @@ The `agent-learn` CLI provides the current task-learning-loop operations:
 ```text
 agent-learn list
 agent-learn tasks-list <agent_id>
-agent-learn task-episodes-count <agent_id> [--task-id <task_id>]
-agent-learn task-episodes-list <agent_id> [--task-id <task_id>] [--limit <1-500>] [--include-incomplete]
+agent-learn task-episodes-count <agent_id> [--task-id <task_id>] [--start-date <date>] [--end-date <date>]
+agent-learn task-episodes-list <agent_id> [--task-id <task_id>] [--limit <1-500>] [--include-incomplete] [--start-date <date>] [--end-date <date>]
 agent-learn task-policy-init --agent-id <agent_id> --task-id <task_id> --actions ./actions.json
 agent-learn task-episode-register --agent-id <agent_id> --task-id <task_id> --episode ./episode.json
 agent-learn score --agent-id <agent_id> [--task-id <task_id>] [--limit <1-500>]
-agent-learn train --agent-id <agent_id> [--task-id <task_id>] [--limit <1-500>] [--start-date <date>] [--end-date <date>] [--skip-scoring]
+agent-learn train --agent-id <agent_id> [--task-id <task_id>] [--limit <1-500>] [--min-episodes <1-500>] [--start-date <date>] [--end-date <date>] [--skip-scoring]
 agent-learn task-policy --agent-id <agent_id> --task-id <task_id>
 ```
