@@ -1,0 +1,228 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 410" role="img" aria-labelledby="title description">
+  <title id="title">Agentic decision making with measurable feedback</title>
+  <desc id="description">An animated four-stage loop in which an agent chooses a bounded action, executes it, scores the observed outcome, and improves the policy for the next decision.</desc>
+  <style>
+    .stage {
+      opacity: 0.52;
+      transform-box: fill-box;
+      transform-origin: center;
+    }
+    .choose-stage { animation: choose-stage 8s ease-in-out infinite; }
+    .execute-stage { animation: execute-stage 8s ease-in-out infinite; }
+    .score-stage { animation: score-stage 8s ease-in-out infinite; }
+    .improve-stage { animation: improve-stage 8s ease-in-out infinite; }
+    .flow {
+      fill: none;
+      stroke: #75d7ff;
+      stroke-linecap: round;
+      stroke-width: 4;
+      stroke-dasharray: 50;
+      stroke-dashoffset: 50;
+      opacity: 0;
+    }
+    .flow-one { animation: flow-one 8s ease-in-out infinite; }
+    .flow-two { animation: flow-two 8s ease-in-out infinite; }
+    .flow-three { animation: flow-three 8s ease-in-out infinite; }
+    .choice-fill {
+      transform-box: fill-box;
+      transform-origin: left;
+      animation: choice-fill 8s ease-in-out infinite;
+    }
+    .execution-line { animation: execution-line 8s ease-in-out infinite; }
+    .metric-fill {
+      transform-box: fill-box;
+      transform-origin: left;
+      animation: metric-fill 8s ease-in-out infinite;
+    }
+    .after-fill {
+      transform-box: fill-box;
+      transform-origin: left;
+      animation: after-fill 8s ease-in-out infinite;
+    }
+    .feedback {
+      fill: none;
+      stroke: #7fba00;
+      stroke-linecap: round;
+      stroke-width: 4;
+      stroke-dasharray: 920;
+      stroke-dashoffset: 920;
+      opacity: 0;
+      animation: feedback 8s ease-in-out infinite;
+    }
+    .feedback-label { animation: feedback-label 8s ease-in-out infinite; }
+    .feedback-arrow {
+      opacity: 0;
+      animation: feedback-arrow 8s step-end infinite;
+    }
+
+    @keyframes choose-stage {
+      0%, 18% { opacity: 1; transform: translateY(-5px); }
+      25%, 100% { opacity: 0.52; transform: translateY(0); }
+    }
+    @keyframes execute-stage {
+      0%, 20% { opacity: 0.52; transform: translateY(0); }
+      27%, 40% { opacity: 1; transform: translateY(-5px); }
+      47%, 100% { opacity: 0.52; transform: translateY(0); }
+    }
+    @keyframes score-stage {
+      0%, 42% { opacity: 0.52; transform: translateY(0); }
+      49%, 62% { opacity: 1; transform: translateY(-5px); }
+      69%, 100% { opacity: 0.52; transform: translateY(0); }
+    }
+    @keyframes improve-stage {
+      0%, 64% { opacity: 0.52; transform: translateY(0); }
+      71%, 86% { opacity: 1; transform: translateY(-5px); }
+      94%, 100% { opacity: 0.52; transform: translateY(0); }
+    }
+    @keyframes flow-one {
+      0%, 17% { opacity: 0; stroke-dashoffset: 50; }
+      25%, 100% { opacity: 0.7; stroke-dashoffset: 0; }
+    }
+    @keyframes flow-two {
+      0%, 39% { opacity: 0; stroke-dashoffset: 50; }
+      47%, 100% { opacity: 0.7; stroke-dashoffset: 0; }
+    }
+    @keyframes flow-three {
+      0%, 61% { opacity: 0; stroke-dashoffset: 50; }
+      69%, 100% { opacity: 0.7; stroke-dashoffset: 0; }
+    }
+    @keyframes choice-fill {
+      0% { transform: scaleX(0.2); }
+      15%, 100% { transform: scaleX(1); }
+    }
+    @keyframes execution-line {
+      0%, 24% { opacity: 0; }
+      31%, 100% { opacity: 1; }
+    }
+    @keyframes metric-fill {
+      0%, 46% { transform: scaleX(0.08); }
+      59%, 100% { transform: scaleX(1); }
+    }
+    @keyframes after-fill {
+      0%, 68% { transform: scaleX(0.78); }
+      82%, 100% { transform: scaleX(1); }
+    }
+    @keyframes feedback {
+      0%, 85% { opacity: 0; stroke-dashoffset: 920; }
+      96% { opacity: 0.9; stroke-dashoffset: 0; }
+      100% { opacity: 0; stroke-dashoffset: 0; }
+    }
+    @keyframes feedback-label {
+      0%, 86% { opacity: 0.28; }
+      96% { opacity: 1; }
+      100% { opacity: 0.28; }
+    }
+    @keyframes feedback-arrow {
+      0%, 95.99% { opacity: 0; }
+      96%, 99.99% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .stage, .flow, .choice-fill, .execution-line, .metric-fill, .after-fill, .feedback, .feedback-label, .feedback-arrow {
+        animation: none;
+      }
+      .stage, .execution-line, .feedback-label { opacity: 1; }
+      .flow, .feedback { opacity: 0.8; stroke-dashoffset: 0; }
+      .feedback-arrow { opacity: 1; }
+    }
+  </style>
+
+  <defs>
+    <marker id="arrowhead" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M 0 0 L 12 6 L 0 12 Z" fill="#75d7ff"/>
+    </marker>
+    <marker id="feedback-arrowhead" viewBox="0 0 14 14" refX="12" refY="7" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="feedback-arrow" d="M 0 0 L 14 7 L 0 14 Z" fill="#7fba00"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="410" rx="8" fill="#18213a"/>
+  <text x="45" y="38" fill="#ffffff" font-family="Segoe UI, sans-serif" font-size="22" font-weight="700">AGENTIC DECISION MAKING</text>
+  <text x="45" y="64" fill="#aebbd2" font-family="Segoe UI, sans-serif" font-size="15">Explicit choices. Observable outcomes. Better decisions.</text>
+  <text x="1155" y="45" fill="#75d7ff" font-family="Consolas, monospace" font-size="15" text-anchor="end">agent-learn</text>
+
+  <line x1="290" y1="205" x2="330" y2="205" stroke="#506079" stroke-width="3"/>
+  <line class="flow flow-one" x1="290" y1="205" x2="327" y2="205" marker-end="url(#arrowhead)"/>
+  <line x1="580" y1="205" x2="620" y2="205" stroke="#506079" stroke-width="3"/>
+  <line class="flow flow-two" x1="580" y1="205" x2="617" y2="205" marker-end="url(#arrowhead)"/>
+  <line x1="870" y1="205" x2="910" y2="205" stroke="#506079" stroke-width="3"/>
+  <line class="flow flow-three" x1="870" y1="205" x2="907" y2="205" marker-end="url(#arrowhead)"/>
+
+  <g class="stage choose-stage">
+    <rect x="45" y="100" width="245" height="220" rx="8" fill="#10192c" stroke="#4cc2ff" stroke-width="2"/>
+    <rect x="45" y="100" width="7" height="220" rx="3" fill="#4cc2ff"/>
+    <text x="70" y="132" fill="#4cc2ff" font-family="Segoe UI, sans-serif" font-size="13" font-weight="700">01</text>
+    <text x="100" y="133" fill="#ffffff" font-family="Segoe UI, sans-serif" font-size="24" font-weight="700">Choose</text>
+    <text x="70" y="158" fill="#aebbd2" font-family="Segoe UI, sans-serif" font-size="14">bounded executable actions</text>
+    <text x="70" y="187" fill="#d8e2f1" font-family="Consolas, monospace" font-size="12">repository search</text>
+    <rect x="70" y="200" width="175" height="22" rx="4" fill="#22314b"/>
+    <rect class="choice-fill" x="70" y="200" width="60" height="22" rx="4" fill="#5d708f"/>
+    <text x="78" y="215" fill="#ffffff" font-family="Segoe UI, sans-serif" font-size="12">text</text>
+    <text x="258" y="215" fill="#aebbd2" font-family="Consolas, monospace" font-size="11" text-anchor="end">29%</text>
+    <rect x="70" y="231" width="175" height="26" rx="4" fill="#18384f" stroke="#4cc2ff" stroke-width="1.5"/>
+    <rect class="choice-fill" x="70" y="231" width="82" height="26" rx="4" fill="#0f6cbd"/>
+    <text x="78" y="249" fill="#ffffff" font-family="Segoe UI, sans-serif" font-size="12" font-weight="700">semantic</text>
+    <text x="258" y="249" fill="#4cc2ff" font-family="Consolas, monospace" font-size="11" text-anchor="end">41%</text>
+    <rect x="70" y="266" width="175" height="22" rx="4" fill="#22314b"/>
+    <rect class="choice-fill" x="70" y="266" width="63" height="22" rx="4" fill="#5d708f"/>
+    <text x="78" y="281" fill="#ffffff" font-family="Segoe UI, sans-serif" font-size="12">symbol</text>
+    <text x="258" y="281" fill="#aebbd2" font-family="Consolas, monospace" font-size="11" text-anchor="end">30%</text>
+    <text x="70" y="306" fill="#4cc2ff" font-family="Consolas, monospace" font-size="11">selected: semantic</text>
+  </g>
+
+  <g class="stage execute-stage">
+    <rect x="335" y="100" width="245" height="220" rx="8" fill="#10192c" stroke="#7fba00" stroke-width="2"/>
+    <rect x="335" y="100" width="7" height="220" rx="3" fill="#7fba00"/>
+    <text x="360" y="132" fill="#7fba00" font-family="Segoe UI, sans-serif" font-size="13" font-weight="700">02</text>
+    <text x="390" y="133" fill="#ffffff" font-family="Segoe UI, sans-serif" font-size="24" font-weight="700">Execute</text>
+    <text x="360" y="158" fill="#aebbd2" font-family="Segoe UI, sans-serif" font-size="14">run the selected strategy</text>
+    <rect x="360" y="182" width="195" height="103" rx="6" fill="#0b1220" stroke="#31415c"/>
+    <circle cx="374" cy="196" r="3" fill="#f25022"/>
+    <circle cx="386" cy="196" r="3" fill="#ffb900"/>
+    <circle cx="398" cy="196" r="3" fill="#7fba00"/>
+    <text class="execution-line" x="372" y="222" fill="#75d7ff" font-family="Consolas, monospace" font-size="11">semantic_search(</text>
+    <text class="execution-line" x="388" y="239" fill="#d8e2f1" font-family="Consolas, monospace" font-size="11">query, context</text>
+    <text class="execution-line" x="372" y="256" fill="#75d7ff" font-family="Consolas, monospace" font-size="11">)</text>
+    <text class="execution-line" x="372" y="274" fill="#7fba00" font-family="Consolas, monospace" font-size="11">completed in 182 ms</text>
+    <text x="360" y="306" fill="#aebbd2" font-family="Segoe UI, sans-serif" font-size="12">preserve context + result</text>
+  </g>
+
+  <g class="stage score-stage">
+    <rect x="625" y="100" width="245" height="220" rx="8" fill="#10192c" stroke="#ffb900" stroke-width="2"/>
+    <rect x="625" y="100" width="7" height="220" rx="3" fill="#ffb900"/>
+    <text x="650" y="132" fill="#ffb900" font-family="Segoe UI, sans-serif" font-size="13" font-weight="700">03</text>
+    <text x="680" y="133" fill="#ffffff" font-family="Segoe UI, sans-serif" font-size="24" font-weight="700">Score</text>
+    <text x="650" y="158" fill="#aebbd2" font-family="Segoe UI, sans-serif" font-size="14">measure the observed outcome</text>
+    <text x="650" y="190" fill="#d8e2f1" font-family="Segoe UI, sans-serif" font-size="12">Intent</text>
+    <rect x="718" y="179" width="112" height="13" rx="4" fill="#293750"/>
+    <rect class="metric-fill" x="718" y="179" width="103" height="13" rx="4" fill="#4cc2ff"/>
+    <text x="650" y="224" fill="#d8e2f1" font-family="Segoe UI, sans-serif" font-size="12">Adherence</text>
+    <rect x="718" y="213" width="112" height="13" rx="4" fill="#293750"/>
+    <rect class="metric-fill" x="718" y="213" width="99" height="13" rx="4" fill="#7fba00"/>
+    <text x="650" y="258" fill="#d8e2f1" font-family="Segoe UI, sans-serif" font-size="12">Completion</text>
+    <rect x="718" y="247" width="112" height="13" rx="4" fill="#293750"/>
+    <rect class="metric-fill" x="718" y="247" width="106" height="13" rx="4" fill="#ffb900"/>
+    <rect x="650" y="278" width="180" height="27" rx="5" fill="#3a3318"/>
+    <text x="740" y="297" fill="#ffcf40" font-family="Consolas, monospace" font-size="14" font-weight="700" text-anchor="middle">reward = +0.84</text>
+  </g>
+
+  <g class="stage improve-stage">
+    <rect x="915" y="100" width="240" height="220" rx="8" fill="#10192c" stroke="#f25022" stroke-width="2"/>
+    <rect x="915" y="100" width="7" height="220" rx="3" fill="#f25022"/>
+    <text x="940" y="132" fill="#f25022" font-family="Segoe UI, sans-serif" font-size="13" font-weight="700">04</text>
+    <text x="970" y="133" fill="#ffffff" font-family="Segoe UI, sans-serif" font-size="24" font-weight="700">Improve</text>
+    <text x="940" y="158" fill="#aebbd2" font-family="Segoe UI, sans-serif" font-size="14">update the next decision</text>
+    <text x="940" y="190" fill="#aebbd2" font-family="Segoe UI, sans-serif" font-size="11">BEFORE</text>
+    <rect x="940" y="200" width="170" height="18" rx="4" fill="#293750"/>
+    <rect x="940" y="200" width="56" height="18" rx="4" fill="#5d708f"/>
+    <text x="1125" y="214" fill="#aebbd2" font-family="Consolas, monospace" font-size="11" text-anchor="end">33%</text>
+    <text x="940" y="244" fill="#f25022" font-family="Segoe UI, sans-serif" font-size="11" font-weight="700">AFTER</text>
+    <rect x="940" y="254" width="170" height="22" rx="4" fill="#293750"/>
+    <rect class="after-fill" x="940" y="254" width="70" height="22" rx="4" fill="#f25022"/>
+    <text x="1125" y="270" fill="#ff8c69" font-family="Consolas, monospace" font-size="11" text-anchor="end">41%</text>
+    <text x="940" y="299" fill="#d8e2f1" font-family="Consolas, monospace" font-size="11">policy v1  -&gt;  v2</text>
+  </g>
+
+  <path class="feedback" d="M 1040 340 C 900 412, 300 412, 160 340" marker-end="url(#feedback-arrowhead)"/>
+  <text class="feedback-label" x="600" y="354" fill="#9bd43a" font-family="Segoe UI, sans-serif" font-size="15" text-anchor="middle">evidence shapes the next decision, not the model weights</text>
+</svg>

@@ -1,10 +1,11 @@
 ---
-title: The SDK math, explained simply
-description: A plain-language, fifth-grade-level walkthrough of every formula in the agent-learning SDK, with everyday analogies and small worked examples you can use to teach others.
+title: Decision math, explained simply
+description: A plain-language walkthrough of how agent-learning turns explicit choices into probabilities and uses measurable outcomes to improve the next decision.
 author: Microsoft
-ms.date: 2026-07-27
+ms.date: 2026-08-09
 ms.topic: overview
 keywords:
+  - agentic decision making
   - reinforcement learning
   - explain like I'm five
   - softmax
@@ -18,7 +19,10 @@ estimated_reading_time: 20
 
 This is the friendly, no-scary-symbols version of [math.md](math.md). Every idea here has a matching grown-up formula in that file, so once an idea "clicks," you can peek at the real math and recognize it.
 
-**The big picture:** this SDK is a little robot helper that makes choices, watches how they turn out, and slowly gets smarter. Almost all the math is about two things:
+**The big picture:** this SDK keeps a small decision policy beside an existing
+agent. The policy chooses among explicit actions, watches how execution turns
+out, and gradually changes the next choice. Almost all the math is about two
+things:
 
 1. **Making a choice** when you're not 100% sure (turning "scores" into "chances").
 2. **Learning from what happened** (nudging yourself to do more of what worked).
@@ -55,7 +59,7 @@ Sometimes the best choice changes depending on what's going on. You'd pick a dif
 
 The "situation" gets written down as a list of numbers called **phi** (say it "fye"). For example: *is it morning? is it hot out? am I hungry?* → `[1, 0, 1]`.
 
-The robot keeps a little **grade book** (called **W**) that says how much each part of the situation should push each choice up or down. It multiplies the situation by the grade book to get fresh scores, then uses the same softmax spinner from Step 1.
+The policy keeps a little **grade book** (called **W**) that says how much each part of the situation should push each choice up or down. It multiplies the situation by the grade book to get fresh scores, then uses the same softmax spinner from Step 1.
 
 **One-sentence version:** *Same spinner wheel as before, but the slice sizes change based on what's happening right now.*
 
@@ -77,7 +81,7 @@ You spin a random number from 0 to 99 and see whose tickets it landed in. More t
 
 > Grown-up name: **REINFORCE-with-baseline**. See [math.md](math.md#reinforce-with-baseline-learner).
 
-This is the heart of the whole thing. After the robot makes a choice, it gets a **reward** — like points in a video game. Good result = high points. Bad result = low points.
+This is the heart of the whole thing. After the agent executes the policy's choice, the observed result gets a **reward**, like points in a game. Good result = high points. Bad result = low points.
 
 The rule is simple: **do more of what earns points, less of what loses them.**
 
@@ -86,7 +90,7 @@ But there's a clever twist called the **baseline**. The baseline is "what I *usu
 - You normally score 5. This time you got 8. That's **better than usual** (+3), so do more of that choice.
 - You normally score 5. This time you got 2. That's **worse than usual** (−3), so do less of that choice.
 
-Without a baseline, *everything* looks like a win and the robot can't tell great from just-okay. The baseline is the "compared to normal" ruler.
+Without a baseline, *everything* looks like a win and the policy cannot tell great from just-okay. The baseline is the "compared to normal" ruler.
 
 **One-sentence version:** *If a choice does better than your usual, lean into it; if it does worse, back off.*
 
@@ -96,14 +100,14 @@ Without a baseline, *everything* looks like a win and the robot can't tell great
 
 > Grown-up name: **entropy** and the **entropy bonus**. See [math.md](math.md#entropy-regularization).
 
-If the robot always picks pizza, it will *never* discover it actually loves tacos. So we add a small reward just for **keeping an open mind** and trying different things now and then.
+If the policy always picks pizza, it will *never* discover that tacos work better. So we add a small reward just for **keeping an open mind** and trying different things now and then.
 
 **Entropy** is a fancy word for "how spread out are my choices?"
 
 - Always picking one thing → **low** entropy (closed-minded).
 - Giving everything a fair shot → **high** entropy (curious).
 
-The "entropy bonus" gently pushes the robot to stay a little curious so it doesn't get stuck too soon.
+The "entropy bonus" gently pushes the policy to stay a little curious so it does not get stuck too soon.
 
 **One-sentence version:** *A little reward for staying curious, so you don't lock onto one answer before exploring.*
 
@@ -121,7 +125,7 @@ Think of your grade in a class: it's mostly your old average, but each new test 
 
 > Grown-up name: **importance weighting**. See [math.md](math.md#off-policy-importance-weighting).
 
-Sometimes the robot learns from **old memories** — choices it made back when it was a "younger, different robot." That's a little unfair, because it might not make those same choices today.
+Sometimes the policy learns from **old memories**, choices captured by an older policy version. That needs care because the active policy might not make those same choices today.
 
 So it puts old memories on a scale: memories that still match how it thinks today count fully; memories that don't match get counted less. There's also a cap so no single old memory can shout too loudly.
 
@@ -131,7 +135,7 @@ So it puts old memories on a scale: memories that still match how it thinks toda
 
 > Grown-up name: **reward shaping**. See [math.md](math.md#reward-shaping).
 
-The robot gets graded by several scorers on different things (Did it understand the question? Did it stay on task? Did it finish the job?). Each scorer returns a grade from **0 to 1**. We need to squish all those into **one** final score.
+The decision outcome gets graded by several scorers (Did it resolve the intent? Did it follow the task? Did it finish the job?). Each scorer returns a grade from **0 to 1**. We need to squish all those into **one** final score.
 
 **Step A — turn grades into good/bad points.** A grade of 0.5 is "meh" (zero points). Above 0.5 is good (plus points); below is bad (minus points):
 
@@ -151,7 +155,7 @@ The robot gets graded by several scorers on different things (Did it understand 
 
 > Grown-up name: **sigmoid** / **logistic function**. See [math.md](math.md#numerically-stable-sigmoid).
 
-Some parts of the robot answer yes/no questions, like "Did this answer actually help?" They start with a plain number that could be anything, and they need to turn it into a **confidence from 0 to 1** (0% sure to 100% sure).
+Some parts of the SDK answer yes/no questions, like "Did this result actually help?" They start with a plain number that could be anything, and they need to turn it into a **confidence from 0 to 1** (0% sure to 100% sure).
 
 The **sigmoid** is a machine that squishes any number into that 0-to-1 range using a smooth S-shaped curve:
 
@@ -165,7 +169,7 @@ The **sigmoid** is a machine that squishes any number into that 0-to-1 range usi
 
 > Grown-up name: **dot product**. See [math.md](math.md#softmax-and-dot-product).
 
-How does the robot turn a situation into a single number to feed the squisher? With a **weighted vote**.
+How does the SDK turn a situation into a single number to feed the squisher? With a **weighted vote**.
 
 Say the clues are `[2, 5]` and their importances are `[3, 1]`. You multiply each pair and add:
 
@@ -217,7 +221,7 @@ Cool part: it only cares about the **direction** the arrow points, not how long 
 
 Computers can't read words, only numbers. So we **count words** — but with a twist.
 
-A normal way is to keep a giant dictionary listing every word. Instead, we use a **magic sorting hat**: each word gets tossed into one of, say, 1,000 numbered buckets. Then we just count how many words landed in each bucket. That list of bucket-counts becomes the numbers the robot reads.
+A normal way is to keep a giant dictionary listing every word. Instead, we use a **magic sorting hat**: each word gets tossed into one of, say, 1,000 numbered buckets. Then we just count how many words landed in each bucket. That list of bucket-counts becomes the numbers the classifier reads.
 
 Why the sorting hat? Because you never have to build or store a dictionary — the hat always sends the same word to the same bucket.
 
@@ -254,18 +258,18 @@ Now every grade speaks the same language before we mix them in Step 8.
 
 ## Putting it all together
 
-Here's the whole robot in one breath:
+Here is the whole decision loop in one breath:
 
 1. A situation comes in, written as numbers (**phi**, Step 2).
-2. The robot scores each choice and turns scores into chances (**softmax**, Step 1).
+2. The policy scores each choice and turns scores into chances (**softmax**, Step 1).
 3. It draws from a weighted raffle to pick (**sampling**, Step 3).
 4. The result gets evaluated by scorers (**sigmoid** yes/no answers, Step 9), with each score stretched onto the same ruler (**normalization**, Step 16).
 5. The grades are mixed into one reward (**reward shaping**, Step 8).
-6. The robot compares that reward to its usual (**baseline**, Steps 4 & 6) and nudges itself to do more of what worked (**learning**, Steps 4 & 11), while staying a little curious (**entropy**, Step 5).
+6. The policy compares that reward to its usual (**baseline**, Steps 4 & 6) and nudges the next decision toward what worked (**learning**, Steps 4 & 11), while staying a little curious (**entropy**, Step 5).
 7. Over many rounds, it gets steadily better.
 
 That's it. Everything in [math.md](math.md) is just a precise way of writing down these seven simple ideas.
 
 ## How to explain this to someone in 30 seconds
 
-> "It's a robot that makes choices like a spinner wheel — better options get bigger slices. After each choice it gets points, like a video game. If a choice beat its usual score, it makes that slice bigger next time; if it did worse, it shrinks the slice. It stays a little curious so it keeps exploring, and it uses simple graders to decide how many points each result earns. Do that thousands of times and it slowly learns the best choices."
+> "The agent has a spinner for a recurring decision, and better options get bigger slices. After the selected action runs, the outcome earns points. If that choice beat its usual score, its slice gets bigger next time; if it did worse, the slice shrinks. The policy keeps some room to explore, and the foundation model stays unchanged."

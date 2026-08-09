@@ -1,10 +1,11 @@
 ---
-title: Mathematical reference for the agent-learning SDK
-description: Consolidated linear-algebra and probability formulas behind the policies, REINFORCE learner, reward shaper, logistic-regression classifiers, router, and scorers of the agent-learning SDK.
+title: Mathematical reference for agent decisions
+description: Linear-algebra and probability formulas behind decision policies, outcome scoring, reward shaping, and policy updates in agent-learning.
 author: Microsoft
-ms.date: 2026-07-27
+ms.date: 2026-08-09
 ms.topic: reference
 keywords:
+  - agentic decision making
   - reinforcement learning
   - policy gradient
   - REINFORCE
@@ -18,7 +19,14 @@ estimated_reading_time: 15
 
 ## Overview
 
-This document collects every linear-algebra and probability formula the SDK relies on in one place. Each section names the source module so the math can be traced back to the implementation. All vectors are column vectors unless stated otherwise, and all softmaxes are evaluated with the max-subtraction trick for numerical stability.
+This document collects every linear-algebra and probability formula used by the
+SDK's decision layer. The product abstraction is a small policy over explicit
+agent actions: softmax turns relative logits into decision probabilities,
+outcome scores become rewards, and REINFORCE adjusts the next decision without
+changing foundation-model weights. Each section names the source module so the
+math can be traced back to the implementation. All vectors are column vectors
+unless stated otherwise, and all softmaxes use max subtraction for numerical
+stability.
 
 ## Notation
 

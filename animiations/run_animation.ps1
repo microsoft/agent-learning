@@ -1,13 +1,14 @@
 <#
 .SYNOPSIS
     run_animation.ps1 — Set up a Python venv, install dependencies, and
-    render the Agent Learning animation with Manim.
+    render an Agent Learning animation with Manim.
 
 .DESCRIPTION
-    PowerShell port of run_animation.sh. Creates a local virtual
-    environment, installs the pinned requirements, and renders the
-    three-act "AgentLearning" scene from animation.py that visualises
-    the SDK's policy → score → learner loop.
+    Creates a local virtual environment, installs the pinned requirements,
+    and renders a selected Manim scene. The defaults render the original
+    policy/score/learner loop. Pass decision_making_animation.py and
+    AgentDecisionMaking to render the decision-focused choose/execute/score/
+    improve story.
 
 .PARAMETER Quality
     Manim render quality: l (480p15), m (720p30), h (1080p60),
@@ -25,6 +26,7 @@
 .EXAMPLE
     .\run_animation.ps1
     .\run_animation.ps1 -Quality h -Preview
+    .\run_animation.ps1 -Script decision_making_animation.py -Scene AgentDecisionMaking -Quality h -Preview
 #>
 
 [CmdletBinding()]

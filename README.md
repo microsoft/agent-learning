@@ -1,49 +1,65 @@
 # agent-learning
 
-Native reinforcement learning SDK for AI agents. An in-process
-Learner optimizes a small, interpretable TaskPolicy over discrete agent choices (e.g., "take action A", "take action B", "take action C") using on-device evaluation scores as the reward
-signal by default.
+Helping agents make better decisions with measurable feedback.
 
-TaskPolicies represent reusable **decisions among executable alternatives**.
-They are not conversation logs: factual questions, ordinary chat, reporting,
-and agent-learning automation are not policy tasks.
+`agent-learning` is a lightweight decision layer for an existing agent. It
+learns which option works best for a recurring task from a small, explicit set
+of executable alternatives, such as prompt variants, retrieval depths, tools,
+models, workflows, or escalation paths.
+
+The foundation model stays frozen. There are no GPU training jobs and no
+hidden prompt rewrites. The agent makes an explicit choice, records the
+user-visible outcome, scores the evidence, and applies a small CPU update to
+the next decision.
 
 <p align="center">
-   <img src="images/agent-learning-loop.svg" alt="Animated TaskPolicy Score Learner loop: TaskPolicy chooses a task action, Score evaluates the episode, and Learner updates TaskPolicy" width="960" style="max-width:100%; height:auto;" />
+   <img src="images/agent-decision-making.svg" alt="Animated agentic decision loop: choose a bounded action, execute it, score the observed outcome, and improve the next decision" width="960" style="max-width:100%; height:auto;" />
 </p>
 
-## How it works
+## The decision loop
 
-The SDK improves agents without LLM weight fine-tuning. There are no GPU fine-tune jobs and no opaque update cycles — just three pieces that run in your existing Python process:
+1. **Frame a reusable decision.** Define a stable decision context and at
+   least two actions the agent can actually execute. A TaskPolicy owns the
+   probability distribution for that `(agent_id, task_id)` pair.
 
-1. **TaskPolicy** is a softmax distribution over `N` discrete
-   actions (e.g., "take action A", "take action B", "take action C"). It lives in Python and updates in milliseconds.
+2. **Choose and execute.** `task-policy-decide` samples an action from the
+   active softmax policy and returns learned feedback from earlier attempts.
+   The agent uses that feedback and executes the selected action.
 
-   <img src="images/0f85e08d0c47cd01.png" alt="TaskPolicy selects one of N discrete actions" width="360" style="max-width:100%; height:auto;" />
+3. **Observe and score.** A completed episode preserves the decision context,
+   selected action, output, result summary, latency, and independently
+   supported correctness evidence. Local scorers measure intent resolution,
+   task adherence, and task completion and shape them into one reward.
 
-2. **Score** evaluates each episode locally with three stdlib scorers for intent
-   resolution, task adherence, and task completion. Their scores are combined
-   into one scalar reward. No scoring endpoint or environment variable is
-   required. Configured Azure AI evaluators remain available as an opt-in.
+4. **Improve the next decision.** REINFORCE-with-baseline nudges a few policy
+   logits, then persists a new policy snapshot. Better-than-usual choices gain
+   probability, worse-than-usual choices lose probability, and exploration
+   remains available.
 
-   <img src="images/246d112f995b785a.png" alt="Three evaluator scores feed a single scalar reward" width="360" style="max-width:100%; height:auto;" />
+Everything runs in the existing Python process. Scoring is local by default;
+configured Azure AI evaluators remain available as an opt-in. Stores can be
+in-memory, local JSON files, or Azure Cosmos DB.
 
-3. **Learner** applies REINFORCE-with-baseline to update TaskPolicy logits
-   directly from stored episodes. Updates are tiny gradient steps
-   that run on local compute and persist through a pluggable store — in-memory
-   or local files by default, with Azure Cosmos DB optional.
+## What counts as a decision
 
-   <img src="images/cc970c453583c982.png" alt="Policy quality improves with every batch of episodes" width="360" style="max-width:100%; height:auto;" />
+A TaskPolicy is appropriate only when all of these are true:
 
-Before the next delegated execution, `task-policy-decide` samples the learned
-policy and returns the selected action together with correctness rate, mean
-reward, recent result summaries, and intent/adherence/completion scores. Agents
-consume that feedback rather than training a policy that is never used.
+- The agent must choose among at least two explicit executable alternatives.
+- The alternatives are stable enough to reuse on future requests.
+- The choice can affect quality, correctness, latency, cost, safety, or
+  completion.
+- An observable outcome can later score whether the choice was useful.
 
-Every episode, reward, run, and deployment is captured by the
-configured store — in-memory or local files by default, or Azure Cosmos DB —
-giving you a complete lineage and audit trail of how the policy
-evolved over time.
+Good examples include choosing a retrieval strategy, model, tool, workflow,
+Azure workload, or escalation path for a concrete use case. Factual questions,
+ordinary chat, summaries, reporting, and the learning automation itself are not
+decision policies. Repetition without an executed outcome is not feedback.
+
+Before every eligible execution, the decision response includes the selected
+and currently recommended actions, policy version and probability, correctness
+rate, mean reward, metric scores, and recent result summaries. This makes the
+learned evidence useful during execution instead of producing a policy that is
+never consumed.
 
 ## Install
 
@@ -64,6 +80,70 @@ agent-learn.exe --help
 Released versions are published to PyPI:
 <https://pypi.org/project/agent-learning/>.
 
+```shell
+pip install agent-learning
+```
+
+## Quickstart: improve one recurring decision
+
+Use one durable store across CLI processes:
+
+```powershell
+$env:AGENT_LEARNING_STORE_BACKEND = "local"
+$env:AGENT_LEARNING_LOCAL_STORE_DIR = Join-Path $env:LOCALAPPDATA "agent-learning\store"
+```
+
+Define actions the agent can really execute in `actions.json`:
+
+```json
+[
+   {
+      "id": "use_text_search",
+      "description": "Search for exact symbols and terms",
+      "parameters": {"strategy": "text"}
+   },
+   {
+      "id": "use_semantic_search",
+      "description": "Search the repository by meaning",
+      "parameters": {"strategy": "semantic"}
+   }
+]
+```
+
+Initialize the decision once, then ask the active policy what to execute:
+
+```powershell
+agent-learn task-policy-init `
+   --agent-id code-reviewer `
+   --task-id choose-repository-search `
+   --decision-context "Choose a repository search strategy for a coding task" `
+   --actions .\actions.json
+
+agent-learn task-policy-decide `
+   --agent-id code-reviewer `
+   --task-id choose-repository-search
+```
+
+Execute the returned `selected_action`, preserve its policy fields, and record
+the independently observed outcome in `episode.json`. Then close the loop:
+
+```powershell
+agent-learn task-episode-register `
+   --agent-id code-reviewer `
+   --task-id choose-repository-search `
+   --episode .\episode.json `
+   --require-decision-policy
+
+agent-learn score --agent-id code-reviewer --task-id choose-repository-search
+agent-learn train --agent-id code-reviewer --task-id choose-repository-search --decision-only
+agent-learn task-policy-decide --agent-id code-reviewer --task-id choose-repository-search
+```
+
+The final decision consumes the updated probabilities and feedback from prior
+executions. Training defaults to a minimum of five completed episodes. See the
+[decision-making guide](docs/decision-making.md) for the episode schema,
+evidence rules, math, and deployment patterns.
+
 ## Functional Testing
 
 A good way to see the SDK in action is to run the
@@ -76,7 +156,8 @@ python tests/functional_cli_batch.py
 
 ## Usage
 
-The `agent-learn` CLI provides the current task-learning-loop operations:
+The `agent-learn` CLI provides the decision lifecycle and inspection
+operations:
 
 ```text
 agent-learn list
@@ -91,3 +172,17 @@ agent-learn score --agent-id <agent_id> [--task-id <task_id>] [--limit <1-500>]
 agent-learn train --agent-id <agent_id> [--task-id <task_id>] [--decision-only] [--limit <1-500>] [--min-episodes <1-500>] [--start-date <date>] [--end-date <date>] [--skip-scoring]
 agent-learn task-policy --agent-id <agent_id> --task-id <task_id>
 ```
+
+## Documentation
+
+- [Agentic decision making](docs/decision-making.md): concepts, evidence,
+   workflow, math, and deployment.
+- [Scout decision integration](docs/scout-agent-learn-skill.md): apply learned
+   delegated decisions during execution.
+- [Scout decision training](docs/scout-automation-agent-learning.md): train
+   eligible policies without turning automation into a policy task.
+- [The math, explained simply](docs/math-explained-simply.md) and
+   [mathematical reference](docs/math.md): softmax, rewards, baselines, and
+   REINFORCE.
+- [Tiered scoring design](docs/design.md): local and Azure-backed outcome
+   scoring.

@@ -1,10 +1,12 @@
 ---
-title: Tiered scoring design for the agent-learning SDK
-description: Four-tier scoring architecture (Python stdlib, NLP library, small language model, large language model) for intent resolution, task adherence, and task completion, with managed-identity support for enterprise deployments
+title: Tiered outcome scoring for agent decisions
+description: Four-tier scoring architecture for measuring intent resolution, task adherence, and task completion after an agent executes a policy decision.
 author: Microsoft
-ms.date: 2026-05-17
+ms.date: 2026-08-09
 ms.topic: concept
 keywords:
+  - agentic decision making
+  - measurable feedback
   - reinforcement learning
   - reward shaping
   - intent classification
@@ -19,9 +21,21 @@ estimated_reading_time: 18
 
 ## Overview
 
-The agent-learning SDK is a reinforcement-learning toolkit for agents. Today the reward shaper consumes three metric scores (intent resolution, task adherence, task completion) that the caller must produce.
+The agent-learning SDK is a decision-improvement layer for agents. A TaskPolicy
+chooses among explicit executable alternatives; after execution, the scoring
+layer measures intent resolution, task adherence, and task completion. The
+reward shaper combines those measurements into the evidence used to improve the
+next decision.
 
-This document proposes a first-class scoring layer inside the SDK, organized as four capability tiers. Each tier is a self-contained scoring stack with a different cost, latency, and dependency profile. Callers pick the tier that matches their environment; the public `ScoreResult` shape, the reward shaper, the learner, and the storage layers stay unchanged across tiers.
+This document describes the first-class scoring layer inside the SDK, organized
+as four capability tiers. Each tier is a self-contained scoring stack with a
+different cost, latency, and dependency profile. Callers pick the tier that
+matches their environment; the decision policy, public `ScoreResult` shape,
+reward shaper, learner, and storage layers stay unchanged across tiers.
+
+Scoring does not choose the action and does not train the foundation model. It
+evaluates the user-visible result of an attributable decision episode so the
+small policy can learn from comparable outcomes.
 
 The two compatibility modes (`nlp` and `llm`) sit on top of the tier model. The `nlp` mode draws from Tiers 1 through 3 depending on which extras are installed. The `llm` mode is Tier 4. `ScoreRuntimeConfig.mode` remains `llm` for API compatibility, while CLI and `LearningRunner` scoring defaults to Tier 1 stdlib whenever no Azure model or explicit tier is configured.
 
