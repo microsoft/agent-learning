@@ -58,6 +58,11 @@ instructions: |
   `decision_context` describes a real reusable choice, and at least two actions
   map to executable delegates or strategies. Skip anything else.
 
+  Inspect `autonomy.complexity`. Report policies whose `profile_source` is
+  `default` so the owner can review them; do not invent a lower profile during
+  automation. Verify configured fields, derived action count, score, tier, risk
+  floors, and `requires_human_approval` before training.
+
   ## 3. Count the exact task-local window
 
   Read this task's checkpoint only. Omit `--start-date` when none exists:
@@ -131,7 +136,9 @@ instructions: |
     `historical_feedback` with recent execution scores and result summaries;
   - decision output contains `autonomy.criteria`, `mode`,
     `execute_without_confirmation`, `request_user_feedback`, and
-    `observable_outcome_satisfies_feedback` plus `outcome_recording`.
+    `observable_outcome_satisfies_feedback` plus `outcome_recording`;
+  - `autonomy.complexity` contains the persisted profile, derived score, tier,
+    profile source, action-space points, and risk floors.
 
   A probability change alone is not enough. The decision output must expose the
   quality feedback and autonomy gates that Scout will consume before the next

@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from agent_learning.autonomy import assess_autonomy, wilson_lower_bound
+from agent_learning.autonomy import (
+    ComplexityProfile,
+    assess_autonomy,
+    assess_complexity,
+    wilson_lower_bound,
+)
 from agent_learning.config import AutonomyConfig
 from agent_learning.storage import InMemoryStore
 from agent_learning.types import Action, Episode, PolicySnapshot, Reward, RewardSource
@@ -134,3 +139,108 @@ def test_observable_reward_drift_revokes_autonomy_without_correctness_labels() -
 def test_autonomy_config_validates_thresholds() -> None:
     with pytest.raises(ValueError, match="audit_rate"):
         AutonomyConfig(audit_rate=1.1)
+
+
+def test_complexity_profile_maps_intent_and_decision_dimensions() -> None:
+    low = assess_complexity(
+        ComplexityProfile(
+            intent_ambiguity="low",
+            context_variability="stable",
+            outcome_observability="direct",
+            decision_impact="low",
+            reversibility="reversible",
+        ),
+        2,
+    )
+    standard = assess_complexity(ComplexityProfile(), 3, profile_source="default")
+    high = assess_complexity(
+        ComplexityProfile(
+            intent_ambiguity="high",
+            context_variability="dynamic",
+            outcome_observability="subjective",
+            decision_impact="medium",
+            reversibility="costly",
+        ),
+        3,
+    )
+    critical = assess_complexity(
+        ComplexityProfile(
+            decision_impact="high",
+            reversibility="irreversible",
+        ),
+        2,
+    )
+
+    assert low.tier == "low" and low.score == 0
+    assert standard.tier == "standard" and standard.score == 6
+    assert standard.profile_source == "default"
+    assert high.tier == "high"
+    assert "ambiguous_subjective_outcome" in high.risk_floors
+    assert critical.tier == "critical"
+    assert "high_impact_irreversible" in critical.risk_floors
+
+
+def test_same_evidence_requires_more_for_high_complexity() -> None:
+    store = InMemoryStore()
+    for version in range(1, 4):
+        store.store_policy(_policy(version))
+    snapshot = store.get_active_policy("scout", "choose-delegate")
+    assert snapshot is not None
+    _store_outcomes(store, 40)
+
+    snapshot.metadata["complexity_profile"] = ComplexityProfile(
+        intent_ambiguity="low",
+        context_variability="stable",
+        outcome_observability="direct",
+        decision_impact="low",
+        reversibility="reversible",
+    ).to_dict()
+    store.store_policy(snapshot)
+    assert assess_autonomy(store, snapshot).eligible
+
+    snapshot.metadata["complexity_profile"] = ComplexityProfile(
+        intent_ambiguity="high",
+        context_variability="dynamic",
+        outcome_observability="subjective",
+        decision_impact="high",
+        reversibility="costly",
+    ).to_dict()
+    store.store_policy(snapshot)
+    assessment = assess_autonomy(store, snapshot)
+
+    assert assessment.complexity.tier == "high"
+    assert not assessment.eligible
+    assert assessment.criteria["minimum_outcomes"] == {
+        "actual": 40,
+        "required": 50,
+        "met": False,
+    }
+    assert assessment.audit_rate == 0.25
+
+
+def test_human_approval_profile_blocks_otherwise_eligible_policy() -> None:
+    store = InMemoryStore()
+    for version in range(1, 4):
+        store.store_policy(_policy(version))
+    snapshot = store.get_active_policy("scout", "choose-delegate")
+    assert snapshot is not None
+    _store_outcomes(store, 40)
+    snapshot.metadata["complexity_profile"] = ComplexityProfile(
+        intent_ambiguity="low",
+        context_variability="stable",
+        outcome_observability="direct",
+        decision_impact="low",
+        reversibility="reversible",
+        requires_human_approval=True,
+    ).to_dict()
+    store.store_policy(snapshot)
+
+    assessment = assess_autonomy(store, snapshot)
+
+    assert not assessment.eligible
+    assert not assessment.criteria["human_approval_not_required"]["met"]
+
+
+def test_complexity_profile_rejects_unknown_fields() -> None:
+    with pytest.raises(ValueError, match="unknown complexity profile fields"):
+        ComplexityProfile.from_dict({"intent_complexity": "low"})

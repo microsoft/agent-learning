@@ -12,6 +12,7 @@ from typing import Any, Literal, Optional
 
 ScoreMode = Literal["nlp", "llm"]
 ScoreTier = Literal["stdlib", "nlp", "slm", "llm"]
+AutonomyTier = Literal["low", "standard", "high", "critical"]
 CredentialMode = Literal[
     "default",
     "managed-identity",
@@ -26,6 +27,44 @@ _VALID_CREDENTIAL_MODES: frozenset[str] = frozenset(
 _VALID_SCORE_TIERS: frozenset[str] = frozenset(
     {"stdlib", "nlp", "slm", "llm"}
 )
+_AUTONOMY_TIER_DEFAULTS: dict[str, dict[str, float | int]] = {
+    "low": {
+        "min_outcomes": 12,
+        "min_correctness_lower_bound": 0.80,
+        "min_mean_reward": 0.0,
+        "min_action_probability": 0.55,
+        "min_probability_margin": 0.10,
+        "stable_snapshots": 2,
+        "audit_rate": 0.05,
+    },
+    "standard": {
+        "min_outcomes": 20,
+        "min_correctness_lower_bound": 0.90,
+        "min_mean_reward": 0.0,
+        "min_action_probability": 0.60,
+        "min_probability_margin": 0.15,
+        "stable_snapshots": 3,
+        "audit_rate": 0.10,
+    },
+    "high": {
+        "min_outcomes": 50,
+        "min_correctness_lower_bound": 0.95,
+        "min_mean_reward": 0.10,
+        "min_action_probability": 0.75,
+        "min_probability_margin": 0.30,
+        "stable_snapshots": 4,
+        "audit_rate": 0.25,
+    },
+    "critical": {
+        "min_outcomes": 100,
+        "min_correctness_lower_bound": 0.975,
+        "min_mean_reward": 0.20,
+        "min_action_probability": 0.85,
+        "min_probability_margin": 0.45,
+        "stable_snapshots": 5,
+        "audit_rate": 0.50,
+    },
+}
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -463,6 +502,42 @@ class AutonomyConfig:
         default_factory=lambda: _env_float("AGENT_LEARNING_AUTONOMY_WILSON_Z", 1.96)
     )
 
+    @classmethod
+    def for_tier(cls, tier: AutonomyTier) -> "AutonomyConfig":
+        """Resolve tier defaults, then apply global environment overrides."""
+        defaults = _AUTONOMY_TIER_DEFAULTS[tier]
+        return cls(
+            min_outcomes=_env_int(
+                "AGENT_LEARNING_AUTONOMY_MIN_OUTCOMES",
+                int(defaults["min_outcomes"]),
+            ),
+            min_correctness_lower_bound=_env_float(
+                "AGENT_LEARNING_AUTONOMY_MIN_CORRECTNESS_LOWER_BOUND",
+                float(defaults["min_correctness_lower_bound"]),
+            ),
+            min_mean_reward=_env_float(
+                "AGENT_LEARNING_AUTONOMY_MIN_MEAN_REWARD",
+                float(defaults["min_mean_reward"]),
+            ),
+            min_action_probability=_env_float(
+                "AGENT_LEARNING_AUTONOMY_MIN_ACTION_PROBABILITY",
+                float(defaults["min_action_probability"]),
+            ),
+            min_probability_margin=_env_float(
+                "AGENT_LEARNING_AUTONOMY_MIN_PROBABILITY_MARGIN",
+                float(defaults["min_probability_margin"]),
+            ),
+            stable_snapshots=_env_int(
+                "AGENT_LEARNING_AUTONOMY_STABLE_SNAPSHOTS",
+                int(defaults["stable_snapshots"]),
+            ),
+            audit_rate=_env_float(
+                "AGENT_LEARNING_AUTONOMY_AUDIT_RATE",
+                float(defaults["audit_rate"]),
+            ),
+            wilson_z=_env_float("AGENT_LEARNING_AUTONOMY_WILSON_Z", 1.96),
+        )
+
     def __post_init__(self) -> None:
         if self.min_outcomes < 1:
             raise ValueError("min_outcomes must be at least 1")
@@ -575,6 +650,7 @@ class LearnerConfig:
 
 __all__ = [
     "AutonomyConfig",
+    "AutonomyTier",
     "CaptureConfig",
     "CosmosConfig",
     "CredentialMode",

@@ -177,6 +177,16 @@ def test_task_policy_init_and_inspection(monkeypatch, capsys, tmp_path: Path) ->
     assert initialized["metadata"] == {
         "policy_scope": "delegated_decision",
         "decision_context": "Choose how the agent should respond to a chat request",
+        "complexity_profile": {
+            "intent_ambiguity": "medium",
+            "context_variability": "variable",
+            "outcome_observability": "delayed",
+            "decision_impact": "medium",
+            "reversibility": "costly",
+            "requires_human_approval": False,
+            "rationale": "",
+        },
+        "complexity_profile_source": "default",
     }
 
     assert (
@@ -188,6 +198,126 @@ def test_task_policy_init_and_inspection(monkeypatch, capsys, tmp_path: Path) ->
     inspected = json.loads(capsys.readouterr().out)
     assert inspected["current_policy"]["task_id"] == "chat"
     assert inspected["previous_policy"] is None
+    assert inspected["autonomy"]["complexity"]["tier"] == "standard"
+
+
+def test_task_policy_complexity_profile_can_be_configured_without_new_snapshot(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    store = InMemoryStore()
+    monkeypatch.setattr(cli, "get_default_store", lambda: store)
+    policy = SoftmaxPolicy.from_actions(
+        [Action(id="use_skill"), Action(id="use_model")],
+        agent_id="scout",
+        task_id="choose-delegate",
+    ).snapshot()
+    policy.metadata = {
+        "policy_scope": "delegated_decision",
+        "decision_context": "Choose a delegate",
+    }
+    store.store_policy(policy)
+    profile_path = tmp_path / "complexity.json"
+    profile_path.write_text(
+        json.dumps(
+            {
+                "intent_ambiguity": "high",
+                "context_variability": "dynamic",
+                "outcome_observability": "subjective",
+                "decision_impact": "high",
+                "reversibility": "costly",
+                "requires_human_approval": True,
+                "rationale": "High-impact decision with subjective outcomes",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert (
+        cli.main(
+            [
+                "task-policy-complexity-set",
+                "--agent-id",
+                "scout",
+                "--task-id",
+                "choose-delegate",
+                "--profile",
+                str(profile_path),
+            ]
+        )
+        == 0
+    )
+    result = json.loads(capsys.readouterr().out)
+
+    assert result["current_policy"]["id"] == policy.id
+    assert result["current_policy"]["version"] == policy.version
+    assert len(store.list_policies("scout", "choose-delegate")) == 1
+    assert result["autonomy"]["complexity"]["tier"] == "high"
+    assert result["autonomy"]["complexity"]["profile_source"] == "configured"
+    assert not result["autonomy"]["criteria"]["human_approval_not_required"]["met"]
+
+
+def test_task_policy_init_persists_configured_complexity(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    store = InMemoryStore()
+    monkeypatch.setattr(cli, "get_default_store", lambda: store)
+    actions_path = tmp_path / "actions.json"
+    actions_path.write_text(
+        json.dumps([{"id": "text"}, {"id": "semantic"}]),
+        encoding="utf-8",
+    )
+    profile_path = tmp_path / "complexity.json"
+    profile_path.write_text(
+        json.dumps(
+            {
+                "intent_ambiguity": "low",
+                "context_variability": "stable",
+                "outcome_observability": "direct",
+                "decision_impact": "low",
+                "reversibility": "reversible",
+                "rationale": "Bounded search with an immediate test result",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert (
+        cli.main(
+            [
+                "task-policy-init",
+                "--agent-id",
+                "reviewer",
+                "--task-id",
+                "choose-search",
+                "--decision-context",
+                "Choose a repository search strategy",
+                "--actions",
+                str(actions_path),
+                "--complexity-profile",
+                str(profile_path),
+            ]
+        )
+        == 0
+    )
+    initialized = json.loads(capsys.readouterr().out)
+    assert initialized["metadata"]["complexity_profile_source"] == "configured"
+
+    assert (
+        cli.main(
+            [
+                "task-policy",
+                "--agent-id",
+                "reviewer",
+                "--task-id",
+                "choose-search",
+            ]
+        )
+        == 0
+    )
+    inspected = json.loads(capsys.readouterr().out)
+    assert inspected["autonomy"]["complexity"]["tier"] == "low"
+    assert inspected["autonomy"]["criteria"]["minimum_outcomes"]["required"] == 12
+    assert inspected["autonomy"]["audit_rate"] == 0.05
 
 
 def test_task_policy_init_requires_two_unique_decision_actions(

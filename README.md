@@ -38,11 +38,10 @@ the next decision.
    remains available.
 
 5. **Earn autonomy.** `task-policy-decide` stops routine confirmation only after
-   the recommended action passes every evidence gate: scored outcomes, Wilson
-   correctness confidence, positive reward, action probability, probability
-   margin, and three stable trained snapshots. Autonomous actions still record
-   observable outcomes, and a configurable sample requests user feedback to
-   detect drift.
+   the recommended action passes every evidence gate. Required outcomes,
+   correctness confidence, reward, probability, margin, stable snapshots, and
+   drift-audit rate scale with a persisted intent/decision complexity profile.
+   Autonomous actions still record observable outcomes.
 
 Everything runs in the existing Python process. Scoring is local by default;
 configured Azure AI evaluators remain available as an opt-in. Stores can be
@@ -72,6 +71,8 @@ never consumed.
 The response also contains an `autonomy` block. Agents must follow
 `execute_without_confirmation`, `request_user_feedback`, and
 `outcome_recording` rather than inventing their own confidence threshold.
+`autonomy.complexity` explains the declared profile, derived action-space
+points, risk floors, tier, and resolved proportional criteria.
 
 ## Install
 
@@ -122,6 +123,20 @@ Define actions the agent can really execute in `actions.json`:
 ]
 ```
 
+Declare intent and decision complexity in `complexity.json`:
+
+```json
+{
+   "intent_ambiguity": "medium",
+   "context_variability": "variable",
+   "outcome_observability": "direct",
+   "decision_impact": "medium",
+   "reversibility": "costly",
+   "requires_human_approval": false,
+   "rationale": "Repository search is bounded and directly observable."
+}
+```
+
 Initialize the decision once, then ask the active policy what to execute:
 
 ```powershell
@@ -129,7 +144,8 @@ agent-learn task-policy-init `
    --agent-id code-reviewer `
    --task-id choose-repository-search `
    --decision-context "Choose a repository search strategy for a coding task" `
-   --actions .\actions.json
+   --actions .\actions.json `
+   --complexity-profile .\complexity.json
 
 agent-learn task-policy-decide `
    --agent-id code-reviewer `
@@ -194,7 +210,8 @@ agent-learn --version
 agent-learn tasks-list <agent_id> [--decision-only]
 agent-learn task-episodes-count <agent_id> [--task-id <task_id>] [--include-incomplete] [--start-date <date>] [--end-date <date>]
 agent-learn task-episodes-list <agent_id> [--task-id <task_id>] [--limit <1-500>] [--include-incomplete] [--start-date <date>] [--end-date <date>]
-agent-learn task-policy-init --agent-id <agent_id> --task-id <task_id> --decision-context <context> --actions ./actions.json
+agent-learn task-policy-init --agent-id <agent_id> --task-id <task_id> --decision-context <context> --actions ./actions.json [--complexity-profile ./complexity.json]
+agent-learn task-policy-complexity-set --agent-id <agent_id> --task-id <task_id> --profile ./complexity.json
 agent-learn task-policy-decide --agent-id <agent_id> --task-id <task_id> [--history-limit <1-500>] [--greedy] [--seed <integer>]
 agent-learn task-episode-register --agent-id <agent_id> --task-id <task_id> --episode ./episode.json [--require-decision-policy]
 agent-learn score --agent-id <agent_id> [--task-id <task_id>] [--limit <1-500>]
@@ -206,6 +223,8 @@ agent-learn task-policy --agent-id <agent_id> --task-id <task_id>
 
 - [Agentic decision making](docs/decision-making.md): concepts, evidence,
    workflow, math, and deployment.
+- [Complexity-proportional autonomy](docs/autonomy-complexity.md): declared
+   complexity dimensions, tier calculation, risk floors, and scaled gates.
 - [Scout decision integration](docs/scout-agent-learn-skill.md): apply learned
    delegated decisions during execution.
 - [Scout decision training](docs/scout-automation-agent-learning.md): train

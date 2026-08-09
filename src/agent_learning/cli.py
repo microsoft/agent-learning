@@ -14,8 +14,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from ._version import __version__
-from .autonomy import assess_autonomy
-from .config import AutonomyConfig
+from .autonomy import ComplexityProfile, assess_autonomy
 from .policy.softmax_bandit import SoftmaxPolicy
 from .storage.cosmos import get_default_store
 from .training.runner import LearningRunner
@@ -37,11 +36,20 @@ def _episode_limit(value: str) -> int:
 def _iso_date(value: str) -> str:
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError as exc:
+    except (TypeError, ValueError) as exc:
         raise argparse.ArgumentTypeError(f"invalid ISO 8601 date: {value!r}") from exc
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc).isoformat()
+
+
+def _load_complexity_profile(path: str) -> ComplexityProfile:
+    try:
+        with open(path, "r", encoding="utf-8") as profile_file:
+            payload = json.load(profile_file)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Unable to read complexity profile: {exc}") from exc
+    return ComplexityProfile.from_dict(payload)
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
@@ -132,6 +140,18 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         required=True,
         help="Path to a JSON file containing a list of {id, description, parameters} objects.",
     )
+    init.add_argument(
+        "--complexity-profile",
+        help="Path to a JSON complexity profile. Defaults conservatively to standard.",
+    )
+
+    complexity = sub.add_parser(
+        "task-policy-complexity-set",
+        help="Configure complexity for an existing delegated decision policy.",
+    )
+    complexity.add_argument("--agent-id", required=True)
+    complexity.add_argument("--task-id", required=True)
+    complexity.add_argument("--profile", required=True)
 
     register = sub.add_parser(
         "task-episode-register",
@@ -479,8 +499,7 @@ def _cmd_decide_task_policy(args: argparse.Namespace) -> int:
     policy = SoftmaxPolicy.from_snapshot(snapshot, rng=rng)
     probabilities = policy.probabilities()
     recommended_index = max(range(len(probabilities)), key=probabilities.__getitem__)
-    autonomy_config = AutonomyConfig()
-    autonomy_assessment = assess_autonomy(store, snapshot, autonomy_config)
+    autonomy_assessment = assess_autonomy(store, snapshot)
     audit_sampled = False
     if autonomy_assessment.eligible:
         selected_index = recommended_index
@@ -489,7 +508,7 @@ def _cmd_decide_task_policy(args: argparse.Namespace) -> int:
         logprob = math.log(max(selected_probability, 1e-12))
         mode = "autonomous-greedy"
         audit_rng = rng or random.Random()
-        audit_sampled = audit_rng.random() < autonomy_config.audit_rate
+        audit_sampled = audit_rng.random() < autonomy_assessment.audit_rate
     elif args.greedy:
         selected_index = recommended_index
         selected_action = snapshot.actions[selected_index]
@@ -528,7 +547,7 @@ def _cmd_decide_task_policy(args: argparse.Namespace) -> int:
         "feedback_reason": feedback_reason,
         "outcome_recording": outcome_recording,
         "audit": {
-            "rate": autonomy_config.audit_rate,
+            "rate": autonomy_assessment.audit_rate,
             "sampled": audit_sampled,
         },
     }
@@ -602,14 +621,65 @@ def _cmd_init_task_policy(args: argparse.Namespace) -> int:
         task_id=args.task_id,
     )
     snapshot = policy.snapshot()
+    try:
+        complexity_profile = (
+            _load_complexity_profile(args.complexity_profile)
+            if args.complexity_profile
+            else ComplexityProfile()
+        )
+    except (TypeError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     snapshot.metadata.update(
         {
             "policy_scope": _DECISION_POLICY_SCOPE,
             "decision_context": args.decision_context,
+            "complexity_profile": complexity_profile.to_dict(),
+            "complexity_profile_source": (
+                "configured" if args.complexity_profile else "default"
+            ),
         }
     )
     store.store_policy(snapshot)
     print(json.dumps(_policy_payload(snapshot), indent=2))
+    return 0
+
+
+def _cmd_set_task_policy_complexity(args: argparse.Namespace) -> int:
+    store = get_default_store()
+    snapshot = store.get_active_policy(args.agent_id, args.task_id)
+    if not _is_decision_policy(snapshot):
+        print(
+            "Complexity configuration requires an active delegated decision policy.",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        profile = _load_complexity_profile(args.profile)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    snapshot.metadata.update(
+        {
+            "complexity_profile": profile.to_dict(),
+            "complexity_profile_source": "configured",
+            "complexity_profile_updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+    store.store_policy(snapshot)
+    assessment = assess_autonomy(store, snapshot)
+    print(
+        json.dumps(
+            {
+                "current_policy": _policy_payload(snapshot),
+                "autonomy": {
+                    **assessment.to_dict(),
+                    "mode": "autonomous" if assessment.eligible else "supervised",
+                },
+            },
+            indent=2,
+        )
+    )
     return 0
 
 
@@ -687,6 +757,7 @@ def main(argv: list[str] | None = None) -> int:
         "task-policy": _cmd_show_task_policy,
         "task-policy-decide": _cmd_decide_task_policy,
         "task-policy-init": _cmd_init_task_policy,
+        "task-policy-complexity-set": _cmd_set_task_policy_complexity,
         "task-episode-register": _cmd_register_task_episode,
     }
     handler = dispatch[args.command]

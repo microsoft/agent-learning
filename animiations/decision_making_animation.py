@@ -617,18 +617,26 @@ class AgentDecisionMaking(Scene):
         header = self._stage_header(
             "05",
             "Earn autonomy",
-            "routine confirmation stops only after every evidence gate passes",
+            "intent + decision complexity scale every evidence requirement",
             BLUE,
         )
         self.play(FadeIn(header), run_time=0.45)
 
         evidence_note = Text(
-            "Representative mature policy after repeated scored batches",
+            "STANDARD profile · representative mature policy after scored batches",
             font=SANS,
             font_size=17,
             color=MUTED,
         ).move_to([-3.0, 2.15, 0])
         self.play(FadeIn(evidence_note), run_time=0.4)
+
+        profile = Text(
+            "ambiguity: medium  ·  context: variable  ·  observable: delayed  ·  impact: medium  ·  reversible: costly",
+            font=MONO,
+            font_size=13,
+            color=BLUE,
+        ).move_to([-2.45, 1.82, 0])
+        self.play(FadeIn(profile), run_time=0.4)
 
         outcomes = 40
         correct = 40
@@ -656,7 +664,7 @@ class AgentDecisionMaking(Scene):
             column = index % 2
             row = index // 2
             center_x = -5.55 + column * 3.35
-            center_y = 1.35 - row * 1.15
+            center_y = 1.05 - row * 1.05
             card = RoundedRectangle(
                 width=3.05,
                 height=0.92,
@@ -690,6 +698,24 @@ class AgentDecisionMaking(Scene):
 
         for card in cards:
             self.play(FadeIn(card, shift=UP * 0.08), run_time=0.25)
+
+        approval = RoundedRectangle(
+            width=6.4,
+            height=0.48,
+            corner_radius=0.08,
+            stroke_color=GREEN,
+            stroke_width=1.5,
+            fill_color=GREEN,
+            fill_opacity=0.07,
+        ).move_to([-3.88, -1.58, 0])
+        approval_text = Text(
+            "PASS  ·  mandatory human approval: false",
+            font=MONO,
+            font_size=14,
+            color=GREEN,
+            weight=BOLD,
+        ).move_to(approval)
+        self.play(FadeIn(VGroup(approval, approval_text)), run_time=0.35)
 
         supervised = RoundedRectangle(
             width=3.9,
@@ -726,7 +752,7 @@ class AgentDecisionMaking(Scene):
             stroke_width=3.5,
         )
         gate_label = Text(
-            "all six pass",
+            "all resolved gates pass",
             font=MONO,
             font_size=14,
             color=BLUE,
@@ -756,7 +782,7 @@ class AgentDecisionMaking(Scene):
             color=WHITE,
         ).move_to([4.25, -0.88, 0])
         autonomous_monitoring = Text(
-            "observe every outcome · request 10% drift audits",
+            "observe outcomes · tier-scaled drift audits",
             font=SANS,
             font_size=14,
             color=WHITE_SOFT,
@@ -784,7 +810,7 @@ class AgentDecisionMaking(Scene):
             fill_opacity=0.06,
         ).move_to([0, -2.65, 0])
         drift_text = Text(
-            "Negative observable outcomes or audits can revoke autonomy on the next decision.",
+            "Higher complexity raises evidence and audit requirements; drift can revoke autonomy.",
             font=SANS,
             font_size=18,
             color=WHITE_SOFT,
@@ -852,7 +878,7 @@ class AgentDecisionMaking(Scene):
             stroke_width=3.5,
         )
         feedback_label = Text(
-            "observable outcomes + sampled audits",
+            "observable outcomes + proportional audits",
             font=SANS,
             font_size=17,
             color=GREEN,

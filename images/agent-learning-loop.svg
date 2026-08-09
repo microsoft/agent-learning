@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 390" role="img" aria-labelledby="title description">
-  <title id="title">The Agent Learning and Autonomy Loop</title>
-  <desc id="description">An animated loop showing TaskPolicy choosing an action, Score evaluating an episode, Learner updating the task-policy, and an evidence gate controlling supervised or autonomous execution.</desc>
+  <title id="title">The Agent Learning and Proportional Autonomy Loop</title>
+  <desc id="description">An animated loop showing TaskPolicy choosing an action, Score evaluating an episode, Learner updating the task-policy, and a complexity-proportional evidence gate controlling supervised or autonomous execution.</desc>
   <style>
     .stage {
       opacity: 0.48;
@@ -108,7 +108,7 @@
   </defs>
 
   <rect width="1200" height="390" rx="8" fill="#0d1117"/>
-  <text x="60" y="45" fill="#8b949e" font-family="Segoe UI, sans-serif" font-size="15" font-weight="600">THE AGENT LEARNING + AUTONOMY LOOP</text>
+  <text x="60" y="45" fill="#8b949e" font-family="Segoe UI, sans-serif" font-size="15" font-weight="600">THE AGENT LEARNING + PROPORTIONAL AUTONOMY LOOP</text>
 
   <line x1="370" y1="154" x2="442" y2="154" stroke="#8b949e" stroke-width="3" opacity="0.3"/>
   <path d="M 442 147 L 454 154 L 442 161 Z" fill="#8b949e" opacity="0.55"/>
@@ -161,8 +161,8 @@
   <g class="gate-stage">
     <rect x="430" y="278" width="340" height="64" rx="8" fill="#10271f" stroke="#6ee7d0" stroke-width="2"/>
     <text x="600" y="303" fill="#6ee7d0" font-family="Segoe UI, sans-serif" font-size="17" font-weight="700" text-anchor="middle">Evidence gate</text>
-    <text x="600" y="326" fill="#c9d1d9" font-family="Consolas, monospace" font-size="12" text-anchor="middle">outcomes · confidence · reward · margin · stability</text>
+    <text x="600" y="326" fill="#c9d1d9" font-family="Consolas, monospace" font-size="12" text-anchor="middle">complexity tier → proportional evidence → approval override</text>
   </g>
 
-  <text class="feedback-label" x="600" y="367" fill="#6ee7d0" font-family="Segoe UI, sans-serif" font-size="15" text-anchor="middle">supervised → autonomous · observable outcomes + sampled audits</text>
+  <text class="feedback-label" x="600" y="367" fill="#6ee7d0" font-family="Segoe UI, sans-serif" font-size="15" text-anchor="middle">supervised → autonomous · outcomes + tier-scaled audits</text>
 </svg>

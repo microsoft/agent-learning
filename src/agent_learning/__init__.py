@@ -56,7 +56,14 @@ Quick start::
 """
 
 from ._version import __version__
-from .autonomy import AutonomyAssessment, assess_autonomy, wilson_lower_bound
+from .autonomy import (
+    AutonomyAssessment,
+    ComplexityAssessment,
+    ComplexityProfile,
+    assess_autonomy,
+    assess_complexity,
+    wilson_lower_bound,
+)
 from .capture import CaptureContext, EpisodeCapture, get_capture
 from .classifiers import (
     AdherenceScorer,
@@ -68,6 +75,7 @@ from .classifiers import (
 )
 from .config import (
     AutonomyConfig,
+    AutonomyTier,
     CaptureConfig,
     CosmosConfig,
     ScoreConfig,
@@ -113,6 +121,7 @@ __all__ = [
     "Action",
         "AutonomyAssessment",
         "AutonomyConfig",
+        "AutonomyTier",
     "AdherenceScorer",
     "AgentSummary",
     "AgentTaskSummary",
@@ -121,6 +130,8 @@ __all__ = [
     "Classifier",
     "ClassifierResult",
     "CompletionScorer",
+    "ComplexityAssessment",
+    "ComplexityProfile",
     "ContextualSoftmaxPolicy",
     "CosmosConfig",
     "CosmosStore",
@@ -157,6 +168,7 @@ __all__ = [
     "TrainingStatus",
     "__version__",
     "assess_autonomy",
+    "assess_complexity",
     "default_metrics",
     "evaluate_all",
     "get_capture",

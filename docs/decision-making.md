@@ -127,7 +127,8 @@ returns feedback from the stored executions, closing the loop.
 ## Evidence-gated autonomy
 
 `task-policy-decide` computes an autonomy assessment for the current
-recommended action. Autonomy is granted only when every default gate passes:
+recommended action. The table below is the backward-compatible `standard` tier;
+low, high, and critical policies use proportionally different requirements:
 
 | Gate | Default |
 |---|---:|
@@ -161,12 +162,21 @@ execution result replaces a user prompt even in supervised mode. It is false for
 a sampled drift audit because that audit deliberately requests an external user
 label.
 
-The default drift-audit rate is 10% of autonomous decisions. A negative audit or
-observable execution result changes reward and correctness evidence; subsequent
-training can lower probability, break snapshot stability, or fail another gate,
-returning the policy to supervised mode.
+The standard drift-audit rate is 10% of autonomous decisions. Low, high, and
+critical tiers use 5%, 25%, and 50%. A negative audit or observable execution
+result changes reward and correctness evidence; subsequent training can lower
+probability, break snapshot stability, or fail another gate, returning the
+policy to supervised mode.
 
-Configure the thresholds with environment variables:
+The tier comes from a persisted profile of intent ambiguity, context
+variability, outcome observability, decision impact, reversibility, and derived
+action-space size. Critical impact, high-impact irreversible actions, and
+ambiguous subjective outcomes apply risk floors. `requires_human_approval`
+blocks learned autonomy regardless of evidence. See
+[Complexity-proportional autonomy](autonomy-complexity.md) for the complete
+scoring and threshold tables.
+
+Environment variables override the resolved tier thresholds globally:
 
 | Variable | Default |
 |---|---:|
@@ -227,6 +237,11 @@ Create `actions.json`:
 ]
 ```
 
+Create `complexity.json` using the fields in
+[Complexity-proportional autonomy](autonomy-complexity.md). Do not derive a
+lower tier from persuasive wording. When no profile is supplied, the SDK uses a
+conservative standard profile.
+
 Discover existing decision policies before creating another one:
 
 ```powershell
@@ -241,10 +256,20 @@ agent-learn task-policy-init `
   --agent-id code-reviewer `
   --task-id choose-repository-search `
   --decision-context "Choose a repository search strategy for a coding task" `
-  --actions .\actions.json
+  --actions .\actions.json `
+  --complexity-profile .\complexity.json
 ```
 
-The CLI marks the policy with `policy_scope: delegated_decision`.
+The CLI marks the policy with `policy_scope: delegated_decision` and persists
+the validated profile. Configure an existing policy without creating a learned
+snapshot:
+
+```powershell
+agent-learn task-policy-complexity-set `
+  --agent-id code-reviewer `
+  --task-id choose-repository-search `
+  --profile .\complexity.json
+```
 
 ### Choose and execute
 

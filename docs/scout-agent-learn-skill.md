@@ -116,14 +116,39 @@ instructions: |
   ]
   ```
 
+  Define a complexity profile. Do not lower complexity by interpreting the
+  wording of Scout's own answer. If the user or policy owner has not provided a
+  profile, keep the SDK's standard default. Elevate from standard when the
+  request clearly establishes high impact, irreversibility, dynamic context, or
+  subjective outcomes. Set `requires_human_approval` for deterministic approval
+  requirements.
+
+  ```json
+  {
+    "intent_ambiguity": "medium",
+    "context_variability": "variable",
+    "outcome_observability": "delayed",
+    "decision_impact": "high",
+    "reversibility": "costly",
+    "requires_human_approval": false,
+    "rationale": "Shared integration architecture with delayed production evidence."
+  }
+  ```
+
   Initialize once:
 
   ```shell
-  agent-learn task-policy-init --agent-id <agent_id> --task-id <decision_task_id> --decision-context "<stable delegated choice>" --actions ./actions.json
+  agent-learn task-policy-init --agent-id <agent_id> --task-id <decision_task_id> --decision-context "<stable delegated choice>" --actions ./actions.json --complexity-profile ./complexity.json
   ```
 
   The CLI marks the policy as `delegated_decision`. Existing unmarked question or
   automation policies are legacy records and are excluded by `--decision-only`.
+  Existing marked policies with no profile remain standard. Apply an approved
+  profile without creating a policy snapshot:
+
+  ```shell
+  agent-learn task-policy-complexity-set --agent-id <agent_id> --task-id <decision_task_id> --profile ./complexity.json
+  ```
 
   ## 4. Consume learned policy feedback before execution
 
@@ -147,7 +172,8 @@ instructions: |
     result summaries, and intent/adherence/completion scores;
   - `historical_feedback`: the same evidence for every alternative;
   - `autonomy`: the authoritative mode, evidence criteria, execution permission,
-    feedback request, audit sample, and outcome-recording strategy.
+    feedback request, audit sample, outcome-recording strategy, and proportional
+    `complexity` calculation.
 
   Use the feedback as execution context. In particular, avoid repeating failure
   modes named in recent result summaries, and preserve behavior associated with
@@ -165,6 +191,10 @@ instructions: |
     and execution produced an independent outcome;
   - when `outcome_recording` is `observable_outcome`, record the independently
     observed execution result instead of asking the user routinely.
+
+  Inspect `autonomy.complexity.profile_source`, `tier`, `risk_floors`, and the
+  per-criterion required values. Never override them in Scout. A true
+  `requires_human_approval` profile always remains supervised.
 
   ## 5. Execute or preserve a pending recommendation
 

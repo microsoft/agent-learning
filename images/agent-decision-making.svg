@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 560" role="img" aria-labelledby="title description">
-  <title id="title">Agentic decision making with evidence-gated autonomy</title>
-  <desc id="description">An animated loop in which an agent chooses a bounded action, executes it, scores the outcome, improves the policy, and earns autonomy only after six evidence gates pass. Observable outcomes and sampled audits continue monitoring drift.</desc>
+  <title id="title">Agentic decision making with complexity-proportional autonomy</title>
+  <desc id="description">An animated loop in which an agent chooses a bounded action, executes it, scores the outcome, improves the policy, and earns autonomy only after complexity-proportional evidence gates pass and no mandatory approval applies. Observable outcomes and tier-scaled audits continue monitoring drift.</desc>
   <style>
     .stage {
       opacity: 0.52;
@@ -247,15 +247,15 @@
     <rect x="45" y="350" width="7" height="130" rx="3" fill="#75d7ff"/>
     <text x="70" y="378" fill="#75d7ff" font-family="Segoe UI, sans-serif" font-size="13" font-weight="700">05</text>
     <text x="100" y="379" fill="#ffffff" font-family="Segoe UI, sans-serif" font-size="22" font-weight="700">Evidence gate</text>
-    <text x="70" y="402" fill="#aebbd2" font-family="Segoe UI, sans-serif" font-size="13">all six criteria must pass</text>
+    <text x="70" y="402" fill="#aebbd2" font-family="Segoe UI, sans-serif" font-size="13">declared profile → tier → proportional gates</text>
 
     <g class="gate-check" font-family="Consolas, monospace" font-size="11">
-      <text x="70" y="430" fill="#9bd43a">✓ 20+ scored outcomes</text>
-      <text x="70" y="452" fill="#9bd43a">✓ Wilson lower bound ≥ 90%</text>
-      <text x="285" y="430" fill="#9bd43a">✓ mean reward &gt; 0</text>
-      <text x="285" y="452" fill="#9bd43a">✓ winner probability ≥ 60%</text>
-      <text x="500" y="430" fill="#9bd43a">✓ margin ≥ 15 points</text>
-      <text x="500" y="452" fill="#9bd43a">✓ same winner × 3 snapshots</text>
+      <text x="70" y="430" fill="#9bd43a">✓ low · standard · high · critical</text>
+      <text x="70" y="452" fill="#9bd43a">✓ outcomes + Wilson scale by tier</text>
+      <text x="300" y="430" fill="#9bd43a">✓ reward + probability + margin</text>
+      <text x="300" y="452" fill="#9bd43a">✓ stable snapshots scale by tier</text>
+      <text x="520" y="430" fill="#9bd43a">✓ risk floors raise tier</text>
+      <text x="520" y="452" fill="#9bd43a">✓ approval can block</text>
     </g>
 
     <rect x="716" y="370" width="174" height="82" rx="6" fill="#202b40" stroke="#8aa0be"/>
@@ -269,10 +269,10 @@
       <text x="1030" y="389" fill="#9bd43a" font-family="Segoe UI, sans-serif" font-size="12" font-weight="700" text-anchor="middle">AUTONOMOUS</text>
       <text x="1030" y="411" fill="#ffffff" font-family="Segoe UI, sans-serif" font-size="11" text-anchor="middle">greedy winner · no routine ask</text>
       <text x="1030" y="431" fill="#d8e2f1" font-family="Segoe UI, sans-serif" font-size="10" text-anchor="middle">observe every outcome</text>
-      <text x="1030" y="448" fill="#9bd43a" font-family="Consolas, monospace" font-size="10" text-anchor="middle">10% drift audit</text>
+      <text x="1030" y="448" fill="#9bd43a" font-family="Consolas, monospace" font-size="10" text-anchor="middle">tier-scaled drift audits</text>
     </g>
   </g>
 
-  <text class="feedback-label" x="600" y="500" fill="#9bd43a" font-family="Segoe UI, sans-serif" font-size="14" text-anchor="middle">observable outcomes and sampled audits keep checking for drift</text>
+  <text class="feedback-label" x="600" y="500" fill="#9bd43a" font-family="Segoe UI, sans-serif" font-size="14" text-anchor="middle">observable outcomes and proportional audits keep checking for drift</text>
   <path class="feedback" d="M 1030 520 C 850 558, 350 558, 170 520" marker-end="url(#feedback-arrowhead)"/>
 </svg>
