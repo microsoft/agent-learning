@@ -1,14 +1,17 @@
 ---
 title: Scout agent-learning automation
-description: Review complete episodes and train each agent task policy from recorded outcomes
+description: Discover each Scout agent task, verify its active policy and scored episodes, run a bounded task-scoped training batch, and confirm that a new policy snapshot was activated
 author: Microsoft
-ms.date: 2026-08-07
+ms.date: 2026-08-08
 ms.topic: how-to
 ---
 
 # Scout agent-learning automation
 
-Run this automation periodically to improve repeated tasks from their recorded outcomes. Set the minimum number of full episodes before training; the default is `5`. A training batch is capped at `500` episodes.
+Run this automation periodically to improve repeated tasks from their recorded
+outcomes. Set an automation-owned minimum number of new full episodes before
+training; the recommended default is `5`. The CLI accepts a batch limit from `1`
+through `500` but does not enforce the automation's minimum threshold.
 
 Configure every automation step to use the same durable local store:
 
@@ -33,27 +36,48 @@ The command returns the `id` and `name` of each agent. Run the remaining steps o
 agent-learn tasks-list <agent_id>
 ```
 
-Policies belong to an agent task. Use each returned task ID when inspecting policy state.
+Policies belong to an agent task. Run the remaining steps separately for every
+returned task ID. Task-scoped runs make the episode limit and resulting policy
+update unambiguous.
 
-## 3. Count full episodes
+## 3. Verify the active task policy
 
 ```shell
-agent-learn task-episodes-count <agent_id>
+agent-learn task-policy --agent-id <agent_id> --task-id <task_id>
 ```
 
-The command prints the number of full episodes. Continue only when the count is greater than or equal to the configured minimum.
+Continue only when `current_policy` exists and its action list is non-empty. If
+the command reports no active policy, skip the task with reason
+`no active policy`; episode-capture setup must initialize it with
+`task-policy-init` before automation can train it.
 
-## 4. Inspect the episodes
+## 4. Select and count new full episodes
 
 ```shell
-agent-learn task-episodes-list <agent_id> --limit 500
+agent-learn task-episodes-count <agent_id> --task-id <task_id>
+```
+
+The command prints the task's total number of full episodes. To avoid repeatedly
+training on the same records, maintain a checkpoint from the previous successful
+batch and select only episodes after that checkpoint. Use the episode
+`created_at` values returned by `task-episodes-list` to count new full episodes
+inside the intended window. Continue only when that new count meets the
+automation's configured minimum.
+
+Choose one fixed `end_date` at the start of the batch. After successful training,
+advance the checkpoint to that cutoff. Use ISO 8601 timestamps for date filters.
+
+## 5. Inspect the selected episodes
+
+```shell
+agent-learn task-episodes-list <agent_id> --task-id <task_id> --limit 500
 ```
 
 Before training, print and compare the episodes. Review:
 
 - differences in intent handling;
 - the recorded intent summary;
-- the chosen action;
+- the chosen `action_id` and `metadata.correct_action_id`;
 - the intent resolution, task adherence, and task completion score breakdown;
 - the final aggregate reward;
 - the execution status and result summary;
@@ -61,15 +85,53 @@ Before training, print and compare the episodes. Review:
 
 Compare repeated episodes for the same task. Repetition is the learning signal: recorded outcomes should make recurring tasks more reliable as their policies are updated.
 
-## 5. Train the agent's task policies
+## 6. Ensure the selected episodes have rewards
+
+`task-episode-register` persists episodes but does not score them. If any
+selected episode has `final_reward: null`, either let `train` score missing
+episodes or score the task explicitly first:
 
 ```shell
-agent-learn train --agent-id <agent_id> --limit 500
+agent-learn score --agent-id <agent_id> --task-id <task_id> --limit 500
 ```
 
-Training runs at the agent level and updates each task independently from that task's episodes and active policy. The CLI rejects limits greater than `500`.
+Use a configured score backend. Re-list the episodes and verify that every
+episode intended for learning has a non-null aggregate reward.
 
-## 6. Inspect each updated task policy
+## 7. Train one task policy
+
+The complete command contract is:
+
+```shell
+agent-learn train --agent-id <agent_id> [--task-id <task_id>] [--limit <1-500>] [--start-date <date>] [--end-date <date>] [--skip-scoring]
+```
+
+For periodic automation, prefer a task-scoped, checkpointed invocation:
+
+```shell
+agent-learn train --agent-id <agent_id> --task-id <task_id> --limit 500 --start-date <start_date> --end-date <end_date>
+```
+
+By default, `train` scores selected episodes that do not yet have rewards and
+then updates the active policy. Add `--skip-scoring` only when every selected
+episode already has a persisted aggregate reward:
+
+```shell
+agent-learn train --agent-id <agent_id> --task-id <task_id> --limit 500 --start-date <start_date> --end-date <end_date> --skip-scoring
+```
+
+Without `--task-id`, the CLI selects one agent-wide batch up to `--limit` and
+distributes those selected episodes across tasks. That is supported, but a busy
+task can consume most of the shared limit; task-scoped automation is more
+predictable.
+
+Inspect the JSON result. A successful update appears in `runs`. A task appears
+in `skipped` when it has no active policy or no episodes in the selected batch.
+The command exits with code `2` when no task policy was trained. Do not advance
+the checkpoint unless the expected task has a successful run and
+`metrics.episodes_used` is greater than zero.
+
+## 8. Inspect the updated task policy
 
 For every task returned by `tasks-list`, run:
 
@@ -77,6 +139,10 @@ For every task returned by `tasks-list`, run:
 agent-learn task-policy --agent-id <agent_id> --task-id <task_id>
 ```
 
-The output includes the active policy, the previous snapshot, and their differences. Review changes in action logits and action probabilities to understand which actions the task now favors.
+The output includes the active policy, the previous snapshot, and their
+differences. Verify that the policy version increased, `episodes_seen` advanced,
+and the action logits or probabilities changed in a direction supported by the
+recorded rewards. Only after these checks should the automation persist its new
+episode checkpoint.
 
 The store can retain any number of policy snapshot JSON files, but exactly one policy is active for each agent task. Use policy snapshots for learning-loop debugging. They do not replace explicit intent capture or intent resolution, task adherence, and task completion scoring.

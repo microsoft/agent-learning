@@ -1,0 +1,32 @@
+[
+  {
+    "metric": "intent_resolution",
+    "score": 1.0,
+    "normalized": 1.0,
+    "status": "completed",
+    "reason": null,
+    "properties": null,
+    "evaluator": "functional-simulator",
+    "metadata": {}
+  },
+  {
+    "metric": "task_adherence",
+    "score": 1.0,
+    "normalized": 1.0,
+    "status": "completed",
+    "reason": null,
+    "properties": null,
+    "evaluator": "functional-simulator",
+    "metadata": {}
+  },
+  {
+    "metric": "task_completion",
+    "score": 1.0,
+    "normalized": 1.0,
+    "status": "completed",
+    "reason": null,
+    "properties": null,
+    "evaluator": "functional-simulator",
+    "metadata": {}
+  }
+]

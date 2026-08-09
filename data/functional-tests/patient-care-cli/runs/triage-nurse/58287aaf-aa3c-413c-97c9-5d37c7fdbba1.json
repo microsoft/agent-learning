@@ -1,0 +1,67 @@
+{
+  "id": "58287aaf-aa3c-413c-97c9-5d37c7fdbba1",
+  "agent_id": "triage-nurse",
+  "task_id": "sore-throat-triage",
+  "policy_id": "f952424e-c378-40ff-a76f-a1d6ffbc089c",
+  "algorithm": "ReinforceLearner",
+  "status": "succeeded",
+  "episode_ids": [
+    "49915563-bcac-46ca-800f-2a3b37bfa38f",
+    "dc3eafad-b3e8-4939-a19e-2bad6870c4ac",
+    "877ece18-a684-41da-895f-b181b8a2e869",
+    "c019d11c-ed7a-4e7b-b871-ce794688fc63",
+    "8d7f89e8-4659-4c53-adfc-4f237bcd090c",
+    "65c74261-8609-48a8-8762-1d7d4c5cebf9",
+    "d3c3a2e8-5f77-454d-8d69-1fc9873bf7e6",
+    "60b3cfcd-2a75-4de9-8ce0-50ae9fb54051",
+    "f8ca01c6-a6a1-4dcb-acad-d6c1974dad17",
+    "cb634463-5acf-43c9-9522-ad8f11cf4b1b",
+    "80c273e9-4acb-472c-95b6-943751d6c7ea",
+    "e522add1-4ec6-4cb8-9643-aab311ec8cbd",
+    "da1a829b-a9c0-4458-8f35-45d9b9287d83",
+    "c0f2e11f-c28b-452d-a0f0-51e79f53e115",
+    "682ae7b6-77aa-45b8-a35b-e42e41770b09",
+    "c7574aee-caa9-46c4-8fef-c6d580ac0afa",
+    "c801ee80-5abc-4f1a-962d-b0ac549fef24",
+    "af2e098b-20bf-48af-a470-f5a8bcc5b0d2",
+    "ad734c26-39f5-4f6f-a595-a22ebd3088cb",
+    "169c77ee-25b1-4013-9b91-eb0fbf6a69ed",
+    "5de5956f-2108-461b-b784-a7a61f588c40",
+    "5504ea7f-0726-48d7-b9c4-6ad9232b7fa3",
+    "8883c0a1-cefd-4031-b300-4287c17ae6bb",
+    "1a6d3b4c-f1f3-4031-96de-ae80a6a1a88d",
+    "c86da644-df74-4908-bacc-c4e51f1777ca",
+    "b1ea532a-7699-4720-9cbe-1293e7bd0c40",
+    "e2ec5a4f-e980-4fc0-83a2-2d70112c470d",
+    "0f5bac64-df20-4e91-92c3-b78f35044e75",
+    "af2a68a1-043f-4ded-bbce-4f4a96417d55",
+    "6ac83d51-42a4-4d64-9997-847c143859bc",
+    "60f71e74-e995-44db-9bcc-8d6db2b05840",
+    "f7ce001a-1643-4180-8cc0-766e3554f406"
+  ],
+  "hyperparameters": {},
+  "metrics": {
+    "episodes_used": 32,
+    "mean_reward": -0.19999999999999998,
+    "baseline_before": 0.0,
+    "baseline_after": -0.019999999999999993,
+    "logit_deltas": {
+      "order_strep_test": 0.017499999999999998,
+      "recommend_supportive_care": -0.0075000000000000015,
+      "prescribe_antibiotics_without_test": -0.006250000000000002,
+      "refer_to_emergency_department": -0.0037500000000000007
+    },
+    "extra": {
+      "entropy": 1.3862943611198906
+    }
+  },
+  "error_message": null,
+  "started_at": "2026-08-09T00:45:48.475681+00:00",
+  "completed_at": "2026-08-09T00:45:48.514669+00:00",
+  "metadata": {
+    "policy_version": 1,
+    "task_id": "sore-throat-triage",
+    "score_missing": false
+  },
+  "created_at": "2026-08-09T00:45:48.475681+00:00"
+}

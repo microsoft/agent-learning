@@ -1,0 +1,47 @@
+{
+  "id": "de654b18-39cf-4a67-9ba0-cafe0e522dc2",
+  "agent_id": "triage-nurse",
+  "task_id": "sore-throat-triage",
+  "version": 1,
+  "actions": [
+    {
+      "id": "order_strep_test",
+      "description": "Order a diagnostic test for strep throat",
+      "parameters": {
+        "is_correct_for_sore_throat_case": true
+      }
+    },
+    {
+      "id": "recommend_supportive_care",
+      "description": "Recommend fluids, rest, and symptom monitoring without testing",
+      "parameters": {
+        "is_correct_for_sore_throat_case": false
+      }
+    },
+    {
+      "id": "prescribe_antibiotics_without_test",
+      "description": "Prescribe antibiotics without first testing for strep throat",
+      "parameters": {
+        "is_correct_for_sore_throat_case": false
+      }
+    },
+    {
+      "id": "refer_to_emergency_department",
+      "description": "Refer the patient to the emergency department",
+      "parameters": {
+        "is_correct_for_sore_throat_case": false
+      }
+    }
+  ],
+  "logits": {
+    "order_strep_test": 0.017499999999999998,
+    "recommend_supportive_care": -0.0075000000000000015,
+    "prescribe_antibiotics_without_test": -0.006250000000000002,
+    "refer_to_emergency_department": -0.0037500000000000007
+  },
+  "baseline": -0.019999999999999993,
+  "episodes_seen": 32,
+  "updates_applied": 1,
+  "metadata": {},
+  "created_at": "2026-08-09T00:45:48.511275+00:00"
+}

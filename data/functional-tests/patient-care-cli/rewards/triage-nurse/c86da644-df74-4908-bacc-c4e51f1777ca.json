@@ -1,0 +1,76 @@
+[
+  {
+    "id": "d49d0011-f7ac-46d8-84a3-68bb4328e360",
+    "episode_id": "c86da644-df74-4908-bacc-c4e51f1777ca",
+    "agent_id": "triage-nurse",
+    "source": "metric",
+    "value": -1.0,
+    "raw_value": 0.0,
+    "metric": "intent_resolution",
+    "rubric": "intent_resolution",
+    "evaluator": "functional-simulator",
+    "metadata": {},
+    "created_at": "2026-08-09T00:45:27.825358+00:00"
+  },
+  {
+    "id": "3bfd126c-48c4-47df-88f7-3605e3424501",
+    "episode_id": "c86da644-df74-4908-bacc-c4e51f1777ca",
+    "agent_id": "triage-nurse",
+    "source": "metric",
+    "value": -1.0,
+    "raw_value": 0.0,
+    "metric": "task_adherence",
+    "rubric": "task_adherence",
+    "evaluator": "functional-simulator",
+    "metadata": {},
+    "created_at": "2026-08-09T00:45:27.826358+00:00"
+  },
+  {
+    "id": "901e27df-f222-4a69-94fe-5fcd9a78fa6e",
+    "episode_id": "c86da644-df74-4908-bacc-c4e51f1777ca",
+    "agent_id": "triage-nurse",
+    "source": "metric",
+    "value": -1.0,
+    "raw_value": 0.0,
+    "metric": "task_completion",
+    "rubric": "task_completion",
+    "evaluator": "functional-simulator",
+    "metadata": {},
+    "created_at": "2026-08-09T00:45:27.859056+00:00"
+  },
+  {
+    "id": "87f354d7-126f-4ed3-815f-7e5a26271997",
+    "episode_id": "c86da644-df74-4908-bacc-c4e51f1777ca",
+    "agent_id": "triage-nurse",
+    "source": "aggregate",
+    "value": -0.8,
+    "raw_value": null,
+    "metric": null,
+    "rubric": "aggregate",
+    "evaluator": null,
+    "metadata": {
+      "metric_contributions": [
+        {
+          "metric": "intent_resolution",
+          "weight": 0.1,
+          "signed": -1.0,
+          "contribution": -0.1
+        },
+        {
+          "metric": "task_adherence",
+          "weight": 0.2,
+          "signed": -1.0,
+          "contribution": -0.2
+        },
+        {
+          "metric": "task_completion",
+          "weight": 0.5,
+          "signed": -1.0,
+          "contribution": -0.5
+        }
+      ],
+      "penalties": []
+    },
+    "created_at": "2026-08-09T00:45:27.889241+00:00"
+  }
+]

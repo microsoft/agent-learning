@@ -1,0 +1,76 @@
+[
+  {
+    "id": "e6f99a24-2cf9-4068-ae94-6d5a8e9925fd",
+    "episode_id": "1a6d3b4c-f1f3-4031-96de-ae80a6a1a88d",
+    "agent_id": "triage-nurse",
+    "source": "metric",
+    "value": 1.0,
+    "raw_value": 1.0,
+    "metric": "intent_resolution",
+    "rubric": "intent_resolution",
+    "evaluator": "functional-simulator",
+    "metadata": {},
+    "created_at": "2026-08-09T00:45:28.239299+00:00"
+  },
+  {
+    "id": "3107d483-dc7d-4234-afe2-fc594fd73db4",
+    "episode_id": "1a6d3b4c-f1f3-4031-96de-ae80a6a1a88d",
+    "agent_id": "triage-nurse",
+    "source": "metric",
+    "value": 1.0,
+    "raw_value": 1.0,
+    "metric": "task_adherence",
+    "rubric": "task_adherence",
+    "evaluator": "functional-simulator",
+    "metadata": {},
+    "created_at": "2026-08-09T00:45:28.240299+00:00"
+  },
+  {
+    "id": "559dd1c6-e233-4440-92b8-4c29929380ee",
+    "episode_id": "1a6d3b4c-f1f3-4031-96de-ae80a6a1a88d",
+    "agent_id": "triage-nurse",
+    "source": "metric",
+    "value": 1.0,
+    "raw_value": 1.0,
+    "metric": "task_completion",
+    "rubric": "task_completion",
+    "evaluator": "functional-simulator",
+    "metadata": {},
+    "created_at": "2026-08-09T00:45:28.271351+00:00"
+  },
+  {
+    "id": "36f798a8-d70c-45da-a695-35088495880d",
+    "episode_id": "1a6d3b4c-f1f3-4031-96de-ae80a6a1a88d",
+    "agent_id": "triage-nurse",
+    "source": "aggregate",
+    "value": 0.8,
+    "raw_value": null,
+    "metric": null,
+    "rubric": "aggregate",
+    "evaluator": null,
+    "metadata": {
+      "metric_contributions": [
+        {
+          "metric": "intent_resolution",
+          "weight": 0.1,
+          "signed": 1.0,
+          "contribution": 0.1
+        },
+        {
+          "metric": "task_adherence",
+          "weight": 0.2,
+          "signed": 1.0,
+          "contribution": 0.2
+        },
+        {
+          "metric": "task_completion",
+          "weight": 0.5,
+          "signed": 1.0,
+          "contribution": 0.5
+        }
+      ],
+      "penalties": []
+    },
+    "created_at": "2026-08-09T00:45:28.304726+00:00"
+  }
+]
