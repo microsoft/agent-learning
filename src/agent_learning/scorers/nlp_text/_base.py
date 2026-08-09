@@ -18,7 +18,7 @@ from ..base import ScoreResult
 
 _SKLEARN_IMPORT_ERROR = (
     "Tier 2 NLP text scorers require the [nlp] extra. Install with: "
-    "pip install agent-learning[nlp]"
+    "pip install agents-learning-sdk[nlp]"
 )
 
 

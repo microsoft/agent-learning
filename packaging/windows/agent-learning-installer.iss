@@ -22,7 +22,7 @@ SolidCompression=yes
 WizardStyle=modern
 SourceDir=..\..
 OutputDir=dist-installer
-OutputBaseFilename=agent-learning-cli-{#AppVersion}-windows-x64
+OutputBaseFilename=agents-learning-sdk-cli-{#AppVersion}-windows-x64
 UninstallDisplayIcon={app}\{#AppExeName}
 
 [Languages]

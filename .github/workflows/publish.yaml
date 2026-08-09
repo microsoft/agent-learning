@@ -182,10 +182,21 @@ jobs:
           GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.release-metadata.outputs.tag }}
           TAG_EXISTS: ${{ needs.release-metadata.outputs.tag-exists }}
+          VERSION: ${{ needs.release-metadata.outputs.version }}
         run: |
-          mapfile -t assets < <(find release-assets -type f -name '*.exe' -print | sort)
+          mapfile -t assets < <(
+            find release-assets -type f \( -name '*.exe' -o -name '*.zip' \) -print | sort
+          )
           if [[ ! -f "release-assets/dist/agent-learn.exe" ]]; then
             echo "::error::The Windows build did not produce agent-learn.exe."
+            exit 1
+          fi
+          if [[ ! -f "release-assets/dist-installer/agents-learning-sdk-cli-${VERSION}-windows-x64.exe" ]]; then
+            echo "::error::The Windows build did not produce the versioned installer."
+            exit 1
+          fi
+          if [[ ! -f "release-assets/dist-installer/agents-learning-sdk-cli-${VERSION}-windows-x64.zip" ]]; then
+            echo "::error::The Windows build did not produce the versioned ZIP."
             exit 1
           fi
 
@@ -215,7 +226,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: testpypi
-      url: https://test.pypi.org/p/agent-learning
+      url: https://test.pypi.org/p/agents-learning-sdk
     permissions:
       id-token: write
     steps:
@@ -242,7 +253,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/agent-learning
+      url: https://pypi.org/p/agents-learning-sdk
     permissions:
       id-token: write
     steps:

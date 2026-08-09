@@ -59,5 +59,6 @@ jobs:
           path: |
             dist/agent-learn.exe
             dist-installer/*.exe
+            dist-installer/*.zip
           if-no-files-found: error
           overwrite: true

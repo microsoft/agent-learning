@@ -8,7 +8,7 @@ applies the same deterministic rule engine the stdlib backend uses;
 the rule-engine score is combined with the learned probability.
 
 Requires the ``[nlp]`` extra (``pip install
-agent-learning[nlp]``). All scikit-learn imports are lazy so
+agents-learning-sdk[nlp]``). All scikit-learn imports are lazy so
 the package can still be imported without the extra; calling
 :meth:`fit` or :meth:`score` raises a helpful ``ImportError`` then.
 """

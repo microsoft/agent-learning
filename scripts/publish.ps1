@@ -102,7 +102,7 @@ try {
             & $python -m twine upload --repository-url https://test.pypi.org/legacy/ dist/*
             if ($LASTEXITCODE -ne 0) { throw "TestPyPI upload failed." }
             Write-Host "`nPublished. View at:" -ForegroundColor Green
-            Write-Host "  https://test.pypi.org/project/agent-learning/"
+            Write-Host "  https://test.pypi.org/project/agents-learning-sdk/"
         }
         'pypi' {
             Write-Host "`n[5/5] Uploading to PyPI (production) ..." -ForegroundColor Yellow
@@ -113,7 +113,7 @@ try {
             & $python -m twine upload dist/*
             if ($LASTEXITCODE -ne 0) { throw "PyPI upload failed." }
             Write-Host "`nPublished. View at:" -ForegroundColor Green
-            Write-Host "  https://pypi.org/project/agent-learning/"
+            Write-Host "  https://pypi.org/project/agents-learning-sdk/"
         }
     }
 }
