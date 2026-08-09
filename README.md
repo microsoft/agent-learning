@@ -72,7 +72,16 @@ agent-learn tasks-list <agent_id>
 agent-learn task-episodes-count <agent_id> [--task-id <task_id>]
 agent-learn task-episodes-list <agent_id> [--task-id <task_id>] [--limit <1-500>] [--include-incomplete]
 agent-learn task-policy-init --agent-id <agent_id> --task-id <task_id> --actions ./actions.json
+agent-learn task-episode-register --agent-id <agent_id> --task-id <task_id> --episode ./episode.json
 agent-learn score --agent-id <agent_id> [--task-id <task_id>] [--limit <1-500>]
 agent-learn train --agent-id <agent_id> [--task-id <task_id>] [--limit <1-500>] [--start-date <date>] [--end-date <date>] [--skip-scoring]
 agent-learn task-policy --agent-id <agent_id> --task-id <task_id>
+```
+
+The subprocess-level functional workflow uses an isolated local store. Run the
+interactive capture scenario first, followed by the offline batch update:
+
+```powershell
+python tests/functional_cli_interactive.py
+python tests/functional_cli_batch.py
 ```

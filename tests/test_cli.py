@@ -124,6 +124,49 @@ def test_task_policy_init_and_inspection(monkeypatch, capsys, tmp_path: Path) ->
     assert inspected["previous_policy"] is None
 
 
+def test_task_episode_register_persists_full_episode(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    store = InMemoryStore()
+    monkeypatch.setattr(cli, "get_default_store", lambda: store)
+    episode_path = tmp_path / "episode.json"
+    episode_path.write_text(
+        json.dumps(
+            {
+                "intent_summary": "assess a patient with a sore throat",
+                "action_id": "order_strep_test",
+                "expected_outcome": "order a strep throat test",
+                "execution_status": "completed",
+                "result_summary": "ordered the strep throat test",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert (
+        cli.main(
+            [
+                "task-episode-register",
+                "--agent-id",
+                "triage-nurse",
+                "--task-id",
+                "sore-throat-triage",
+                "--episode",
+                str(episode_path),
+            ]
+        )
+        == 0
+    )
+    registered = json.loads(capsys.readouterr().out)
+
+    episode = store.get_episode(registered["id"], "triage-nurse")
+    assert episode is not None
+    assert episode.task_id == "sore-throat-triage"
+    assert episode.intent_summary == "assess a patient with a sore throat"
+    assert episode.execution_status == "completed"
+    assert episode.is_full
+
+
 def test_agent_training_uses_one_limit_and_preserves_task_policy_history(
     monkeypatch, capsys
 ) -> None:

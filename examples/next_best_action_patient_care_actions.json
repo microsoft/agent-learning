@@ -1,0 +1,30 @@
+[
+  {
+    "id": "order_strep_test",
+    "description": "Order a diagnostic test for strep throat",
+    "parameters": {
+      "is_correct_for_sore_throat_case": true
+    }
+  },
+  {
+    "id": "recommend_supportive_care",
+    "description": "Recommend fluids, rest, and symptom monitoring without testing",
+    "parameters": {
+      "is_correct_for_sore_throat_case": false
+    }
+  },
+  {
+    "id": "prescribe_antibiotics_without_test",
+    "description": "Prescribe antibiotics without first testing for strep throat",
+    "parameters": {
+      "is_correct_for_sore_throat_case": false
+    }
+  },
+  {
+    "id": "refer_to_emergency_department",
+    "description": "Refer the patient to the emergency department",
+    "parameters": {
+      "is_correct_for_sore_throat_case": false
+    }
+  }
+]

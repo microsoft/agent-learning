@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 import argparse
-from collections import Counter
 import json
 import logging
 import sys
-from typing import Any, Dict, List, Optional
+import uuid
+from collections import Counter
+from typing import Any
 
 from .policy.softmax_bandit import SoftmaxPolicy
 from .storage.cosmos import get_default_store
 from .training.runner import LearningRunner
-from .types import Action, MetricName, PolicySnapshot, RewardSource
-
+from .types import Action, Episode, MetricName, PolicySnapshot, RewardSource
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +83,18 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         "--actions",
         required=True,
         help="Path to a JSON file containing a list of {id, description, parameters} objects.",
+    )
+
+    register = sub.add_parser(
+        "task-episode-register",
+        help="Register an agent task episode from a JSON file.",
+    )
+    register.add_argument("--agent-id", required=True)
+    register.add_argument("--task-id", required=True)
+    register.add_argument(
+        "--episode",
+        required=True,
+        help="Path to a JSON file containing an Episode object.",
     )
 
     return parser
@@ -160,8 +172,8 @@ def _cmd_train(args: argparse.Namespace) -> int:
         end_date=args.end_date,
     )
     episode_limits = Counter(episode.task_id for episode in selected_episodes)
-    runs: List[Dict[str, Any]] = []
-    skipped: List[Dict[str, str]] = []
+    runs: list[dict[str, Any]] = []
+    skipped: list[dict[str, str]] = []
     for task_id in task_ids:
         snapshot = store.get_active_policy(args.agent_id, task_id)
         if snapshot is None:
@@ -213,7 +225,7 @@ def _cmd_score(args: argparse.Namespace) -> int:
     return 0
 
 
-def _policy_payload(snapshot: PolicySnapshot) -> Dict[str, Any]:
+def _policy_payload(snapshot: PolicySnapshot) -> dict[str, Any]:
     payload = snapshot.to_dict()
     policy = SoftmaxPolicy.from_snapshot(snapshot)
     payload["action_probabilities"] = {
@@ -224,8 +236,8 @@ def _policy_payload(snapshot: PolicySnapshot) -> Dict[str, Any]:
 
 
 def _policy_difference(
-    current: PolicySnapshot, previous: Optional[PolicySnapshot]
-) -> Optional[Dict[str, Any]]:
+    current: PolicySnapshot, previous: PolicySnapshot | None
+) -> dict[str, Any] | None:
     if previous is None:
         return None
     current_payload = _policy_payload(current)
@@ -317,7 +329,41 @@ def _cmd_init_task_policy(args: argparse.Namespace) -> int:
     return 0
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def _cmd_register_task_episode(args: argparse.Namespace) -> int:
+    try:
+        with open(args.episode, "r", encoding="utf-8") as episode_file:
+            payload = json.load(episode_file)
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"Unable to read --episode file: {exc}", file=sys.stderr)
+        return 2
+    if not isinstance(payload, dict):
+        print("--episode file must contain a JSON object", file=sys.stderr)
+        return 2
+
+    payload = dict(payload)
+    for field, expected in (("agent_id", args.agent_id), ("task_id", args.task_id)):
+        actual = payload.get(field)
+        if actual is not None and actual != expected:
+            print(
+                f"Episode {field}={actual!r} does not match --{field.replace('_', '-')}={expected!r}.",
+                file=sys.stderr,
+            )
+            return 2
+        payload[field] = expected
+    payload.setdefault("id", str(uuid.uuid4()))
+
+    try:
+        episode = Episode.from_dict(payload)
+    except (KeyError, TypeError, ValueError) as exc:
+        print(f"Invalid episode definition: {exc}", file=sys.stderr)
+        return 2
+
+    get_default_store().store_episode(episode)
+    print(json.dumps(episode.to_dict(), indent=2))
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s - %(message)s")
     parser = _build_arg_parser()
     args = parser.parse_args(argv)
@@ -330,6 +376,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "score": _cmd_score,
         "task-policy": _cmd_show_task_policy,
         "task-policy-init": _cmd_init_task_policy,
+        "task-episode-register": _cmd_register_task_episode,
     }
     handler = dispatch[args.command]
     return handler(args)
