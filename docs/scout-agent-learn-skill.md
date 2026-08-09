@@ -1,6 +1,6 @@
 ---
 name: agent-learn
-description: "Use only when Scout must make a delegated decision among two or more explicit execution alternatives, such as choosing a language model, skill, automation, tool, workflow, escalation path, or Azure workload for a use case. Do not use for factual questions, ordinary chat answers, summaries, reporting, or running agent-learning scoring/training automation."
+description: "Use when Scout must make a delegated decision among two or more explicit execution alternatives, or when the user accepts, rejects, or reports the outcome of a prior agent-learn recommendation. Examples include choosing a language model, skill, automation, tool, workflow, escalation path, or Azure workload. Do not use for factual questions, ordinary chat answers, summaries, reporting, or running agent-learning scoring/training automation."
 instructions: |
   # Agent Learn: delegated decisions only
 
@@ -47,10 +47,11 @@ instructions: |
   the reusable decision may be `choose-model-for-code-agent`, with actions such
   as `use_gpt_5_6_sol` and `use_gpt_5_6_terra`.
 
-  Advice alone is not execution evidence. Create an episode only when Scout
-  executes the selected delegate, the user accepts/rejects a recommendation, or
-  another observable outcome can score the choice. Repeating the same unresolved
-  comparison five times does not create five valid decision episodes.
+  Advice alone is not trainable execution evidence. Preserve a supervised or
+  audited recommendation as pending, but complete it only when Scout executes
+  the selected delegate, the user accepts/rejects it, or another observable
+  outcome can score the choice. Repeating the same unresolved comparison five
+  times does not create five trainable decision episodes.
 
   If the gate fails, answer or execute normally. Do not initialize a policy, do
   not register an episode, and do not invoke the training loop.
@@ -144,25 +145,48 @@ instructions: |
   - `policy_id`, `policy_version`, probability, and behavior `logprob`;
   - `selected_action_feedback`: attempts, correctness rate, mean reward, recent
     result summaries, and intent/adherence/completion scores;
-  - `historical_feedback`: the same evidence for every alternative.
+  - `historical_feedback`: the same evidence for every alternative;
+  - `autonomy`: the authoritative mode, evidence criteria, execution permission,
+    feedback request, audit sample, and outcome-recording strategy.
 
   Use the feedback as execution context. In particular, avoid repeating failure
   modes named in recent result summaries, and preserve behavior associated with
   high completion/correctness scores. Execute `selected_action`; otherwise the
   recorded policy probability and feedback loop are not causally meaningful.
 
+  Never infer autonomy from a probability, logit, or answer quality. Follow the
+  returned `autonomy` object exactly:
+
+  - when `execute_without_confirmation` is `false`, the policy is supervised;
+  - when `execute_without_confirmation` is `true`, use `selected_action` without
+    routine acceptance or rejection;
+  - when `request_user_feedback` is `true`, request feedback for the reason in
+    `feedback_reason`, unless `observable_outcome_satisfies_feedback` is true
+    and execution produced an independent outcome;
+  - when `outcome_recording` is `observable_outcome`, record the independently
+    observed execution result instead of asking the user routinely.
+
   ## 5. Execute or preserve a pending recommendation
 
   When Scout can perform the chosen delegation now, execute it and evaluate the
-  user-visible result. The final response may answer a question, but evaluation
-  belongs to the delegated decision task. Assess whether the selected delegate
-  produced a correct, relevant, adherent, and complete result for the user.
+  user-visible result. Register a full episode from the observable outcome even
+  when no user feedback is requested. Set `metadata.outcome_source` to
+  `observable`, set `task_completed` from the actual result, and set
+  `correct_action_id` only when the result independently establishes the correct
+  alternative. Automatic tool success alone is not task completion.
 
-  When the action is a recommendation rather than immediate execution, preserve
-  the attempt immediately as an incomplete episode. Generate a stable episode
-  ID and register the decision fields, but omit `execution_status`,
-  `result_summary`, `metadata.correct_action_id`, and `metadata.task_completed`.
-  Those omissions keep the episode ineligible for scoring and training:
+  For a recommendation without an immediate observable outcome:
+
+  - supervised mode: preserve it as pending and ask for feedback;
+  - autonomous mode without an audit: present the recommendation without
+    routine acceptance/rejection and do not fabricate a completed episode;
+  - autonomous drift audit: preserve it as pending, present it without requiring
+    pre-approval, then ask for acceptance/rejection.
+
+  To preserve a pending attempt, generate a stable episode ID and register the
+  decision fields, but omit `execution_status`, `result_summary`,
+  `metadata.correct_action_id`, and `metadata.task_completed`. Those omissions
+  keep the episode ineligible for scoring and training:
 
   ```json
   {
@@ -191,21 +215,25 @@ instructions: |
   agent-learn task-episode-register --agent-id <agent_id> --task-id <decision_task_id> --episode ./pending-episode.json --require-decision-policy
   ```
 
-  Tell the user that feedback is pending and ask for one of:
+  When `autonomy.request_user_feedback` is true, tell the user why feedback is
+  requested and ask for one of:
 
   - `ACCEPT`, when the selected recommendation is endorsed;
   - `REJECT`, plus the correct action when known;
   - the observed execution or test result.
 
-  Five repeated recommendation prompts with no follow-up are five pending
-  attempts, not five trainable outcomes.
+  Five supervised or audited recommendation prompts with no follow-up are five
+  pending attempts, not five trainable outcomes. Autonomous non-audit
+  recommendations do not create pending feedback debt.
 
   ## 6. Complete or register the decision episode
 
   For immediate execution, build a full episode using the decision command's
   policy fields. For a pending recommendation, retrieve the incomplete record
   with `task-episodes-list --include-incomplete`, update the same episode ID,
-  and register it again. Never create a second episode for the feedback.
+  and register it again. Never create a second episode for the feedback. The SDK
+  preserves the original decision time in `metadata.decision_created_at` and
+  moves completion into the current training window.
 
   Independently determine `correct_action_id` when evidence supports one. It may
   differ from `action_id`. Do not call an action correct only because Scout
@@ -233,6 +261,7 @@ instructions: |
     "action_logprob": -0.6931471805599453,
     "metadata": {
       "feedback_status": "observed",
+      "outcome_source": "user_feedback_or_observable",
       "correct_action_id": "<independently supported action id>",
       "task_completed": true
     }
@@ -268,12 +297,13 @@ instructions: |
   2. Establish the durable store.
   3. Resolve or initialize a marked delegated-decision policy.
   4. Call `task-policy-decide` and consume its learned feedback.
-  5. Execute the returned `selected_action`, or register it as pending when it
-     is a recommendation.
-  6. Ask for acceptance, rejection, or an execution result when feedback is
-     pending.
+    5. Follow `autonomy.execute_without_confirmation`, `request_user_feedback`,
+      and `outcome_recording` exactly.
+    6. Execute `selected_action`, or preserve a supervised/audited recommendation
+      as pending when no observable outcome exists.
   7. Evaluate user-visible correctness and completion.
-  8. Complete the same episode ID with `--require-decision-policy`.
+    8. Complete the same pending ID, or register the automatic observable outcome,
+      with `--require-decision-policy`.
   9. Score and verify the completed episode for the next decision.
 
   ## Smoke-test prompt
@@ -289,9 +319,9 @@ instructions: |
   observable correctness criterion. Asking only "Sol vs Terra for my use case?"
   does not.
 
-  For a recommendation-only test such as "Which Azure workload should receive
-  and process these PubSub messages?", follow every recommendation with
-  `ACCEPT`, `REJECT; correct action is <action_id>`, or an execution result.
-  Asking the recommendation five times without those outcomes must produce five
-  pending attempts and zero trainable episodes.
+  For a supervised recommendation-only test such as "Which Azure workload
+  should receive and process these PubSub messages?", follow each recommendation
+  with `ACCEPT`, `REJECT; correct action is <action_id>`, or an execution result.
+  Once `autonomy.mode` becomes `autonomous`, stop routine feedback and respond
+  only when `request_user_feedback` samples a drift audit.
 ---

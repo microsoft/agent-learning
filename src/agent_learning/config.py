@@ -418,6 +418,72 @@ class ScoreRuntimeConfig:
 
 
 # ---------------------------------------------------------------------------
+# Decision autonomy
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class AutonomyConfig:
+    """Evidence thresholds for executing a learned decision autonomously."""
+
+    min_outcomes: int = field(
+        default_factory=lambda: _env_int("AGENT_LEARNING_AUTONOMY_MIN_OUTCOMES", 20)
+    )
+    min_correctness_lower_bound: float = field(
+        default_factory=lambda: _env_float(
+            "AGENT_LEARNING_AUTONOMY_MIN_CORRECTNESS_LOWER_BOUND", 0.90
+        )
+    )
+    min_mean_reward: float = field(
+        default_factory=lambda: _env_float(
+            "AGENT_LEARNING_AUTONOMY_MIN_MEAN_REWARD", 0.0
+        )
+    )
+    min_action_probability: float = field(
+        default_factory=lambda: _env_float(
+            "AGENT_LEARNING_AUTONOMY_MIN_ACTION_PROBABILITY", 0.60
+        )
+    )
+    min_probability_margin: float = field(
+        default_factory=lambda: _env_float(
+            "AGENT_LEARNING_AUTONOMY_MIN_PROBABILITY_MARGIN", 0.15
+        )
+    )
+    stable_snapshots: int = field(
+        default_factory=lambda: _env_int(
+            "AGENT_LEARNING_AUTONOMY_STABLE_SNAPSHOTS", 3
+        )
+    )
+    audit_rate: float = field(
+        default_factory=lambda: _env_float(
+            "AGENT_LEARNING_AUTONOMY_AUDIT_RATE", 0.10
+        )
+    )
+    wilson_z: float = field(
+        default_factory=lambda: _env_float("AGENT_LEARNING_AUTONOMY_WILSON_Z", 1.96)
+    )
+
+    def __post_init__(self) -> None:
+        if self.min_outcomes < 1:
+            raise ValueError("min_outcomes must be at least 1")
+        if self.stable_snapshots < 1:
+            raise ValueError("stable_snapshots must be at least 1")
+        for name in (
+            "min_correctness_lower_bound",
+            "min_action_probability",
+            "min_probability_margin",
+            "audit_rate",
+        ):
+            value = getattr(self, name)
+            if not 0.0 <= value <= 1.0:
+                raise ValueError(f"{name} must be between 0 and 1")
+        if not -1.0 <= self.min_mean_reward <= 1.0:
+            raise ValueError("min_mean_reward must be between -1 and 1")
+        if self.wilson_z <= 0.0:
+            raise ValueError("wilson_z must be positive")
+
+
+# ---------------------------------------------------------------------------
 # Capture / shaping
 # ---------------------------------------------------------------------------
 
@@ -508,6 +574,7 @@ class LearnerConfig:
 
 
 __all__ = [
+    "AutonomyConfig",
     "CaptureConfig",
     "CosmosConfig",
     "CredentialMode",

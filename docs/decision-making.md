@@ -124,6 +124,65 @@ Training writes a new policy snapshot. It does not alter foundation-model
 weights. The next `task-policy-decide` call loads the active snapshot and
 returns feedback from the stored executions, closing the loop.
 
+## Evidence-gated autonomy
+
+`task-policy-decide` computes an autonomy assessment for the current
+recommended action. Autonomy is granted only when every default gate passes:
+
+| Gate | Default |
+|---|---:|
+| Scored outcomes for the recommended action | At least 20 |
+| Correctness confidence | 95% Wilson lower bound at least 90% |
+| Mean aggregate reward | Greater than 0 |
+| Recommended-action probability | At least 60% |
+| Probability margin over the runner-up | At least 15 percentage points |
+| Consecutive trained snapshots with the same winner | At least 3 |
+
+The Wilson bound prevents a small perfect sample from appearing certain. For
+example, 20 correct outcomes out of 20 have a lower bound below 90%; roughly 40
+perfect independently labeled outcomes pass. Probability is policy preference,
+not calibrated correctness confidence, so probability alone never grants
+autonomy.
+
+The response's `autonomy.criteria` object reports the actual, required, and
+pass/fail value for every gate. Agents consume these authoritative fields:
+
+- `mode: supervised`: execute only within the user's existing authorization and
+  request acceptance/rejection when a recommendation has no observable result;
+- `mode: autonomous`: use the stable recommended action greedily and do not ask
+  for routine confirmation;
+- `request_user_feedback: true` with `feedback_reason: drift_audit`: execute or
+  present the autonomous action, then request feedback for the sampled audit;
+- `outcome_recording: observable_outcome`: register the actual execution result
+  instead of asking the user when correctness or completion is observable.
+
+When `observable_outcome_satisfies_feedback` is true, an independently observed
+execution result replaces a user prompt even in supervised mode. It is false for
+a sampled drift audit because that audit deliberately requests an external user
+label.
+
+The default drift-audit rate is 10% of autonomous decisions. A negative audit or
+observable execution result changes reward and correctness evidence; subsequent
+training can lower probability, break snapshot stability, or fail another gate,
+returning the policy to supervised mode.
+
+Configure the thresholds with environment variables:
+
+| Variable | Default |
+|---|---:|
+| `AGENT_LEARNING_AUTONOMY_MIN_OUTCOMES` | `20` |
+| `AGENT_LEARNING_AUTONOMY_MIN_CORRECTNESS_LOWER_BOUND` | `0.90` |
+| `AGENT_LEARNING_AUTONOMY_MIN_MEAN_REWARD` | `0.0` |
+| `AGENT_LEARNING_AUTONOMY_MIN_ACTION_PROBABILITY` | `0.60` |
+| `AGENT_LEARNING_AUTONOMY_MIN_PROBABILITY_MARGIN` | `0.15` |
+| `AGENT_LEARNING_AUTONOMY_STABLE_SNAPSHOTS` | `3` |
+| `AGENT_LEARNING_AUTONOMY_AUDIT_RATE` | `0.10` |
+| `AGENT_LEARNING_AUTONOMY_WILSON_Z` | `1.96` |
+
+Safety, compliance, financial, and destructive-operation approvals remain
+outside the learned autonomy gate. A policy preference must never override a
+deterministic approval requirement.
+
 ## CLI walkthrough
 
 ### Establish one durable store
@@ -191,8 +250,10 @@ agent-learn task-policy-decide `
 ```
 
 Sampling is the default so viable alternatives retain a chance to gather
-evidence. Add `--greedy` only when deterministic exploitation is required.
-Execute the returned `selected_action`, not a separate preference.
+evidence while a policy is supervised. Add `--greedy` only when deterministic
+supervised exploitation is required. Once all autonomy gates pass, the command
+selects the stable recommended action greedily regardless of this flag. Execute
+the returned `selected_action`, not a separate preference.
 
 ### Register independently observed evidence
 
@@ -260,7 +321,8 @@ Training ignores incomplete work and defaults to at least five completed
 episodes. `task-policy` returns the current and previous snapshots so the
 probability and logit changes remain inspectable. Call `task-policy-decide`
 again before the next execution to consume the new snapshot and historical
-feedback.
+feedback. Its `autonomy` object determines whether routine user feedback is
+required, sampled for drift, or replaced by an observable execution outcome.
 
 ## The math in one minute
 

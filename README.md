@@ -36,6 +36,13 @@ the next decision.
    probability, worse-than-usual choices lose probability, and exploration
    remains available.
 
+5. **Earn autonomy.** `task-policy-decide` stops routine confirmation only after
+   the recommended action passes every evidence gate: scored outcomes, Wilson
+   correctness confidence, positive reward, action probability, probability
+   margin, and three stable trained snapshots. Autonomous actions still record
+   observable outcomes, and a configurable sample requests user feedback to
+   detect drift.
+
 Everything runs in the existing Python process. Scoring is local by default;
 configured Azure AI evaluators remain available as an opt-in. Stores can be
 in-memory, local JSON files, or Azure Cosmos DB.
@@ -60,6 +67,10 @@ and currently recommended actions, policy version and probability, correctness
 rate, mean reward, metric scores, and recent result summaries. This makes the
 learned evidence useful during execution instead of producing a policy that is
 never consumed.
+
+The response also contains an `autonomy` block. Agents must follow
+`execute_without_confirmation`, `request_user_feedback`, and
+`outcome_recording` rather than inventing their own confidence threshold.
 
 ## Install
 

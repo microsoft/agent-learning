@@ -331,6 +331,11 @@ def test_task_policy_decide_returns_learned_feedback(monkeypatch, capsys) -> Non
     assert result["selected_action"]["id"] == "use_skill"
     assert result["selected_action"]["probability"] > 0.5
     assert result["recommended_action"]["id"] == "use_skill"
+    assert result["autonomy"]["mode"] == "supervised"
+    assert not result["autonomy"]["execute_without_confirmation"]
+    assert result["autonomy"]["request_user_feedback"]
+    assert result["autonomy"]["observable_outcome_satisfies_feedback"]
+    assert result["autonomy"]["feedback_reason"] == "autonomy_thresholds_not_met"
     feedback = result["selected_action_feedback"]
     assert feedback["attempts"] == 2
     assert feedback["correctness_rate"] == 0.5
@@ -343,6 +348,98 @@ def test_task_policy_decide_returns_learned_feedback(monkeypatch, capsys) -> Non
         item["score_breakdown"]["task_completion"]["normalized"]
         for item in feedback["recent_outcomes"]
     } == {0.0, 1.0}
+
+
+def test_task_policy_decide_uses_autonomy_and_samples_drift_audits(
+    monkeypatch, capsys
+) -> None:
+    store = InMemoryStore()
+    monkeypatch.setattr(cli, "get_default_store", lambda: store)
+    for version in range(1, 4):
+        snapshot = SoftmaxPolicy.from_actions(
+            [Action(id="winner"), Action(id="alternative")],
+            agent_id="scout",
+            task_id="choose-delegation",
+            initial_logits={"winner": 2.0, "alternative": 0.0},
+        ).snapshot()
+        snapshot.id = f"policy-{version}"
+        snapshot.version = version
+        snapshot.episodes_seen = version * 20
+        snapshot.updates_applied = version
+        snapshot.metadata = {
+            "policy_scope": "delegated_decision",
+            "decision_context": "Choose a delegate",
+        }
+        store.store_policy(snapshot)
+    for index in range(40):
+        episode = Episode(
+            id=f"autonomy-{index}",
+            agent_id="scout",
+            task_id="choose-delegation",
+            intent_summary="Choose a delegate",
+            action_id="winner",
+            expected_outcome="Use the correct delegate",
+            execution_status="completed",
+            result_summary="The outcome supported the winner",
+            metadata={"correct_action_id": "winner", "task_completed": True},
+        )
+        store.store_episode(episode)
+        store.store_reward(
+            Reward(
+                episode_id=episode.id,
+                agent_id=episode.agent_id,
+                source=RewardSource.AGGREGATE,
+                value=0.7,
+            )
+        )
+
+    monkeypatch.setenv("AGENT_LEARNING_AUTONOMY_AUDIT_RATE", "0")
+    assert (
+        cli.main(
+            [
+                "task-policy-decide",
+                "--agent-id",
+                "scout",
+                "--task-id",
+                "choose-delegation",
+                "--seed",
+                "7",
+            ]
+        )
+        == 0
+    )
+    autonomous = json.loads(capsys.readouterr().out)
+    assert autonomous["selection_mode"] == "autonomous-greedy"
+    assert autonomous["selected_action"]["id"] == "winner"
+    assert autonomous["autonomy"]["eligible"]
+    assert autonomous["autonomy"]["execute_without_confirmation"]
+    assert not autonomous["autonomy"]["request_user_feedback"]
+    assert autonomous["autonomy"]["observable_outcome_satisfies_feedback"]
+    assert autonomous["autonomy"]["feedback_reason"] == "observable_outcome"
+    assert autonomous["autonomy"]["outcome_recording"] == "observable_outcome"
+
+    monkeypatch.setenv("AGENT_LEARNING_AUTONOMY_AUDIT_RATE", "1")
+    assert (
+        cli.main(
+            [
+                "task-policy-decide",
+                "--agent-id",
+                "scout",
+                "--task-id",
+                "choose-delegation",
+                "--seed",
+                "7",
+            ]
+        )
+        == 0
+    )
+    audit = json.loads(capsys.readouterr().out)
+    assert audit["autonomy"]["eligible"]
+    assert audit["autonomy"]["execute_without_confirmation"]
+    assert audit["autonomy"]["request_user_feedback"]
+    assert not audit["autonomy"]["observable_outcome_satisfies_feedback"]
+    assert audit["autonomy"]["feedback_reason"] == "drift_audit"
+    assert audit["autonomy"]["audit"] == {"rate": 1.0, "sampled": True}
 
 
 def test_decision_only_excludes_unmarked_question_policy(monkeypatch, capsys) -> None:
@@ -471,6 +568,7 @@ def test_pending_decision_episode_can_be_completed_in_place(
     episode_path = tmp_path / "pending-decision.json"
     payload = {
         "id": "pending-decision",
+        "created_at": "2026-08-09T10:00:00+00:00",
         "policy_id": policy.id,
         "policy_version": policy.version,
         "action_id": "use_functions",
@@ -559,7 +657,11 @@ def test_pending_decision_episode_can_be_completed_in_place(
 
     assert cli.main(register) == 0
     capsys.readouterr()
-    assert store.get_episode("pending-decision", "scout").is_full
+    completed = store.get_episode("pending-decision", "scout")
+    assert completed is not None
+    assert completed.is_full
+    assert completed.created_at > "2026-08-09T10:00:00+00:00"
+    assert completed.metadata["decision_created_at"] == "2026-08-09T10:00:00+00:00"
     assert cli.main(["task-episodes-count", "scout"]) == 0
     assert capsys.readouterr().out.strip() == "1"
     assert (

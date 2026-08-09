@@ -56,6 +56,7 @@ Quick start::
 """
 
 from ._version import __version__
+from .autonomy import AutonomyAssessment, assess_autonomy, wilson_lower_bound
 from .capture import CaptureContext, EpisodeCapture, get_capture
 from .classifiers import (
     AdherenceScorer,
@@ -66,6 +67,7 @@ from .classifiers import (
     RouterClassifier,
 )
 from .config import (
+    AutonomyConfig,
     CaptureConfig,
     CosmosConfig,
     ScoreConfig,
@@ -109,6 +111,8 @@ from .types import (
 
 __all__ = [
     "Action",
+        "AutonomyAssessment",
+        "AutonomyConfig",
     "AdherenceScorer",
     "AgentSummary",
     "AgentTaskSummary",
@@ -152,9 +156,11 @@ __all__ = [
     "TrainingRun",
     "TrainingStatus",
     "__version__",
+    "assess_autonomy",
     "default_metrics",
     "evaluate_all",
     "get_capture",
     "get_default_store",
     "shape_episode_reward",
+    "wilson_lower_bound",
 ]

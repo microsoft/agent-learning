@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 from ._version import __version__
+from .autonomy import assess_autonomy
+from .config import AutonomyConfig
 from .policy.softmax_bandit import SoftmaxPolicy
 from .storage.cosmos import get_default_store
 from .training.runner import LearningRunner
@@ -45,7 +47,7 @@ def _iso_date(value: str) -> str:
 def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="agent-learn",
-        description=f"Native RL CLI for AI agents. SDK version {__version__}.",
+        description=f"Evidence-driven decision CLI for AI agents. SDK version {__version__}.",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -438,12 +440,17 @@ def _cmd_show_task_policy(args: argparse.Namespace) -> int:
         ),
         None,
     )
+    autonomy_assessment = assess_autonomy(store, snapshot)
     print(
         json.dumps(
             {
                 "current_policy": _policy_payload(snapshot),
                 "previous_policy": _policy_payload(previous) if previous else None,
                 "difference": _policy_difference(snapshot, previous),
+                "autonomy": {
+                    **autonomy_assessment.to_dict(),
+                    "mode": "autonomous" if autonomy_assessment.eligible else "supervised",
+                },
             },
             indent=2,
         )
@@ -472,7 +479,18 @@ def _cmd_decide_task_policy(args: argparse.Namespace) -> int:
     policy = SoftmaxPolicy.from_snapshot(snapshot, rng=rng)
     probabilities = policy.probabilities()
     recommended_index = max(range(len(probabilities)), key=probabilities.__getitem__)
-    if args.greedy:
+    autonomy_config = AutonomyConfig()
+    autonomy_assessment = assess_autonomy(store, snapshot, autonomy_config)
+    audit_sampled = False
+    if autonomy_assessment.eligible:
+        selected_index = recommended_index
+        selected_action = snapshot.actions[selected_index]
+        selected_probability = probabilities[selected_index]
+        logprob = math.log(max(selected_probability, 1e-12))
+        mode = "autonomous-greedy"
+        audit_rng = rng or random.Random()
+        audit_sampled = audit_rng.random() < autonomy_config.audit_rate
+    elif args.greedy:
         selected_index = recommended_index
         selected_action = snapshot.actions[selected_index]
         selected_probability = probabilities[selected_index]
@@ -492,6 +510,28 @@ def _cmd_decide_task_policy(args: argparse.Namespace) -> int:
     feedback = _decision_feedback(store, snapshot, args.history_limit)
     selected_stats = feedback["actions"][selected_action.id]
     recommendation = snapshot.actions[recommended_index]
+    if not autonomy_assessment.eligible:
+        feedback_reason = "autonomy_thresholds_not_met"
+        outcome_recording = "user_feedback_or_observable_outcome"
+    elif audit_sampled:
+        feedback_reason = "drift_audit"
+        outcome_recording = "user_feedback"
+    else:
+        feedback_reason = "observable_outcome"
+        outcome_recording = "observable_outcome"
+    autonomy_payload = {
+        **autonomy_assessment.to_dict(),
+        "mode": "autonomous" if autonomy_assessment.eligible else "supervised",
+        "execute_without_confirmation": autonomy_assessment.eligible,
+        "request_user_feedback": not autonomy_assessment.eligible or audit_sampled,
+        "observable_outcome_satisfies_feedback": not audit_sampled,
+        "feedback_reason": feedback_reason,
+        "outcome_recording": outcome_recording,
+        "audit": {
+            "rate": autonomy_config.audit_rate,
+            "sampled": audit_sampled,
+        },
+    }
     print(
         json.dumps(
             {
@@ -516,6 +556,7 @@ def _cmd_decide_task_policy(args: argparse.Namespace) -> int:
                 },
                 "selected_action_feedback": selected_stats,
                 "historical_feedback": feedback,
+                "autonomy": autonomy_payload,
             },
             indent=2,
         )
@@ -573,6 +614,7 @@ def _cmd_init_task_policy(args: argparse.Namespace) -> int:
 
 
 def _cmd_register_task_episode(args: argparse.Namespace) -> int:
+    store = get_default_store()
     try:
         with open(args.episode, "r", encoding="utf-8") as episode_file:
             payload = json.load(episode_file)
@@ -602,7 +644,7 @@ def _cmd_register_task_episode(args: argparse.Namespace) -> int:
         return 2
 
     if args.require_decision_policy:
-        policy = get_default_store().get_policy(episode.policy_id or "", args.agent_id)
+        policy = store.get_policy(episode.policy_id or "", args.agent_id)
         if not _is_decision_policy(policy) or policy.task_id != args.task_id:
             print(
                 "Episode registration requires a delegated decision policy and its policy_id.",
@@ -621,7 +663,12 @@ def _cmd_register_task_episode(args: argparse.Namespace) -> int:
             )
             return 2
 
-    get_default_store().store_episode(episode)
+    existing = store.get_episode(episode.id, args.agent_id)
+    if existing is not None and not existing.is_full and episode.is_full:
+        episode.metadata.setdefault("decision_created_at", existing.created_at)
+        episode.created_at = datetime.now(timezone.utc).isoformat()
+
+    store.store_episode(episode)
     print(json.dumps(episode.to_dict(), indent=2))
     return 0
 

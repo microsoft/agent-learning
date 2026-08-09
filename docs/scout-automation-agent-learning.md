@@ -128,10 +128,15 @@ instructions: |
   - `metrics.episodes_used >= 5`;
   - policy version and `episodes_seen` increased;
   - decision output contains `selected_action_feedback` and
-    `historical_feedback` with recent execution scores and result summaries.
+    `historical_feedback` with recent execution scores and result summaries;
+  - decision output contains `autonomy.criteria`, `mode`,
+    `execute_without_confirmation`, `request_user_feedback`, and
+    `observable_outcome_satisfies_feedback` plus `outcome_recording`.
 
   A probability change alone is not enough. The decision output must expose the
-  quality feedback that Scout will consume before the next delegated execution.
+  quality feedback and autonomy gates that Scout will consume before the next
+  delegated execution. Report the autonomy mode and unmet criteria, but never
+  override the SDK assessment in automation.
 
   ## 7. Advance only the trained task checkpoint
 

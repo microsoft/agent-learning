@@ -20,4 +20,11 @@ The SDK improves agents without LLM weight fine-tuning. There are no GPU fine-tu
 action plus historical correctness, reward, result summaries, and per-metric
 quality feedback for the agent to use on its next delegated decision.
 
+It also returns an evidence-gated autonomy assessment. Routine confirmation
+stops only after the recommended action has enough scored outcomes, a 95%
+Wilson correctness lower bound of at least 90%, positive mean reward, strong
+probability and margin, and the same winner across three trained snapshots.
+Autonomous executions continue learning from observable outcomes, while a
+configurable sample requests user feedback to detect drift.
+
 Every episode, reward, run, and deployment is captured by the configured store — in-memory or local files by default, or Azure Cosmos DB — giving you a complete lineage and audit trail of how the policy evolved over time.
