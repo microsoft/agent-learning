@@ -1,0 +1,826 @@
+\documentclass[conference]{IEEEtran}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{cite}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{array}
+\usepackage{url}
+\usepackage{hyperref}
+
+\title{Agentic Decision Making:\\
+Bounded Policy Learning for Repeatable Tasks}
+
+\author{
+\IEEEauthorblockN{Chris Tava}
+\IEEEauthorblockA{Microsoft\\
+christava@microsoft.com}}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Many agent tasks are repeated decisions rather than open-ended text
+generation: select a route, escalate a case, or recommend one action from a small approved set.
+This paper presents the Agent Learning SDK as a bounded policy layer for such tasks. The
+language model and surrounding application remain responsible for
+understanding context and executing work, while an explicit softmax
+policy selects among a finite action set. The SDK captures each
+decision episode, scores its outcome, shapes a scalar reward, applies
+an offline REINFORCE-with-baseline update, and persists a new policy
+version with episode-to-update lineage. This is bounded plasticity,
+not language-model fine-tuning and not general autonomy. We formalize
+the approach through a decision frame that declares inputs, actions,
+outcomes, utilities, constraints, and human authority. We then give a
+dataset-driven validation plan spanning low-stakes routing, emergency
+triage, approval decisions, next-best-action tasks, and governance
+tests. The plan compares the learned policy with majority, rules,
+supervised, tree-based, and prompted-LLM baselines; evaluates utility,
+critical errors, calibration, entropy, regret, subgroup performance,
+and lineage completeness; and requires locked test sets and human
+promotion gates. We also identify a current implementation boundary:
+the shipped learner updates a marginal softmax policy, whereas direct
+per-example classification requires a context-conditioned learner or
+actions that encapsulate complete decision strategies. The paper
+therefore makes no deployment-readiness or empirical superiority
+claim. Its contribution is a scoped technical thesis and a
+reproducible program for testing it.
+\end{abstract}
+
+\begin{IEEEkeywords}
+AI agents, bounded agency, contextual bandits, decision support,
+policy gradients, REINFORCE, reward shaping, utility, offline
+evaluation, governance.
+\end{IEEEkeywords}
+
+\section{Introduction}
+\label{sec:intro}
+
+Large language models can generate strong responses when prompts and
+context are well designed, but many production agent tasks terminate
+in a choice rather than a sentence. A support agent routes a request;
+a workflow chooses a tool; a care-management system recommends a next
+step; an approval system decides whether to approve, deny, request
+more information, or escalate. In these settings, linguistic
+plausibility is not the objective. The objective is a decision whose
+consequences can be observed and evaluated.
+
+The Agent Learning SDK separates the language model from that
+decision policy~\cite{agentlearningsdk2026}. The model may summarize
+evidence, extract features, or render the final response, but a small
+explicit policy chooses among a declared set of actions. Experience
+changes that policy through scored episodes and offline updates. The
+base model's weights do not change.
+
+This separation gives the system \emph{bounded plasticity}. The
+agent can improve a repeated choice, but it cannot invent a new action
+or acquire a new linguistic capability through the policy update.
+The same boundary supports governance: actions, rewards, training
+runs, and policy snapshots are inspectable artifacts. Boundedness,
+however, is not proof of safety. An unsafe action set, misspecified
+utility, biased dataset, or invalid scorer can still produce harmful
+decisions. High-impact use therefore requires domain validation and
+human authority outside the learner.
+
+This paper replaces a broad comparison with model fine-tuning with a
+narrower claim: the SDK is useful when a task has a stable,
+low-cardinality action surface and outcomes that can be scored. Its
+contributions are:
+
+\begin{enumerate}
+\item an operational account of agency as bounded plasticity plus a
+  declared action surface;
+\item a formal decision frame connecting predictions, utilities,
+  constraints, and escalation authority;
+\item a precise description of the SDK loop and its current
+  implementation boundary;
+\item a dataset-driven benchmark design with task cards, baselines,
+  locked splits, metrics, and promotion gates; and
+\item an engineering roadmap whose first milestone is a complete
+  emergency-triage benchmark, followed by a second-domain replication.
+\end{enumerate}
+
+No benchmark result is reported. The intended contribution is a
+falsifiable development and evaluation design.
+
+\section{Bounded Agency and the Decision Frame}
+\label{sec:frame}
+
+\subsection{Plasticity and empowerment}
+
+We use \emph{plasticity} to mean that experience can alter future
+behavior. We use \emph{empowerment} in the operational sense that the
+system has an action surface capable of affecting workflow outcomes.
+This usage is related to, but less formal than, information-theoretic
+empowerment~\cite{klyubin2005empowerment}. Practical agency requires
+both. A system that stores experience but cannot change its choices
+has no plasticity; a system that learns preferences but cannot take a
+meaningful action has no empowerment.
+
+The SDK bounds both properties. It updates policy weights from
+scored episodes, but it selects only from actions declared by the
+application. Table~\ref{tab:agency} translates the conceptual frame
+into engineering artifacts.
+
+\begin{table}[t]
+\centering
+\caption{Agency concepts and their SDK realization.}
+\label{tab:agency}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{@{}p{1.65cm}p{5.75cm}@{}}
+\toprule
+\textbf{Concept} & \textbf{Engineering realization} \\
+\midrule
+Plasticity & Rewards change policy parameters and therefore future action probabilities. \\
+Empowerment & The application exposes a finite set of workflow actions. \\
+Frame & A task declares inputs, actions, outcomes, utility, constraints, and authority. \\
+Lineage & Episodes, rewards, runs, and policy versions record how behavior changed. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{The decision frame}
+
+A learning task is specified by the frame
+\begin{equation}
+\mathcal{F} = (\mathcal{X},\mathcal{A},\mathcal{Y},U,\mathcal{C},\mathcal{H}),
+\label{eq:frame}
+\end{equation}
+where $\mathcal{X}$ is the information available at decision time,
+$\mathcal{A}=\{a_1,\ldots,a_K\}$ is the allowed action set,
+$\mathcal{Y}$ is the outcome or adjudicated-label space,
+$U(y,a;\omega)$ is a utility function under stakeholder profile
+$\omega$, $\mathcal{C}$ is the set of forbidden actions and safety
+constraints, and $\mathcal{H}$ defines when a human must decide.
+
+This frame is the unit of design review. It prevents an action label
+from being treated as self-explanatory and makes asymmetric costs
+explicit. It also limits what learning may change: the learner may
+change the distribution over $\mathcal{A}$, but not the action set,
+the constraints, or the human authority boundary.
+
+\subsection{Scope}
+
+The best-fit tasks share four properties: a small and stable action
+set, repeated comparable decisions, observable outcomes or credible
+labels, and enough volume to evaluate policy changes. Examples
+include routing among agents or tools, selecting retrieval strategy
+A/B/C, recommending a next action, and choosing between resolve and
+escalate. Approval disposition, site-of-care support, emergency
+triage, and financial review also have low-cardinality actions, but
+their impact makes them research and decision-support cases only
+until prospective domain validation and accountable human review are
+in place.
+
+The SDK is not a general autonomous-agent brain, a mechanism for
+creating linguistic capability, or a replacement for clinical,
+financial, legal, or organizational accountability. It also cannot
+repair an incomplete action taxonomy: if the appropriate action is
+absent, optimizing probabilities over the remaining actions cannot
+recover it.
+
+\section{The Agent Learning Loop}
+\label{sec:loop}
+
+\subsection{Policy selection}
+
+For a marginal policy, the SDK stores one logit $\theta_k$ per action:
+\begin{equation}
+\begin{aligned}
+m_\theta &= \max_j \theta_j, \\
+\pi_\theta(a=k) =
+\frac{\exp(\theta_k-m_\theta)}
+{\sum_{j=1}^{K}\exp(\theta_j-m_\theta)}.
+\end{aligned}
+\label{eq:marginal-softmax}
+\end{equation}
+All-zero initial logits produce a uniform policy. A contextual policy
+instead computes $z(x)=W\phi(x)$ and applies the same stable
+softmax:
+\begin{equation}
+\begin{aligned}
+z_k(x)&=w_k^\top\phi(x), \qquad m(x)=\max_j z_j(x),\\
+\pi_W(a=k\mid x) =
+\frac{\exp(z_k(x)-m(x))}
+{\sum_{j=1}^{K}\exp(z_j(x)-m(x))}.
+\end{aligned}
+\label{eq:contextual-softmax}
+\end{equation}
+Subtracting the maximum logit changes neither distribution because
+softmax is invariant to a common additive constant, but it prevents
+unnecessarily large exponentials.
+
+Both policies sample by inverse cumulative probability. For
+$u_i\sim\mathcal{U}[0,1)$, the captured action and behavior-policy
+log probability are
+\begin{equation}
+\begin{aligned}
+a_i&=\min\left\{k:\sum_{j=1}^{k}\pi_{\mathrm{beh}}(j\mid x_i)
+\geq u_i\right\},\\
+\ell_i&=\log\max\{\pi_{\mathrm{beh}}(a_i\mid x_i),\epsilon\},
+\qquad \epsilon=10^{-12}.
+\end{aligned}
+\label{eq:sampling}
+\end{equation}
+The probability floor is a finite-precision guard used when the log
+probability is stored; it does not redefine the ideal policy.
+
+The softmax Jacobian and score-function identity are
+\begin{equation}
+\begin{aligned}
+\frac{\partial \pi_j}{\partial z_k}
+ &=\pi_j(\mathbf{1}[j=k]-\pi_k),\\
+\frac{\partial\log\pi(a\mid x)}{\partial z_k}
+ &=\mathbf{1}[a=k]-\pi_k.
+\end{aligned}
+\label{eq:softmax-score}
+\end{equation}
+For the contextual policy, the chain rule therefore gives
+\begin{equation}
+\nabla_{w_k}\log\pi_W(a\mid x)
+=\left(\mathbf{1}[a=k]-\pi_W(k\mid x)\right)\phi(x).
+\label{eq:contextual-score}
+\end{equation}
+These identities connect the policy representation directly to the
+offline updates below.
+
+The distinction is essential. Equation~\ref{eq:marginal-softmax}
+learns one global preference over actions. It cannot assign different
+labels to two inputs. Equation~\ref{eq:contextual-softmax} is required
+when the action itself is a per-record class such as approve or deny.
+
+\subsection{Episode capture and scoring}
+
+An episode records the decision-time input, selected action, behavior
+policy version, action log probability, output, tool calls, outcome,
+and operational metadata. The action log probability permits a later
+offline update to correct for a difference between the behavior and
+target policies.
+
+Generic intent-resolution, task-adherence, and task-completion
+evaluators are useful for open-ended agent responses. LLM-based
+judges can align with human ratings, but they can also be biased or
+exploited~\cite{zheng2023judging,liu2023geval,skalse2022reward,
+pan2022reward}. A labeled decision benchmark must therefore use the
+adjudicated label and task utility as its primary reward signal.
+Generic response-quality scores may be reported separately; they
+must not substitute for decision correctness in a high-impact task.
+
+Let $u(y_i,a_i;\omega)\in[-1,1]$ be normalized task utility,
+$c_i$ indicate a safety violation, $q_i$ indicate an appropriate
+human-review action, and $s_{im}\in[0,1]$ be optional auxiliary
+scores. An asymmetric cost matrix $C_\omega$ can be converted to
+normalized utility using fixed task-card bounds:
+\begin{equation}
+u(y,a;\omega)=1-2\frac{C_\omega(y,a)-C_{\min}}
+{C_{\max}-C_{\min}}.
+\label{eq:utility-normalization}
+\end{equation}
+Thus minimum cost maps to $1$ and maximum cost maps to $-1$; the
+bounds cannot be changed after observing test results. The generic
+SDK transformation $\widetilde{s}_{im}=2s_{im}-1$ similarly maps an
+auxiliary score to $[-1,1]$. A task-aware reward is then
+\begin{equation}
+r_i = \operatorname{clip}\!\left(
+u(y_i,a_i;\omega)
+-\lambda_c c_i + \lambda_q q_i
++\sum_m w_m\widetilde{s}_{im}, -1, 1\right).
+\label{eq:reward}
+\end{equation}
+The utility profile $\omega$, penalty weights, and review criterion
+must be versioned with the reward. Replaying the same episodes under
+another utility profile then becomes an explicit comparison rather
+than an unexplained reward change.
+
+\subsection{Offline update}
+
+For a batch of $N$ episodes, REINFORCE with a baseline estimates the
+gradient from the sampled actions~\cite{williams1992simple,
+sutton2018reinforcement}. Let $p_{ik}=\pi_\theta(k\mid x_i)$,
+$A_i=r_i-b$, and let $c_\rho$ be the importance-ratio clip. The
+off-policy weight is
+\begin{equation}
+\rho_i=\min\left\{c_\rho,
+\frac{p_{i,a_i}}{\max\{\exp(\ell_i),\epsilon\}}\right\}.
+\label{eq:importance}
+\end{equation}
+When a behavior log probability is unavailable, the reference learner
+uses $\rho_i=1$. Clipping controls variance but introduces bias, so
+the benchmark also reports the importance-weight effective sample
+size
+\begin{equation}
+N_{\mathrm{eff}}=\frac{\left(\sum_i\rho_i\right)^2}
+{\sum_i\rho_i^2}.
+\label{eq:ess}
+\end{equation}
+
+For distribution $p_i$, define
+\begin{equation}
+\begin{aligned}
+H(p_i)&=-\sum_jp_{ij}\log\max\{p_{ij},\epsilon\},\\
+q_{ik}&=-\log\max\{p_{ik},\epsilon\}-H(p_i).
+\end{aligned}
+\label{eq:entropy-direction}
+\end{equation}
+The reference marginal learner computes
+\begin{equation}
+\widehat{g}_k=\frac{1}{N}\sum_{i=1}^{N}
+\left[\rho_iA_i(\mathbf{1}[a_i=k]-p_{ik})+\beta q_{ik}\right]
+\label{eq:gradient}
+\end{equation}
+and applies the bounded update
+\begin{equation}
+\theta_k\leftarrow\operatorname{clip}
+(\theta_k+\eta\widehat{g}_k,-z_{\max},z_{\max}).
+\label{eq:bounded-update}
+\end{equation}
+Here $z_{\max}>0$ is the symmetric logit bound; its reference default
+is $10$. The contextual analogue uses a symmetric weight bound
+$w_{\max}>0$, also $10$ by default.
+Here $q_{ik}$ is the implementation's entropy-balancing direction.
+For comparison, the exact Shannon-entropy derivative with respect to
+a logit is
+\begin{equation}
+\frac{\partial H(p_i)}{\partial z_{ik}}=p_{ik}q_{ik}.
+\label{eq:entropy-gradient}
+\end{equation}
+The distinction between $q_{ik}$ and $p_{ik}q_{ik}$ must be retained
+in benchmark configuration and reports rather than describing both
+as the same regularizer. The scalar baseline is updated after the
+batch by
+\begin{equation}
+\overline{r}=\frac{1}{N}\sum_{i=1}^{N}r_i,\qquad
+b\leftarrow\lambda b+(1-\lambda)\overline{r}.
+\label{eq:baseline}
+\end{equation}
+
+Applying Equation~\ref{eq:contextual-score} yields a compatible
+contextual update for row $w_k$:
+\begin{equation}
+\widehat{G}_k=\frac{1}{N}\sum_{i=1}^{N}
+\left[\rho_iA_i(\mathbf{1}[a_i=k]-p_{ik})
++\beta q_{ik}\right]\phi(x_i).
+\label{eq:contextual-update}
+\end{equation}
+The update $w_k\leftarrow\operatorname{clip}
+(w_k+\eta\widehat{G}_k,-w_{\max},w_{\max})$ is an outer-product
+policy-gradient step: the scalar action advantage changes every
+feature weight in proportion to that feature's observed value. An
+exact entropy-gradient variant replaces $q_{ik}$ with $p_{ik}q_{ik}$.
+The repository's contextual example centers each training batch with
+$b=\overline{r}$ in this gradient while retaining an EMA in the
+snapshot for continuity and reporting.
+
+\begin{algorithm}[t]
+\caption{Bounded offline policy update}
+\label{alg:update}
+\begin{algorithmic}[1]
+\REQUIRE frame $\mathcal{F}$, policy $\pi_v$, captured episodes
+\STATE Validate action ids and join each episode to its aggregate reward
+\STATE Compute current action probabilities and behavior-policy ratios
+\STATE Estimate the baseline-adjusted gradient in Equation~\ref{eq:gradient}
+\STATE Apply the bounded update and update the EMA baseline
+\STATE Persist run id, episode ids, hyperparameters, metrics, and snapshot $v+1$
+\STATE Keep $v+1$ offline until its promotion gates pass
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Lineage and implementation boundary}
+
+The reference repository persists episodes, metric results, aggregate
+rewards, training runs, and versioned policy snapshots in memory,
+local files, or Azure Cosmos DB~\cite{agentlearningsdk2026}. This
+supports reconstruction of the chain from observed episode to reward
+to logit delta. It is policy-level interpretability, not an
+explanation of the frozen model's internal reasoning.
+
+The current learner accepts the marginal softmax policy in
+Equation~\ref{eq:marginal-softmax}. The repository contains a
+contextual policy representation, but direct learner integration for
+Equation~\ref{eq:contextual-softmax} is a development requirement.
+Consequently, the benchmark has two valid modes:
+
+\begin{enumerate}
+\item \emph{strategy selection}: each action is a complete rule,
+  classifier, prompt, or routing strategy, and the marginal policy
+  learns which strategy performs best overall; or
+\item \emph{contextual decision}: each action is the predicted label,
+  and a context-conditioned learner selects a different action for
+  each input.
+\end{enumerate}
+
+Results from the first mode cannot be presented as evidence that the
+SDK performs the second.
+
+\section{Prediction, Utility, and Decision Quality}
+\label{sec:utility}
+
+Prediction quality and decision quality are related but not
+identical. Given estimated outcome probabilities $p(y\mid x)$, the
+utility-maximizing action is
+\begin{equation}
+a^*_{\omega}(x)=\arg\max_{a\in\mathcal{A}}
+\sum_{y\in\mathcal{Y}}p(y\mid x)U(y,a;\omega).
+\label{eq:expected-utility}
+\end{equation}
+Two stakeholders can use the same calibrated prediction and choose
+different actions because their utility profiles differ. Emergency
+triage makes this distinction concrete: the harm of missing an
+emergency need not equal the harm of unnecessary escalation. Recent
+triage research accordingly argues that language models in
+high-stakes settings should be evaluated as probabilistic decision
+systems with explicit utilities, not only as predictors
+\cite{highstakestriage2026}.
+
+Utility configuration is therefore a first-class benchmark artifact.
+Accuracy and macro F1 remain useful diagnostics, but neither can
+establish that a learned action policy makes the preferred trade-off.
+The benchmark must report the false-negative and false-positive costs
+that generated its scalar reward and must replay results under
+alternative preregistered profiles where stakeholder values differ.
+
+\section{Dataset-Driven Validation Program}
+\label{sec:validation}
+
+\subsection{Evaluation unit}
+
+Every experiment begins with a task card containing: the decision
+frame in Equation~\ref{eq:frame}; a dataset version and hash; feature
+availability at decision time; label provenance; train, validation,
+and locked-test split rules; slice definitions; utility profiles;
+critical errors; and promotion criteria. This prevents a benchmark
+from silently changing its action semantics or reward after results
+are observed.
+
+Supervised datasets are the starting point because they supply labels,
+baselines, and measurable error profiles before production episodes
+exist. They do not by themselves establish operational validity. In
+particular, a historical label may describe what happened rather than
+what should have been done.
+
+\subsection{Candidate datasets}
+
+Table~\ref{tab:datasets} identifies candidate sources rather than a
+preapproved benchmark suite. Each candidate still requires license,
+provenance, leakage, representativeness, and label-semantics review.
+Kaggle sources must be pinned to an exact dataset owner, version, and
+license before use.
+
+\begin{table*}[t]
+\centering
+\caption{Candidate public sources and their role in the validation program.}
+\label{tab:datasets}
+\renewcommand{\arraystretch}{1.17}
+\begin{tabular}{@{}p{3.0cm}p{4.1cm}p{5.0cm}p{3.5cm}@{}}
+\toprule
+\textbf{Decision task} & \textbf{Candidate source} & \textbf{Use} & \textbf{Principal limitation} \\
+\midrule
+Emergency triage & Microsoft triage experiment data, including the original-paper data directory~\cite{llmtriagerepo2026} & Multiclass urgency decisions and asymmetric undertriage/overtriage utility & Clinical labels and available-at-triage features must be audited \\
+Medical decision attributes & ITM-Kitware alignable decision-making scenarios~\cite{alignabledm2024} & Small-sample tests of risk aversion, fairness, and utilitarian framing & Low volume; scenario judgments are not clinical outcomes \\
+Emergency acuity & Versioned Kaggle triage candidates~\cite{kagglecatalog2026} & Structured or text multiclass classification & Dataset identity, quality, and license vary \\
+Hospital readmission & Diabetes 130-US Hospitals dataset~\cite{ucireadmission2014} & Supervised risk benchmark that can seed next-action research & A readmission label is not an intervention label \\
+Prior-authorization proxy & Data.Healthcare.gov public-use files and explicit policy rules~\cite{healthcarepuf2026} & Synthetic rule-grounded disposition tasks & Not a labeled prior-authorization corpus \\
+Credit approval or fraud review & Versioned Kaggle credit candidates~\cite{kagglecatalog2026} & Approve, deny, request-information, or review mappings & Historical labels may encode bias and are not policy authority \\
+Health-data discovery & HealthData.gov catalog~\cite{healthdatagov2026} & Source discovery for later task cards & Requires curation into a valid action task \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\subsection{Benchmark tracks}
+
+The program progresses from mechanics to impact:
+
+\begin{description}
+\item[Track A: low-stakes routing.] Validate action selection,
+capture, scoring, reward shaping, offline training, and versioning on
+support or synthetic routing tasks.
+\item[Track B: medical triage.] Test context-conditioned multiclass
+decisions with separate undertriage and overtriage measures and a
+mandatory review action.
+\item[Track C: approval decisions.] Test approve, deny,
+request-more-information, and human-review actions using credit data
+or a policy-grounded synthetic prior-authorization proxy.
+\item[Track D: next best action.] Convert risk datasets into
+intervention choices only when labels are created by a defensible rule
+or human adjudication; do not equate risk labels with optimal actions.
+\item[Track E: governance.] Exercise reproducibility, utility replay,
+policy comparison, canary logic, pinning, and rollback independently
+of predictive performance.
+\end{description}
+
+\section{Experimental Design}
+\label{sec:experiment}
+
+\subsection{Protocol}
+
+For each task card, the benchmark performs the following steps:
+
+\begin{enumerate}
+\item freeze the dataset version and create deterministic train,
+validation, and test splits, with the test set locked until tuning is
+complete;
+\item audit features for post-decision leakage and document all
+exclusions;
+\item implement majority-class, static-rule, multinomial logistic
+regression, tree-ensemble, and prompted-LLM baselines where
+appropriate;
+\item map labels and review conditions to the declared SDK actions;
+\item run either the strategy-selection or contextual-decision mode
+defined in Section~\ref{sec:loop}, recording which mode is used;
+\item generate offline episodes by sampling only from the training
+split and score them with label agreement, utility, safety penalties,
+and review bonuses;
+\item tune policies and utility-independent hyperparameters on the
+validation split over multiple fixed seeds;
+\item compare every candidate policy version with its predecessor and
+the baselines before one final locked-test evaluation;
+\item report aggregate, utility, calibration, critical-error, slice,
+and policy-change metrics with confidence intervals; and
+\item require accountable human approval before any high-impact
+policy can leave offline evaluation.
+\end{enumerate}
+
+All methods receive the same decision-time features, action taxonomy,
+split, and utility profiles. A prompted LLM may explain or classify a
+case, but its output is mapped to the same finite actions and scored by
+the same task utility.
+
+\subsection{Metrics}
+
+\begin{table}[t]
+\centering
+\caption{Core metrics and the question each answers.}
+\label{tab:metrics}
+\renewcommand{\arraystretch}{1.13}
+\begin{tabular}{@{}p{2.2cm}p{5.2cm}@{}}
+\toprule
+\textbf{Metric} & \textbf{Purpose} \\
+\midrule
+Accuracy / macro F1 & Basic performance, including minority classes \\
+Expected utility & Performance under the declared cost profile \\
+Critical-error rate & Frequency of task-card-defined unacceptable errors \\
+Review rate & Reliance on human escalation and appropriateness of review \\
+Calibration & Agreement between action confidence and observed correctness \\
+Policy entropy & Exploration and premature action collapse \\
+Importance ESS & Effective support for an off-policy estimate \\
+Regret & Utility lost relative to the best labeled action \\
+Policy shift & Magnitude of change from the incumbent policy \\
+Slice metrics & Regressions across declared demographic or operational groups \\
+Lineage completeness & Traceability from update to episodes, rewards, run, and versions \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+For a labeled test set, mean realized utility is
+\begin{equation}
+\widehat{V}_{\omega}(\pi)=\frac{1}{n}\sum_{i=1}^{n}
+U(y_i,a_i;\omega),
+\label{eq:value}
+\end{equation}
+and empirical regret against the best known action is
+\begin{equation}
+\widehat{\mathcal{R}}_{\omega}=\frac{1}{n}\sum_{i=1}^{n}
+\left[\max_{a\in\mathcal{A}}U(y_i,a;\omega)
+-U(y_i,a_i;\omega)\right].
+\label{eq:regret}
+\end{equation}
+Calibration is reported with multiclass Brier score and expected
+calibration error. For predicted class probabilities $p_{ik}$,
+\begin{equation}
+\widehat{\mathrm{BS}}=\frac{1}{n}\sum_{i=1}^{n}\sum_{k=1}^{K}
+\left(p_{ik}-\mathbf{1}[y_i=k]\right)^2.
+\label{eq:brier}
+\end{equation}
+Let $\widehat{y}_i=\arg\max_kp_{ik}$ and
+$c_i=\max_kp_{ik}$. If confidence values are partitioned into bins
+$B_1,\ldots,B_M$, then
+\begin{equation}
+\widehat{\mathrm{ECE}}=\sum_{m=1}^{M}\frac{|B_m|}{n}
+\left|\operatorname{acc}(B_m)-\operatorname{conf}(B_m)\right|.
+\label{eq:ece}
+\end{equation}
+Both metrics are accompanied by reliability plots because a scalar
+summary can hide class-specific miscalibration. Entropy is reported
+by policy version, not interpreted as quality by itself.
+
+\subsection{Supervised comparison}
+
+Multinomial logistic regression is a particularly informative
+baseline because it shares the contextual policy's linear-softmax
+representation but receives full labels. With
+$p_{ik}=\operatorname{softmax}(v_k^\top\phi_i)$, its cross-entropy
+objective and gradient are
+\begin{equation}
+\begin{aligned}
+\mathcal{L}_{\mathrm{CE}}
+&=-\frac{1}{n}\sum_{i=1}^{n}\log p_{i,y_i},\\
+\nabla_{v_k}\mathcal{L}_{\mathrm{CE}}
+&=\frac{1}{n}\sum_{i=1}^{n}
+(p_{ik}-\mathbf{1}[y_i=k])\phi_i.
+\end{aligned}
+\label{eq:logistic-baseline}
+\end{equation}
+Comparing Equation~\ref{eq:logistic-baseline} with
+Equation~\ref{eq:contextual-update} isolates the learning signal:
+the supervised baseline observes every training label, whereas the
+policy gradient uses realized utility for the sampled action. The SDK
+must therefore justify itself through utility, online-feedback, or
+governance advantages rather than merely matching a representation
+already available to supervised learning.
+
+\subsection{Statistical and reproducibility controls}
+
+Policy training is repeated over at least five fixed seeds. Paired
+bootstrap confidence intervals are computed over held-out examples
+for differences in utility and critical-error rate. Utility profiles,
+critical slices, and promotion gates are registered before the locked
+test is opened. Dataset hashes, adapter versions, random seeds,
+hyperparameters, episode ids, reward-profile ids, and policy versions
+are retained with each run. Exploratory findings are labeled as such
+and do not replace the preregistered endpoints.
+
+\section{First Milestone: Emergency Triage}
+\label{sec:triage}
+
+The first complete benchmark uses the public emergency-triage source
+in Table~\ref{tab:datasets}. The task card is:
+
+\begin{table}[t]
+\centering
+\caption{Initial emergency-triage task card.}
+\label{tab:taskcard}
+\renewcommand{\arraystretch}{1.14}
+\begin{tabular}{@{}p{1.75cm}p{5.65cm}@{}}
+\toprule
+\textbf{Field} & \textbf{Specification} \\
+\midrule
+Task & Emergency-triage disposition benchmark \\
+Inputs & Complaint, vitals, acuity features, and context available at triage time \\
+Actions & Dataset-grounded urgency classes plus human review; final mapping fixed in the card \\
+Label & Source recommendation or separately adjudicated label \\
+Utility & Severe undertriage costs more than unnecessary escalation \\
+Leakage ban & Disposition and future outcomes unavailable at decision time \\
+Gate & No increase in severe undertriage on validation or declared critical slices \\
+Oversight & Mandatory review for high-acuity and uncertain cases; research use only \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The milestone is complete only when it produces: a frozen data card
+and adapter; an explicit action-label mapping; at least two utility
+profiles; all baseline results; contextual policy results or a clear
+strategy-selection result; calibration and slice reports; and a
+lineage report reconstructing every promoted offline snapshot. It
+does not authorize clinical use. A second benchmark in credit
+approval or policy-grounded prior authorization then tests whether
+the engineering pattern generalizes beyond triage.
+
+\section{Engineering and Promotion Plan}
+\label{sec:roadmap}
+
+Table~\ref{tab:backlog} turns the validation design into an ordered
+backlog. Contextual learner integration is explicit because without
+it, mapping record labels directly to actions would test a capability
+the shipped learner does not provide.
+
+\begin{table*}[t]
+\centering
+\caption{Engineering backlog and testable definitions of done.}
+\label{tab:backlog}
+\renewcommand{\arraystretch}{1.16}
+\begin{tabular}{@{}cp{4.1cm}p{10.3cm}@{}}
+\toprule
+\textbf{Priority} & \textbf{Work item} & \textbf{Definition of done} \\
+\midrule
+P0 & Dataset adapter interface & Loads a pinned dataset, declares actions and slices, enforces a split, and emits reproducible episodes \\
+P0 & Context-conditioned learner path & Trains the contextual softmax on decision-time features and passes synthetic separability, off-policy, and serialization tests \\
+P0 & Task-specific scoring plugin & Computes label agreement, utility, critical penalties, and appropriate-review bonuses with a versioned profile \\
+P0 & Offline benchmark runner & Runs baselines and SDK learning on fixed splits and seeds without reading the locked test during tuning \\
+P0 & Policy comparison report & Shows probabilities, entropy, deltas, rewards, utility, calibration, critical errors, and slices by version \\
+P1 & Human adjudication import & Retains reviewer provenance and can annotate or supersede machine-generated scores \\
+P1 & Utility profile registry & Versions cost matrices and replays stored episodes without overwriting original rewards \\
+P1 & Promotion workflow & Supports shadow, approve, reject, canary, pin, and rollback states with an audit record \\
+P2 & Simulation harness & Generates repeated episodes with controlled noise, drift, delayed reward, and known optimal actions \\
+P2 & Packaged examples & Ships reproducible routing, triage, approval, and next-action examples with task cards \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+A policy is promotable only when it clears all of the following:
+minimum task performance; no regression in critical-error rate or a
+declared slice; calibrated confidence within task-card tolerance; a
+bounded policy shift from the incumbent; complete lineage; and human
+approval for high-impact tasks. The shift bound may be expressed as a
+task-specific maximum KL divergence or per-action probability change.
+For contextual policies, the validation-set mean shift is
+\begin{equation}
+\widehat{D}_{\mathrm{KL}}(\pi_{\mathrm{new}}\Vert\pi_{\mathrm{old}})
+=\frac{1}{n}\sum_{i=1}^{n}\sum_{k=1}^{K}
+p^{\mathrm{new}}_{ik}\log
+\frac{\max\{p^{\mathrm{new}}_{ik},\epsilon\}}
+{\max\{p^{\mathrm{old}}_{ik},\epsilon\}}.
+\label{eq:policy-shift}
+\end{equation}
+For a marginal policy, the outer average is unnecessary. This shift
+limit is a guardrail, not evidence of quality.
+
+Governance tests inject a bad reward profile, scorer outage, drifted
+slice, and degraded candidate policy. The system must keep the
+candidate in shadow, preserve capture where safe, reject or roll back
+the version, and retain the triggering evidence. Model cards and
+dataset documentation provide useful reporting structures
+\cite{mitchell2019modelcards,gebru2021datasheets}.
+
+\section{Risks and Threats to Validity}
+\label{sec:risks}
+
+\textbf{Label-to-action validity.} A predictive label is not
+automatically the correct intervention. Readmission risk, for
+example, does not identify the best care action. Synthetic action
+labels must be identified as synthetic and supported by rules or
+adjudication.
+
+\textbf{Leakage.} Post-decision disposition, length of stay, later
+claims, or resolved outcomes can make an offline classifier appear
+useful while being unavailable at runtime. Every adapter needs an
+available-at-decision-time feature audit.
+
+\textbf{Reward misspecification.} A scalar reward compresses multiple
+values and can hide unacceptable trade-offs. Reports must retain the
+underlying errors, safety events, review decisions, and utility
+components rather than publishing reward alone.
+
+\textbf{Off-policy bias.} Logged episodes may come from older or
+nonexploratory policies. Importance weighting reduces but does not
+eliminate support problems. If an action is rarely observed for a
+slice, the benchmark should report insufficient support rather than
+extrapolate.
+
+\textbf{Policy collapse and drift.} A softmax policy may concentrate
+prematurely on a majority action or adapt to a changing label base
+rate. Entropy, action probabilities, slices, and temporal drift must
+be monitored together.
+
+\textbf{External validity.} Public retrospective data do not prove
+prospective clinical, financial, or operational benefit. Passing an
+offline benchmark supports continued research; it does not support
+autonomous deployment.
+
+\textbf{Human review is an action, not a disclaimer.} A review option
+needs capacity, service-level expectations, and measured outcomes. A
+policy that sends every case to review may be safe in one sense but
+operationally useless; both appropriateness and review rate must be
+reported.
+
+\section{Discussion}
+\label{sec:discussion}
+
+The SDK's value does not depend on algorithmic novelty. A softmax
+policy and REINFORCE baseline are intentionally simple. The central
+engineering proposition is that a small explicit decision layer can
+be easier to measure, inspect, version, and reverse than an implicit
+choice buried in prompts or model weights. Whether that proposition
+produces useful outcomes depends on the quality of the decision
+frame, data, utility, scorer, and governance process.
+
+This framing also clarifies the relationship to fine-tuning. The SDK
+does not compete with a weight update when the task requires a new
+language, specialized knowledge absent from context, or a new
+generative behavior. A fine-tuned or prompted model can instead be
+one component of an action strategy selected by the bounded policy.
+The two mechanisms operate at different layers.
+
+Finally, classification benchmarks are necessary but not sufficient.
+They offer cheap, reproducible falsification: a contextual policy that
+cannot beat a majority baseline, maintain critical slices, or remain
+calibrated should not advance. Success must then be tested under
+delayed outcomes, distribution shift, imperfect human labels, and
+real workflow constraints.
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+Agent Learning gives an agent bounded, governable plasticity over an
+explicit action surface. It is most appropriate when the desired
+output is a repeated low-cardinality decision whose outcomes can be
+scored. The SDK implements the core marginal loop: softmax selection,
+episode capture, reward shaping, offline REINFORCE-with-baseline, and
+versioned lineage. Direct dataset classification additionally
+requires context-conditioned learning, which the development plan
+treats as a P0 capability rather than an assumed result.
+
+The proposed validation program starts with supervised data, strong
+baselines, task-aware utility, locked tests, slice analysis, and
+policy-change reports. Its first milestone is an emergency-triage
+benchmark with explicit undertriage costs and mandatory human
+oversight, followed by a second-domain replication. The result sought
+is not a generally autonomous agent or a claim of high-stakes
+readiness. It is a measured, reversible decision layer whose behavior
+can improve only inside a frame that people define and govern.
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}
