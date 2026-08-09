@@ -4,6 +4,10 @@ Native reinforcement learning SDK for AI agents. An in-process
 Learner optimizes a small, interpretable TaskPolicy over discrete agent choices (e.g., "take action A", "take action B", "take action C") using on-device evaluation scores as the reward
 signal by default.
 
+TaskPolicies represent reusable **decisions among executable alternatives**.
+They are not conversation logs: factual questions, ordinary chat, reporting,
+and agent-learning automation are not policy tasks.
+
 <p align="center">
    <img src="images/agent-learning-loop.svg" alt="Animated TaskPolicy Score Learner loop: TaskPolicy chooses a task action, Score evaluates the episode, and Learner updates TaskPolicy" width="960" style="max-width:100%; height:auto;" />
 </p>
@@ -30,6 +34,11 @@ The SDK improves agents without LLM weight fine-tuning. There are no GPU fine-tu
    or local files by default, with Azure Cosmos DB optional.
 
    <img src="images/cc970c453583c982.png" alt="Policy quality improves with every batch of episodes" width="360" style="max-width:100%; height:auto;" />
+
+Before the next delegated execution, `task-policy-decide` samples the learned
+policy and returns the selected action together with correctness rate, mean
+reward, recent result summaries, and intent/adherence/completion scores. Agents
+consume that feedback rather than training a policy that is never used.
 
 Every episode, reward, run, and deployment is captured by the
 configured store — in-memory or local files by default, or Azure Cosmos DB —
@@ -71,12 +80,14 @@ The `agent-learn` CLI provides the current task-learning-loop operations:
 
 ```text
 agent-learn list
-agent-learn tasks-list <agent_id>
+agent-learn --version
+agent-learn tasks-list <agent_id> [--decision-only]
 agent-learn task-episodes-count <agent_id> [--task-id <task_id>] [--start-date <date>] [--end-date <date>]
 agent-learn task-episodes-list <agent_id> [--task-id <task_id>] [--limit <1-500>] [--include-incomplete] [--start-date <date>] [--end-date <date>]
-agent-learn task-policy-init --agent-id <agent_id> --task-id <task_id> --actions ./actions.json
-agent-learn task-episode-register --agent-id <agent_id> --task-id <task_id> --episode ./episode.json
+agent-learn task-policy-init --agent-id <agent_id> --task-id <task_id> --decision-context <context> --actions ./actions.json
+agent-learn task-policy-decide --agent-id <agent_id> --task-id <task_id> [--history-limit <1-500>] [--greedy] [--seed <integer>]
+agent-learn task-episode-register --agent-id <agent_id> --task-id <task_id> --episode ./episode.json [--require-decision-policy]
 agent-learn score --agent-id <agent_id> [--task-id <task_id>] [--limit <1-500>]
-agent-learn train --agent-id <agent_id> [--task-id <task_id>] [--limit <1-500>] [--min-episodes <1-500>] [--start-date <date>] [--end-date <date>] [--skip-scoring]
+agent-learn train --agent-id <agent_id> [--task-id <task_id>] [--decision-only] [--limit <1-500>] [--min-episodes <1-500>] [--start-date <date>] [--end-date <date>] [--skip-scoring]
 agent-learn task-policy --agent-id <agent_id> --task-id <task_id>
 ```

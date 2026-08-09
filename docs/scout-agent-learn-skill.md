@@ -1,280 +1,189 @@
 ---
 name: agent-learn
-description: "MANDATORY for every Scout user request, including first-time questions, one-off chat answers, and tool calls: use agent-learn to resolve or initialize a task policy, choose an action, register the full episode with chosen and correct action IDs, and persist its scores and reward. Do not wait for the user to mention learning or repeat a task."
+description: "Use only when Scout must make a delegated decision among two or more explicit execution alternatives, such as choosing a language model, skill, automation, tool, workflow, escalation path, or Azure workload for a use case. Do not use for factual questions, ordinary chat answers, summaries, reporting, or running agent-learning scoring/training automation."
 instructions: |
-  # Agent Learn
+  # Agent Learn: delegated decisions only
 
-  Apply this workflow to every Scout user request, including the first occurrence
-  of a task. It is cross-cutting capture behavior: do not wait for a task to be
-  repeated, and do not skip it because another skill or tool answered the request.
+  Agent learning governs Scout's decisions about how work should be delegated or
+  executed. It does not govern every user message.
 
-  ## 0. Establish one durable store
+  ## 0. Eligibility gate
 
-  Before invoking any `agent-learn` command, establish the same absolute store
-  used by the training automation. On Windows PowerShell, run these assignments
-  in every shell process that invokes the CLI:
+  Create or use a TaskPolicy only when all of these are true:
+
+  1. Scout must choose among at least two explicit executable alternatives.
+  2. The alternatives are stable enough to reuse across future requests.
+  3. The selected alternative can affect user-visible quality, correctness,
+     latency, cost, safety, or completion.
+  4. The outcome can later identify whether the choice was correct or useful.
+
+  Eligible examples:
+
+  - choose an Azure workload for a stated use case;
+  - choose a language model versus a specialized skill or automation;
+  - choose which tool, workflow, retrieval strategy, or escalation path to use;
+  - choose among implementation approaches that Scout can actually execute.
+
+  Ineligible examples:
+
+  - answer a factual or informational question;
+  - report model context-window size;
+  - summarize, explain, or retrieve information when no delegation choice exists;
+  - run agent-learning scoring, review, or training automation;
+  - create a policy with only one possible action.
+
+  A user question may provide context for an eligible delegation decision, but
+  the TaskPolicy represents the decision, not the question. For example,
+  `choose-answer-delegate` may choose between a live-data skill and a language
+  model; do not create `answer-context-window-question` as a policy.
+
+  If the gate fails, answer or execute normally. Do not initialize a policy, do
+  not register an episode, and do not invoke the training loop.
+
+  ## 1. Establish the durable store
+
+  Use the same absolute store as decision training:
 
   ```powershell
   $env:AGENT_LEARNING_STORE_BACKEND = "local"
   $env:AGENT_LEARNING_LOCAL_STORE_DIR = Join-Path $env:LOCALAPPDATA "agent-learning\store"
   ```
 
-  The resolved default Windows location is
-  `%LOCALAPPDATA%\agent-learning\store`. Use that exact absolute directory for
-  capture, review, and training. Do not use a path relative to Scout's working
-  directory. Do not use the default in-memory backend: each CLI invocation is a
-  separate process, so in-memory policies and episodes disappear before the next
-  command.
+  Do not use the in-memory backend across CLI processes.
 
-  For a persistent configuration inherited by newly started Scout processes,
-  configure the user environment once and restart Scout:
+  ## 2. Resolve a reusable delegated decision
 
-  ```powershell
-  [Environment]::SetEnvironmentVariable("AGENT_LEARNING_STORE_BACKEND", "local", "User")
-  [Environment]::SetEnvironmentVariable("AGENT_LEARNING_LOCAL_STORE_DIR", (Join-Path $env:LOCALAPPDATA "agent-learning\store"), "User")
-  ```
-
-  ## 1. Treat every task as a learning opportunity
-
-  Register the first attempt and every repeated attempt as an episode under the
-  same stable task ID. A successful answer from another tool is still an episode.
-  For example, a question answered with `Get Context Usage` must be captured after
-  the tool result is returned.
-
-  ## 2. Resolve the task
-
-  Before starting a task, determine its intent, action class, and expected completion criteria. Resolve its task ID by semantically comparing the requested work with the task names returned by:
+  Discover only marked decision policies:
 
   ```shell
-  agent-learn tasks-list <agent_id>
+  agent-learn tasks-list <agent_id> --decision-only
   ```
 
-  Do not invent a task ID when multiple task names are plausible. Ask for clarification.
+  Reuse a task ID only when its `decision_context` and action space match the
+  present decision. Otherwise create a stable decision ID such as
+  `choose-azure-workload` or `choose-answer-delegate`.
 
-  For every task, store or emit:
+  ## 3. Initialize a new decision policy
 
-  - `agent_id`
-  - `task_id`
-  - `task_name`
-  - `intent_summary`
-  - `action_type`
-  - `action_id`
-  - `action_name`
-  - `target`
-  - `input_summary`
-  - `expected_outcome`
-  - `execution_status`
-  - `result_summary`
-
-  The SDK learns from discrete action choices and scored episodes, not raw logs.
-
-  ## 3. Initialize a task policy when no policy exists
-
-  Inspect the active policy first:
-
-  ```shell
-  agent-learn task-policy --agent-id <agent_id> --task-id <task_id>
-  ```
-
-  If the task has no active policy and no prior episode history, initialize it before recording the first episode:
-
-  ```shell
-  agent-learn task-policy-init --agent-id <agent_id> --task-id <task_id> --actions ./actions.json
-  ```
-
-  The actions file must contain a non-empty JSON list. Every action needs a stable,
-  unique `id`; its optional `description` and `parameters` explain how Scout should
-  execute it:
+  Define at least two non-empty, unique action IDs. Each action must map to a real
+  underlying model, skill, automation, tool, workload, or execution strategy.
 
   ```json
   [
     {
-      "id": "answer_in_chat",
-      "description": "Answer directly in chat",
-      "parameters": {}
+      "id": "use_live_context_skill",
+      "description": "Delegate to the live context-usage skill",
+      "parameters": {"delegate": "get-context-usage"}
     },
     {
-      "id": "create_animation",
-      "description": "Create and return an animation",
-      "parameters": {}
+      "id": "use_language_model",
+      "description": "Delegate to the selected language model",
+      "parameters": {"delegate": "language-model"}
     }
   ]
   ```
 
-  If the action space is missing or incomplete, do not guess. Ask for the missing
-  definitions or create a minimal list from confirmed choices. Treat an
-  already-active policy as authoritative; `task-policy-init` rejects a second
-  initialization for the same agent task.
+  Initialize once:
 
-  The store may retain unlimited policy snapshot JSON files. Only one policy is active at a time for a given `(agent_id, task_id)`.
+  ```shell
+  agent-learn task-policy-init --agent-id <agent_id> --task-id <decision_task_id> --decision-context "<stable delegated choice>" --actions ./actions.json
+  ```
 
-  ## 4. Choose and record the policy action
+  The CLI marks the policy as `delegated_decision`. Existing unmarked question or
+  automation policies are legacy records and are excluded by `--decision-only`.
 
-  Read `current_policy` from `task-policy`. Choose only an `action_id` listed in
-  `current_policy.actions`, using the current action probabilities. The CLI exposes
-  the snapshot and probabilities; an in-process agent can reconstruct
-  `SoftmaxPolicy` from that snapshot and call `choose()`.
+  ## 4. Consume learned policy feedback before execution
 
-  Before execution, retain these decision fields for the episode:
+  This step is mandatory for every eligible decision. Do not merely inspect
+  `task-policy` and then choose independently.
 
-  - `policy_id`: `current_policy.id`;
-  - `policy_version`: `current_policy.version`;
-  - `action_id`: the action actually selected;
-  - `action_logprob`: the selected action's behavior log probability, when the
-    sampler provides it.
+  ```shell
+  agent-learn task-policy-decide --agent-id <agent_id> --task-id <decision_task_id>
+  ```
 
-  Do not choose an action outside the initialized action space.
+  By default, the command samples from the learned probabilities to preserve a
+  small amount of exploration. Use `--greedy` only when deterministic exploitation
+  is required.
 
-  ## 5. Capture intent before execution
+  The output provides:
 
-  Before Scout performs the action, start an episode through the SDK capture flow and record:
+  - `selected_action`: the action Scout must execute for this attempt;
+  - `recommended_action`: the current highest-probability action;
+  - `policy_id`, `policy_version`, probability, and behavior `logprob`;
+  - `selected_action_feedback`: attempts, correctness rate, mean reward, recent
+    result summaries, and intent/adherence/completion scores;
+  - `historical_feedback`: the same evidence for every alternative.
 
-  - what the user asked Scout to do;
-  - what Scout believes the task means;
-  - the task ID and task name;
-  - the action Scout selected;
-  - what successful completion looks like.
+  Use the feedback as execution context. In particular, avoid repeating failure
+  modes named in recent result summaries, and preserve behavior associated with
+  high completion/correctness scores. Execute `selected_action`; otherwise the
+  recorded policy probability and feedback loop are not causally meaningful.
 
-  For a zero-shot task or a task with no prior history, write an explicit intent summary. Do not record a vague placeholder.
+  ## 5. Execute and evaluate user-visible quality
 
-  ## 6. Record completion and the correct action
+  Perform the chosen delegation. The final response may answer a question, but
+  evaluation belongs to the delegated decision task. Assess whether the selected
+  delegate produced a correct, relevant, adherent, and complete result for the
+  user.
 
-  After Scout completes or attempts the task, capture:
+  After execution, independently determine `correct_action_id` when evidence
+  supports one. It may differ from `action_id`. Do not call an action correct only
+  because Scout selected it. Record `task_completed` from the user-visible
+  outcome, not merely from successful tool invocation.
 
-  - what actually happened;
-  - whether execution completed, failed, or was partial;
-  - whether the result adhered to the user's request;
-  - what follow-up remains.
+  ## 6. Register the decision episode
 
-  After the outcome can be evaluated, determine the independently confirmed
-  `correct_action_id`. It must be one of the initialized policy action IDs. Store
-  it as `metadata.correct_action_id`, and store whether the selected action
-  completed the task as `metadata.task_completed`.
-
-  `action_id` and `correct_action_id` have different meanings:
-
-  - `action_id` is what the policy selected and executed;
-  - `correct_action_id` is the action that the rubric, evaluator, or observed
-    outcome says should have been selected.
-
-  They may differ on an unsuccessful episode. Do not label the selected action as
-  correct merely because Scout chose it. If correctness cannot be established,
-  omit `correct_action_id` rather than guessing and explain the uncertainty in
-  `result_summary`.
-
-  ## 7. Register the full episode
-
-  After execution, write one JSON object such as `./episode.json`. The CLI supplies
-  `agent_id`, `task_id`, and a generated episode `id` when they are omitted:
+  Build a full episode using the decision command's policy fields:
 
   ```json
   {
     "agent_name": "Scout",
-    "task_name": "<stable task name>",
-    "user_input": "<original user request>",
-    "assistant_output": "<final response or execution output>",
-    "intent_summary": "<specific intent>",
-    "action_type": "chat",
-    "action_id": "<selected policy action id>",
-    "action_name": "<selected action description>",
-    "target": "<task target>",
-    "input_summary": "<concise input summary>",
-    "expected_outcome": "<observable completion criteria>",
+    "task_name": "<delegated decision name>",
+    "user_input": "<user request that created the decision context>",
+    "assistant_output": "<final user-visible result>",
+    "intent_summary": "<what the user needed>",
+    "action_type": "delegation",
+    "action_id": "<selected_action.id>",
+    "action_name": "<selected_action.description>",
+    "target": "<decision target>",
+    "input_summary": "<decision context>",
+    "expected_outcome": "<observable correctness and completion criteria>",
     "execution_status": "completed",
-    "result_summary": "<what happened and what remains>",
-    "policy_id": "<current policy id>",
+    "result_summary": "<quality, correctness, failures, and remaining work>",
+    "policy_id": "<policy_id from task-policy-decide>",
     "policy_version": 0,
     "action_logprob": -0.6931471805599453,
     "metadata": {
-      "correct_action_id": "<confirmed correct action id>",
+      "correct_action_id": "<independently supported action id>",
       "task_completed": true
     }
   }
   ```
 
-  For failed or partial work, use the corresponding `execution_status` and an
-  accurate `result_summary`; do not omit the outcome. Register the episode through
-  the same durable store used for policy inspection:
+  Register only against a marked decision policy:
 
   ```shell
-  agent-learn task-episode-register --agent-id <agent_id> --task-id <task_id> --episode ./episode.json
+  agent-learn task-episode-register --agent-id <agent_id> --task-id <decision_task_id> --episode ./episode.json --require-decision-policy
   ```
 
-  If `agent_id` or `task_id` is present in the JSON, it must exactly match the
-  command arguments. Keep the returned episode `id` for verification.
-
-  ## 8. Score and verify the registered episode
-
-  `task-episode-register` stores the episode but does not score it. Persist
-  missing metric results and aggregate rewards with the zero-configuration local
-  stdlib scorer:
+  ## 7. Score and verify execution feedback
 
   ```shell
-  agent-learn score --agent-id <agent_id> --task-id <task_id> --limit 100
+  agent-learn score --agent-id <agent_id> --task-id <decision_task_id> --limit 100
+  agent-learn task-episodes-list <agent_id> --task-id <decision_task_id> --limit 100
   ```
 
-  No scoring endpoint or environment variable is required. A configured Azure
-  scorer remains an optional override. The score command skips episodes that
-  already have usable rewards and automatically replaces prior evaluations whose
-  metrics were all skipped.
-  Inspect the registered task afterward:
-
-  ```shell
-  agent-learn task-episodes-list <agent_id> --task-id <task_id> --limit 100
-  ```
-
-  Confirm that the episode contains its intent, chosen action, completion result,
-  score breakdown, and non-null `final_reward`. An episode without an aggregate
-  reward cannot contribute to a policy update when training uses
-  `--skip-scoring`.
-
-  Evaluate and persist all three core scoring signals:
-
-  - intent resolution;
-  - task adherence;
-  - task completion.
-
-  Persist the score breakdown and final aggregate reward with the episode.
-
-  ## 9. Do not use the SDK as a black box
-
-  Every episode must include a clear task description, action choice, expected outcome, and post-execution result summary. If any value is missing, pause and obtain the missing context before persisting a full episode.
-
-  A policy snapshot is useful for debugging action preferences. It does not replace explicit intent capture or completion scoring.
-
-  ## 10. Use a consistent action taxonomy
-
-  Use only these `action_type` values for Scout tasks:
-
-  - `chat`
-  - `animation`
-
-  Record each action result as JSON-compatible fields:
-
-  ```json
-  {
-    "action_id": "<selected policy action id>",
-    "action_name": "<action name>",
-    "target": "<target>",
-    "input_summary": "<input summary>",
-    "execution_status": "<status>",
-    "result_summary": "<result summary>"
-  }
-  ```
+  Confirm that the episode has three completed core metrics and a non-null final
+  reward. The next `task-policy-decide` call will return this execution feedback.
 
   ## Execution sequence
 
-    1. Establish the absolute durable local store in the command process.
-    2. Determine intent and resolve the agent task.
-    3. Inspect or initialize the task policy.
-    4. Choose an action from that policy's action space and retain the policy
-     decision metadata.
-    5. Capture intent and expected outcome before execution.
-    6. Execute the selected action, including any other skill or tool calls.
-    7. Record completion and independently determine `correct_action_id` when the
-     outcome supports one.
-    8. Register the full episode with `task-episode-register` before replying is
-      considered complete.
-    9. Score intent resolution, task adherence, and task completion.
-    10. Verify that the episode has a final aggregate reward.
+  1. Apply the eligibility gate; stop if no delegated decision exists.
+  2. Establish the durable store.
+  3. Resolve or initialize a marked delegated-decision policy.
+  4. Call `task-policy-decide` and consume its learned feedback.
+  5. Execute the returned `selected_action` through the underlying delegate.
+  6. Evaluate user-visible correctness and completion.
+  7. Register with `--require-decision-policy`.
+  8. Score and verify the episode for the next decision.
 ---

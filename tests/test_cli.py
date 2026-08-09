@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_learning import cli
+from agent_learning import __version__, cli
 from agent_learning.policy import SoftmaxPolicy
 from agent_learning.storage import InMemoryStore
 from agent_learning.types import (
@@ -33,6 +33,14 @@ def _full_episode() -> Episode:
         execution_status="completed",
         result_summary="answered correctly",
     )
+
+
+def test_help_and_version_print_sdk_version(capsys) -> None:
+    assert f"SDK version {__version__}" in cli._build_arg_parser().format_help()
+    with pytest.raises(SystemExit) as exit_info:
+        cli.main(["--version"])
+    assert exit_info.value.code == 0
+    assert capsys.readouterr().out.strip() == f"agent-learn {__version__}"
 
 
 def test_discovery_and_full_episode_count(monkeypatch, capsys) -> None:
@@ -134,7 +142,12 @@ def test_task_policy_init_and_inspection(monkeypatch, capsys, tmp_path: Path) ->
     monkeypatch.setattr(cli, "get_default_store", lambda: store)
     actions_path = tmp_path / "actions.json"
     actions_path.write_text(
-        json.dumps([{"id": "respond", "description": "Respond directly"}]),
+        json.dumps(
+            [
+                {"id": "respond", "description": "Respond directly"},
+                {"id": "delegate", "description": "Delegate the response"},
+            ]
+        ),
         encoding="utf-8",
     )
 
@@ -146,6 +159,8 @@ def test_task_policy_init_and_inspection(monkeypatch, capsys, tmp_path: Path) ->
                 "agent-1",
                 "--task-id",
                 "chat",
+                "--decision-context",
+                "Choose how the agent should respond to a chat request",
                 "--actions",
                 str(actions_path),
             ]
@@ -154,6 +169,10 @@ def test_task_policy_init_and_inspection(monkeypatch, capsys, tmp_path: Path) ->
     )
     initialized = json.loads(capsys.readouterr().out)
     assert initialized["task_id"] == "chat"
+    assert initialized["metadata"] == {
+        "policy_scope": "delegated_decision",
+        "decision_context": "Choose how the agent should respond to a chat request",
+    }
 
     assert (
         cli.main(
@@ -164,6 +183,33 @@ def test_task_policy_init_and_inspection(monkeypatch, capsys, tmp_path: Path) ->
     inspected = json.loads(capsys.readouterr().out)
     assert inspected["current_policy"]["task_id"] == "chat"
     assert inspected["previous_policy"] is None
+
+
+def test_task_policy_init_requires_two_unique_decision_actions(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    store = InMemoryStore()
+    monkeypatch.setattr(cli, "get_default_store", lambda: store)
+    actions_path = tmp_path / "actions.json"
+    actions_path.write_text(json.dumps([{"id": "only"}]), encoding="utf-8")
+
+    result = cli.main(
+        [
+            "task-policy-init",
+            "--agent-id",
+            "scout",
+            "--task-id",
+            "not-a-decision",
+            "--decision-context",
+            "There is only one action",
+            "--actions",
+            str(actions_path),
+        ]
+    )
+
+    assert result == 2
+    assert "at least two" in capsys.readouterr().err
+    assert store.get_active_policy("scout", "not-a-decision") is None
 
 
 def test_task_episode_register_persists_full_episode(
@@ -207,6 +253,199 @@ def test_task_episode_register_persists_full_episode(
     assert episode.intent_summary == "assess a patient with a sore throat"
     assert episode.execution_status == "completed"
     assert episode.is_full
+
+
+def test_task_policy_decide_returns_learned_feedback(monkeypatch, capsys) -> None:
+    store = InMemoryStore()
+    monkeypatch.setattr(cli, "get_default_store", lambda: store)
+    policy = SoftmaxPolicy.from_actions(
+        [Action(id="use_skill"), Action(id="use_model")],
+        agent_id="scout",
+        task_id="choose-delegation",
+        initial_logits={"use_skill": 1.0, "use_model": 0.0},
+    )
+    snapshot = policy.snapshot()
+    snapshot.metadata = {
+        "policy_scope": "delegated_decision",
+        "decision_context": "Choose whether to delegate to a skill or language model",
+    }
+    store.store_policy(snapshot)
+    outcomes = [
+        ("correct", "use_skill", 0.8),
+        ("incorrect", "use_model", -0.3),
+    ]
+    for label, correct_action_id, reward_value in outcomes:
+        episode = Episode(
+            id=label,
+            agent_id="scout",
+            task_id="choose-delegation",
+            policy_id=snapshot.id,
+            action_id="use_skill",
+            execution_status="completed",
+            result_summary=label,
+            metadata={"correct_action_id": correct_action_id},
+        )
+        store.store_episode(episode)
+        store.store_metric_results(
+            episode.id,
+            episode.agent_id,
+            [
+                MetricResult(
+                    metric=MetricName.TASK_COMPLETION,
+                    score=1.0 if label == "correct" else 0.0,
+                    normalized=1.0 if label == "correct" else 0.0,
+                    status="completed",
+                    reason=label,
+                )
+            ],
+        )
+        store.store_reward(
+            Reward(
+                episode_id=episode.id,
+                agent_id=episode.agent_id,
+                source=RewardSource.AGGREGATE,
+                value=reward_value,
+            )
+        )
+
+    assert (
+        cli.main(
+            [
+                "task-policy-decide",
+                "--agent-id",
+                "scout",
+                "--task-id",
+                "choose-delegation",
+                "--greedy",
+            ]
+        )
+        == 0
+    )
+    result = json.loads(capsys.readouterr().out)
+
+    assert result["selected_action"]["id"] == "use_skill"
+    assert result["selected_action"]["probability"] > 0.5
+    assert result["recommended_action"]["id"] == "use_skill"
+    feedback = result["selected_action_feedback"]
+    assert feedback["attempts"] == 2
+    assert feedback["correctness_rate"] == 0.5
+    assert feedback["mean_reward"] == pytest.approx(0.25)
+    assert {item["was_correct"] for item in feedback["recent_outcomes"]} == {
+        True,
+        False,
+    }
+    assert {
+        item["score_breakdown"]["task_completion"]["normalized"]
+        for item in feedback["recent_outcomes"]
+    } == {0.0, 1.0}
+
+
+def test_decision_only_excludes_unmarked_question_policy(monkeypatch, capsys) -> None:
+    store = InMemoryStore()
+    monkeypatch.setattr(cli, "get_default_store", lambda: store)
+    question = SoftmaxPolicy.from_actions(
+        [Action(id="answer")], agent_id="scout", task_id="answer-question"
+    ).snapshot()
+    decision = SoftmaxPolicy.from_actions(
+        [Action(id="delegate")], agent_id="scout", task_id="choose-delegation"
+    ).snapshot()
+    decision.metadata = {
+        "policy_scope": "delegated_decision",
+        "decision_context": "Choose a delegate",
+    }
+    store.store_policy(question)
+    store.store_policy(decision)
+
+    assert cli.main(["tasks-list", "scout", "--decision-only"]) == 0
+    assert json.loads(capsys.readouterr().out) == [
+        {"id": "choose-delegation", "name": "choose-delegation"}
+    ]
+    assert (
+        cli.main(
+            [
+                "train",
+                "--agent-id",
+                "scout",
+                "--task-id",
+                "answer-question",
+                "--decision-only",
+            ]
+        )
+        == 2
+    )
+    result = json.loads(capsys.readouterr().out)
+    assert result["skipped"] == [
+        {"task_id": "answer-question", "reason": "not a delegated decision policy"}
+    ]
+
+
+def test_decision_episode_registration_requires_marked_policy(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    store = InMemoryStore()
+    monkeypatch.setattr(cli, "get_default_store", lambda: store)
+    policy = SoftmaxPolicy.from_actions(
+        [Action(id="delegate")], agent_id="scout", task_id="choose-delegation"
+    ).snapshot()
+    policy.metadata = {
+        "policy_scope": "delegated_decision",
+        "decision_context": "Choose a delegate",
+    }
+    store.store_policy(policy)
+    episode_path = tmp_path / "decision.json"
+    episode_path.write_text(
+        json.dumps(
+            {
+                "policy_id": policy.id,
+                "policy_version": policy.version,
+                "action_id": "delegate",
+                "intent_summary": "Choose a delegate",
+                "expected_outcome": "Use the best delegate",
+                "execution_status": "completed",
+                "result_summary": "Delegation completed",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert (
+        cli.main(
+            [
+                "task-episode-register",
+                "--agent-id",
+                "scout",
+                "--task-id",
+                "choose-delegation",
+                "--episode",
+                str(episode_path),
+                "--require-decision-policy",
+            ]
+        )
+        == 0
+    )
+    registered = json.loads(capsys.readouterr().out)
+    assert store.get_episode(registered["id"], "scout") is not None
+
+    invalid_path = tmp_path / "invalid-decision.json"
+    invalid_payload = json.loads(episode_path.read_text(encoding="utf-8"))
+    invalid_payload["metadata"] = {"correct_action_id": "outside-policy"}
+    invalid_path.write_text(json.dumps(invalid_payload), encoding="utf-8")
+    assert (
+        cli.main(
+            [
+                "task-episode-register",
+                "--agent-id",
+                "scout",
+                "--task-id",
+                "choose-delegation",
+                "--episode",
+                str(invalid_path),
+                "--require-decision-policy",
+            ]
+        )
+        == 2
+    )
+    assert "correct_action_id" in capsys.readouterr().err
 
 
 def test_score_uses_local_stdlib_without_configuration(

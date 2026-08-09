@@ -108,6 +108,8 @@ def main() -> int:
             AGENT_ID,
             "--task-id",
             TASK_ID,
+            "--decision-context",
+            "Choose the next triage action for a patient with a sore throat",
             "--actions",
             str(actions_path),
         ],
@@ -189,6 +191,7 @@ def main() -> int:
                     TASK_ID,
                     "--episode",
                     str(episode_path),
+                    "--require-decision-policy",
                 ],
                 env,
             )

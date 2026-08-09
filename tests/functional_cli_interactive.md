@@ -36,6 +36,7 @@ The interactive script initializes the policy with:
 agent-learn task-policy-init \
   --agent-id triage-nurse \
   --task-id sore-throat-triage \
+  --decision-context "Choose the next triage action for a patient with a sore throat" \
   --actions examples/next_best_action_patient_care_actions.json
 ```
 
@@ -62,6 +63,10 @@ For each episode, the script:
 5. Reads the episode back from the shared local store.
 6. Writes three deterministic metric results and the shaped reward through the
    SDK.
+
+Episode registration uses `--require-decision-policy`, so the CLI rejects an
+episode whose policy, task, or selected action does not match the initialized
+delegated decision.
 
 With seed 7, the 32 choices are:
 

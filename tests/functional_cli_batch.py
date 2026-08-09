@@ -168,11 +168,34 @@ def main() -> int:
     if preferred_action != correct_action_id:
         raise AssertionError(f"The trained policy did not prefer {correct_action_id!r}")
 
+    decision = _run_cli(
+        [
+            "task-policy-decide",
+            "--agent-id",
+            AGENT_ID,
+            "--task-id",
+            TASK_ID,
+            "--greedy",
+        ],
+        env,
+    )
+    if decision["selected_action"]["id"] != correct_action_id:
+        raise AssertionError("The next execution did not consume the learned preference")
+    feedback = decision["selected_action_feedback"]
+    if feedback["attempts"] == 0 or feedback["correctness_rate"] is None:
+        raise AssertionError("The next execution did not receive correctness feedback")
+    if feedback["mean_reward"] is None:
+        raise AssertionError("The next execution did not receive reward feedback")
+    if not any(outcome["score_breakdown"] for outcome in feedback["recent_outcomes"]):
+        raise AssertionError("The next execution did not receive metric feedback")
+
     print("\nBatch functional test passed")
     print(f"Store: {store_dir}")
     print(f"Episodes trained: {episodes_used}")
     print(f"Policy version: {previous['version']} -> {current['version']}")
     print(f"Correct-action probability: {before:.4f} -> {after:.4f}")
+    print(f"Next selected action: {decision['selected_action']['id']}")
+    print(f"Historical correctness: {feedback['correctness_rate']:.4f}")
     return 0
 
 

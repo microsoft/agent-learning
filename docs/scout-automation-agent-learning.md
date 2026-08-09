@@ -1,187 +1,139 @@
 ---
-title: Scout agent-learning automation
-description: Discover each Scout agent task, verify its active policy and scored episodes, run a bounded task-scoped training batch, and confirm that a new policy snapshot was activated
+title: Scout delegated-decision policy training
+description: Train only Scout policies explicitly marked as delegated decisions; exclude questions, reporting tasks, ordinary chat, and the agent-learning automation itself
 author: Microsoft
-ms.date: 2026-08-08
+ms.date: 2026-08-09
 ms.topic: how-to
 instructions: |
-  # Scout agent-learning automation
+  # Scout delegated-decision policy training
 
-  Run this automation periodically to improve repeated tasks from their recorded
-  outcomes. Set an automation-owned minimum number of new full episodes before
-  training; the recommended default is `5`. The CLI accepts a batch limit from `1`
-  through `500` but does not enforce the automation's minimum threshold.
+  This automation trains reusable delegated decisions only. It is control-plane
+  maintenance, not a user decision task.
 
-  ## 0. Establish the shared durable store
+  **Never create a TaskPolicy or episode for this automation run. Never train a
+  `run-agent-learning-automation` policy.** Its status report is operational
+  output and must not pass through the agent-learning capture skill.
 
-  Before invoking any `agent-learn` command, establish the same absolute store
-  used by episode capture. On Windows PowerShell, run these assignments in every
-  shell process that invokes the CLI:
+  ## 0. Establish the shared store and cutoff
 
   ```powershell
   $env:AGENT_LEARNING_STORE_BACKEND = "local"
   $env:AGENT_LEARNING_LOCAL_STORE_DIR = Join-Path $env:LOCALAPPDATA "agent-learning\store"
   ```
 
-  The resolved default Windows location is
-  `%LOCALAPPDATA%\agent-learning\store`. Never substitute a path relative to the
-  automation's working directory. The environment variables and absolute path
-  must be identical across capture, review, and training processes.
+  Choose one fixed UTC `end_date` before inspecting policies. Read and update the
+  task-local checkpoint file only after verified successful training.
 
-  ## 1. Discover agents
+  ## 1. Discover decision policies only
 
   ```shell
   agent-learn list
+  agent-learn tasks-list <agent_id> --decision-only
   ```
 
-    The command returns the `id` and `name` of each agent. Run the remaining steps once for each returned agent.
+  The second command is authoritative. It returns only policies whose metadata
+  has `policy_scope: delegated_decision`.
 
-    If the command returns `[]`, stop. Do not report that training succeeded and do
-    not advance checkpoints. Diagnose capture first:
+  Do not fall back to unfiltered `tasks-list`. In particular, ignore legacy or
+  accidental policies for:
 
-    1. Confirm the skill and automation resolve the same absolute
-      `AGENT_LEARNING_LOCAL_STORE_DIR`.
-    2. Confirm `AGENT_LEARNING_STORE_BACKEND` is `local`, not the default `memory`.
-    3. Confirm the live Scout skill was invoked for the preceding request and ran
-      `task-policy-init` or `task-episode-register`.
-    4. Confirm the store contains `policies/` or `episodes/` JSON files.
+  - factual questions and informational queries;
+  - model context-window reporting;
+  - ordinary chat, summaries, or status reports;
+  - `run-agent-learning-automation`;
+  - scoring, review, or training operations.
 
-    Training only consumes existing records; it cannot reconstruct a user request
-    that the capture skill never registered.
+  If no decision policies are returned, report that there are no delegated
+  decision policies to train. Do not create one and do not write a checkpoint.
 
-  ## 2. Discover the agent's tasks
+  ## 2. Verify policy intent
 
-  ```shell
-  agent-learn tasks-list <agent_id>
-  ```
-
-  Policies belong to an agent task. Run the remaining steps separately for every
-  returned task ID. Task-scoped runs make the episode limit and resulting policy
-  update unambiguous.
-
-  ## 3. Verify the active task policy
+  For each returned task:
 
   ```shell
   agent-learn task-policy --agent-id <agent_id> --task-id <task_id>
   ```
 
-  Continue only when `current_policy` exists and its action list is non-empty. If
-  the command reports no active policy, skip the task with reason
-  `no active policy`; episode-capture setup must initialize it with
-  `task-policy-init` before automation can train it.
+  Confirm `current_policy.metadata.policy_scope` is `delegated_decision`,
+  `decision_context` describes a real reusable choice, and at least two actions
+  map to executable delegates or strategies. Skip anything else.
 
-  ## 4. Select and count new full episodes
+  ## 3. Count the exact task-local window
 
-  Read the checkpoint for the current `(agent_id, task_id)` only. Choose one
-  fixed `end_date` before inspecting any task. Then ask the CLI for the exact
-  window that `train` will consume:
+  Read this task's checkpoint only. Omit `--start-date` when none exists:
 
   ```shell
   agent-learn task-episodes-count <agent_id> --task-id <task_id> --start-date <checkpoint_end_date> --end-date <end_date>
-  ```
-
-  Omit `--start-date` when that task has no checkpoint. The returned number is
-  the authoritative eligible count. Continue only when it meets the configured
-  minimum.
-
-  Never calculate `total episodes - current_policy.episodes_seen`.
-  `episodes_seen` counts training usages, not unique episodes, so retraining or
-  rescoring a batch can make it larger than the number of stored records. Never
-  reuse one task's checkpoint as another task's `start_date`. Keep task-local
-  `start_date`, count, and result variables through the whole loop.
-
-  After successful training, advance only that task's checkpoint to the fixed
-  cutoff. Use ISO 8601 timestamps for all date filters.
-
-  ## 5. Inspect the selected episodes
-
-  ```shell
   agent-learn task-episodes-list <agent_id> --task-id <task_id> --limit 500 --start-date <checkpoint_end_date> --end-date <end_date>
   ```
 
-  Omit `--start-date` for a task without a checkpoint. The list length must equal
-  the windowed count when the count is at most `500`. If they differ, stop and do
-  not train or advance the checkpoint.
+  The count and list length must agree when the count is at most `500`.
 
-  Before training, print and compare the episodes. Review:
+  Never calculate `total episodes - current_policy.episodes_seen`.
+  `episodes_seen` counts training usages, not unique records. Never reuse another
+  task's checkpoint.
 
-  - differences in intent handling;
-  - the recorded intent summary;
-  - the chosen `action_id` and `metadata.correct_action_id`;
-  - the intent resolution, task adherence, and task completion score breakdown;
-  - the final aggregate reward;
-  - the execution status and result summary;
-  - differences in task completion quality.
+  ## 4. Verify usable execution feedback
 
-  Compare repeated episodes for the same task. Repetition is the learning signal: recorded outcomes should make recurring tasks more reliable as their policies are updated.
+  Require at least five selected episodes. Every episode must:
 
-  ## 6. Ensure the selected episodes have rewards
+  - reference this delegated decision policy and one of its actions;
+  - contain user-visible execution results;
+  - contain three completed core metrics;
+  - contain a non-null aggregate reward;
+  - include `metadata.correct_action_id` when correctness is independently known.
 
-  `task-episode-register` persists episodes but does not score them. The CLI uses
-  on-device stdlib scoring by default with no endpoint or environment variables.
-  If any selected episode has `final_reward: null`, `final_reward: 0.0` backed
-  only by skipped metrics, or fewer than three completed core metrics, either let
-  `train` score it or score the task explicitly first:
+  Rescore incomplete evaluations locally when needed:
 
   ```shell
   agent-learn score --agent-id <agent_id> --task-id <task_id> --limit 500
   ```
 
-  Re-list the episodes and verify that every episode intended for learning has
-  completed intent-resolution, task-adherence, and task-completion metrics plus
-  a non-null aggregate reward. A configured Azure scorer is optional.
-
-  ## 7. Train one task policy
-
-  The complete command contract is:
+  ## 5. Train with CLI-side eligibility enforcement
 
   ```shell
-  agent-learn train --agent-id <agent_id> [--task-id <task_id>] [--limit <1-500>] [--min-episodes <1-500>] [--start-date <date>] [--end-date <date>] [--skip-scoring]
+  agent-learn train --agent-id <agent_id> --task-id <task_id> --decision-only --limit 500 --min-episodes 5 --start-date <checkpoint_end_date> --end-date <end_date> --skip-scoring
   ```
 
-  For periodic automation, prefer a task-scoped, checkpointed invocation:
+  Omit `--start-date` for a task with no checkpoint. `--decision-only` prevents
+  accidental question or automation policies from training. `--min-episodes 5`
+  prevents an undersized update even if orchestration counted incorrectly.
 
-  ```shell
-  agent-learn train --agent-id <agent_id> --task-id <task_id> --limit 500 --min-episodes 5 --start-date <checkpoint_end_date> --end-date <end_date>
-  ```
+  ## 6. Verify usefulness for the next execution
 
-  Omit `--start-date` when the task has no checkpoint. `--min-episodes 5`
-  independently prevents the CLI from updating a policy when the selected window
-  is smaller than the threshold, even if the automation counted incorrectly.
-
-  By default, `train` locally scores selected episodes that do not yet have a
-  usable reward and then updates the active policy. Add `--skip-scoring` only
-  when every selected episode already has three completed core metrics and a
-  persisted aggregate reward:
-
-  ```shell
-  agent-learn train --agent-id <agent_id> --task-id <task_id> --limit 500 --min-episodes 5 --start-date <checkpoint_end_date> --end-date <end_date> --skip-scoring
-  ```
-
-  Without `--task-id`, the CLI selects one agent-wide batch up to `--limit` and
-  distributes those selected episodes across tasks. That is supported, but a busy
-  task can consume most of the shared limit; task-scoped automation is more
-  predictable.
-
-  Inspect the JSON result. A successful update appears in `runs`. A task appears
-  in `skipped` when it has no active policy or no episodes in the selected batch.
-  The command exits with code `2` when no task policy was trained. Do not advance
-  the checkpoint unless the expected task has a successful run and
-  `metrics.episodes_used` is greater than zero.
-
-  ## 8. Inspect the updated task policy
-
-  For every task returned by `tasks-list`, run:
+  Inspect the new policy:
 
   ```shell
   agent-learn task-policy --agent-id <agent_id> --task-id <task_id>
+  agent-learn task-policy-decide --agent-id <agent_id> --task-id <task_id> --greedy
   ```
 
-  The output includes the active policy, the previous snapshot, and their
-  differences. Verify that the policy version increased, `episodes_seen` advanced,
-  and the action logits or probabilities changed in a direction supported by the
-  recorded rewards. Only after these checks should the automation persist its new
-  episode checkpoint.
+  Require all of the following before advancing the checkpoint:
 
-  The store can retain any number of policy snapshot JSON files, but exactly one policy is active for each agent task. Use policy snapshots for learning-loop debugging. They do not replace explicit intent capture or intent resolution, task adherence, and task completion scoring.
+  - a successful run for the expected task;
+  - `metrics.episodes_used >= 5`;
+  - policy version and `episodes_seen` increased;
+  - decision output contains `selected_action_feedback` and
+    `historical_feedback` with recent execution scores and result summaries.
+
+  A probability change alone is not enough. The decision output must expose the
+  quality feedback that Scout will consume before the next delegated execution.
+
+  ## 7. Advance only the trained task checkpoint
+
+  Persist the fixed `end_date`, run ID, policy ID/version, and episodes used for
+  this `(agent_id, task_id)` only. Do not advance checkpoints for skipped tasks.
+
+  ## Execution sequence
+
+  1. Establish the store and fixed cutoff.
+  2. Discover with `tasks-list --decision-only`.
+  3. Verify decision metadata and action space.
+  4. Count/list the exact task-local checkpoint window.
+  5. Verify or repair execution scores.
+  6. Train with `--decision-only --min-episodes 5`.
+  7. Verify policy update and next-execution feedback.
+  8. Advance only that decision task's checkpoint.
+  9. Return the operational report without capturing this automation as an
+     agent-learning episode.
 ---
