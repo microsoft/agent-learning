@@ -83,6 +83,10 @@ instructions: |
   - contain a non-null aggregate reward;
   - include `metadata.correct_action_id` when correctness is independently known.
 
+  Exclude unresolved comparisons and unexecuted recommendations. Repeating a
+  prompt is not evidence by itself; each episode must represent an executed
+  delegate, explicit user acceptance/rejection, or another observable outcome.
+
   Rescore incomplete evaluations locally when needed:
 
   ```shell

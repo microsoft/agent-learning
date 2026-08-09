@@ -21,6 +21,8 @@ instructions: |
 
   - choose an Azure workload for a stated use case;
   - choose a language model versus a specialized skill or automation;
+  - recommend one of two named models or workloads when the concrete use case,
+    optimization priority, and success criteria are known;
   - choose which tool, workflow, retrieval strategy, or escalation path to use;
   - choose among implementation approaches that Scout can actually execute.
 
@@ -36,6 +38,19 @@ instructions: |
   the TaskPolicy represents the decision, not the question. For example,
   `choose-answer-delegate` may choose between a live-data skill and a language
   model; do not create `answer-context-window-question` as a policy.
+
+  A comparison such as "Should I use GPT-5.6 Sol or Terra for my use case?" is
+  not yet a reusable decision when the use case and priority are absent. Ask for
+  the workload plus the primary optimization target (for example correctness,
+  latency, cost, long-context synthesis, or tool-use reliability). Do not infer
+  an "apparent use case" and train on that guess. Once the context is supplied,
+  the reusable decision may be `choose-model-for-code-agent`, with actions such
+  as `use_gpt_5_6_sol` and `use_gpt_5_6_terra`.
+
+  Advice alone is not execution evidence. Create an episode only when Scout
+  executes the selected delegate, the user accepts/rejects a recommendation, or
+  another observable outcome can score the choice. Repeating the same unresolved
+  comparison five times does not create five valid decision episodes.
 
   If the gate fails, answer or execute normally. Do not initialize a policy, do
   not register an episode, and do not invoke the training loop.
@@ -126,6 +141,11 @@ instructions: |
   delegate produced a correct, relevant, adherent, and complete result for the
   user.
 
+  If the action is a recommendation rather than immediate delegation, record an
+  episode only after user acceptance/rejection or another independently observable
+  result. Until then, the recommendation is pending feedback and must not be
+  labeled correct merely because Scout produced it.
+
   After execution, independently determine `correct_action_id` when evidence
   supports one. It may differ from `action_id`. Do not call an action correct only
   because Scout selected it. Record `task_completed` from the user-visible
@@ -186,4 +206,17 @@ instructions: |
   6. Evaluate user-visible correctness and completion.
   7. Register with `--require-decision-policy`.
   8. Score and verify the episode for the next decision.
+
+  ## Smoke-test prompt
+
+  Use a complete request such as:
+
+  > For editing a large Python repository with repeated tool calls, prioritize
+  > correctness and tool-use reliability over latency. Choose GPT-5.6 Sol or
+  > GPT-5.6 Terra, use the selected model to review this change, and treat whether
+  > the review finds the seeded defect as the correctness outcome.
+
+  This supplies alternatives, reusable context, an executed delegate, and an
+  observable correctness criterion. Asking only "Sol vs Terra for my use case?"
+  does not.
 ---
