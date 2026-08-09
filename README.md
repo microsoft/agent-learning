@@ -13,7 +13,7 @@ user-visible outcome, scores the evidence, and applies a small CPU update to
 the next decision.
 
 <p align="center">
-   <img src="images/agent-decision-making.svg" alt="Animated agentic decision loop: choose a bounded action, execute it, score the observed outcome, and improve the next decision" width="960" style="max-width:100%; height:auto;" />
+   <img src="images/agent-decision-making.svg" alt="Animated agentic decision loop: choose, execute, score, improve, and earn autonomy only after all evidence gates pass" width="960" style="max-width:100%; height:auto;" />
 </p>
 
 ## The decision loop
@@ -22,9 +22,10 @@ the next decision.
    least two actions the agent can actually execute. A TaskPolicy owns the
    probability distribution for that `(agent_id, task_id)` pair.
 
-2. **Choose and execute.** `task-policy-decide` samples an action from the
-   active softmax policy and returns learned feedback from earlier attempts.
-   The agent uses that feedback and executes the selected action.
+2. **Choose and execute.** `task-policy-decide` samples from the active softmax
+   policy while supervised, then uses the stable winner greedily after autonomy
+   is earned. The agent consumes learned feedback and executes the selected
+   action.
 
 3. **Observe and score.** A completed episode preserves the decision context,
    selected action, output, result summary, latency, and independently
@@ -163,6 +164,23 @@ interactive capture scenario first, followed by the offline batch update:
 ```powershell
 python tests/functional_cli_interactive.py
 python tests/functional_cli_batch.py
+```
+
+## Visualizing autonomy
+
+The animated SVG above shows the full five-stage loop. The retained
+[learning-loop SVG](images/agent-learning-loop.svg) keeps the compact
+TaskPolicy → Score → Learner view and places the evidence gate on its return
+path.
+
+Render the decision animation with Manim:
+
+```powershell
+.\animiations\run_animation.ps1 `
+   -Script decision_making_animation.py `
+   -Scene AgentDecisionMaking `
+   -Quality h `
+   -Preview
 ```
 
 ## Usage

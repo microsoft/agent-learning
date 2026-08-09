@@ -25,7 +25,7 @@ is a separate decision layer whose action set, evidence, probabilities, and
 history can be inspected.
 
 <p align="center">
-  <img src="../images/agent-decision-making.svg" alt="Agentic decision loop: choose, execute, score, and improve" width="960" style="max-width:100%; height:auto;" />
+  <img src="../images/agent-decision-making.svg" alt="Agentic decision loop: choose, execute, score, improve, and pass an evidence gate before autonomous execution" width="960" style="max-width:100%; height:auto;" />
 </p>
 
 ## Start with a decision, not a conversation
@@ -182,6 +182,11 @@ Configure the thresholds with environment variables:
 Safety, compliance, financial, and destructive-operation approvals remain
 outside the learned autonomy gate. A policy preference must never override a
 deterministic approval requirement.
+
+The visual represents autonomy as a fifth stage after policy improvement. Its
+return path remains active in autonomous mode: every observable outcome is
+scored, 10% of decisions request a user drift audit by default, and failing
+evidence can return the next decision to supervised mode.
 
 ## CLI walkthrough
 

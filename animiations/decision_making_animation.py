@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Animate an explicit agent decision improving from measured outcomes.
+"""Animate an explicit agent decision earning autonomy from measured outcomes.
 
 The scene uses a small softmax policy and a REINFORCE-with-baseline update to
-show the product workflow: choose, execute, score, and improve. The foundation
-model is never trained.
+show the product workflow: choose, execute, score, improve, and pass an
+evidence gate. The foundation model is never trained.
 
 Usage:
     manim -pql decision_making_animation.py AgentDecisionMaking
@@ -104,7 +104,7 @@ class DecisionSim:
 
 
 class AgentDecisionMaking(Scene):
-    """Four-act explainer for agentic decision making with feedback."""
+    """Five-act explainer for agentic decision making with autonomy."""
 
     def construct(self) -> None:
         self.camera.background_color = BG
@@ -119,6 +119,7 @@ class AgentDecisionMaking(Scene):
         self._execute()
         self._score()
         self._improve()
+        self._autonomy()
         self._closing()
 
     def _stage_header(self, number: str, title: str, subtitle: str, color: str) -> VGroup:
@@ -612,10 +613,190 @@ class AgentDecisionMaking(Scene):
         self.wait(1.2)
         self._clear()
 
+    def _autonomy(self) -> None:
+        header = self._stage_header(
+            "05",
+            "Earn autonomy",
+            "routine confirmation stops only after every evidence gate passes",
+            BLUE,
+        )
+        self.play(FadeIn(header), run_time=0.45)
+
+        evidence_note = Text(
+            "Representative mature policy after repeated scored batches",
+            font=SANS,
+            font_size=17,
+            color=MUTED,
+        ).move_to([-3.0, 2.15, 0])
+        self.play(FadeIn(evidence_note), run_time=0.4)
+
+        outcomes = 40
+        correct = 40
+        z_value = 1.96
+        proportion = correct / outcomes
+        z_squared = z_value * z_value
+        denominator = 1.0 + z_squared / outcomes
+        center = proportion + z_squared / (2.0 * outcomes)
+        spread = z_value * math.sqrt(
+            proportion * (1.0 - proportion) / outcomes
+            + z_squared / (4.0 * outcomes * outcomes)
+        )
+        wilson_lower = (center - spread) / denominator
+
+        criteria = [
+            ("Scored outcomes", f"{outcomes}  /  20"),
+            ("Wilson lower bound", f"{wilson_lower * 100:.1f}%  /  90%"),
+            ("Mean reward", "+0.70  >  0"),
+            ("Winner probability", "82%  /  60%"),
+            ("Probability margin", "+73 pts  /  +15"),
+            ("Stable winner", "3  /  3 snapshots"),
+        ]
+        cards = VGroup()
+        for index, (label, value) in enumerate(criteria):
+            column = index % 2
+            row = index // 2
+            center_x = -5.55 + column * 3.35
+            center_y = 1.35 - row * 1.15
+            card = RoundedRectangle(
+                width=3.05,
+                height=0.92,
+                corner_radius=0.1,
+                stroke_color=GREEN,
+                stroke_width=1.8,
+                fill_color=GREEN,
+                fill_opacity=0.07,
+            ).move_to([center_x, center_y, 0])
+            status = Text(
+                "PASS",
+                font=MONO,
+                font_size=13,
+                color=GREEN,
+                weight=BOLD,
+            ).move_to([center_x - 1.12, center_y + 0.22, 0])
+            name = Text(
+                label,
+                font=SANS,
+                font_size=15,
+                color=WHITE_SOFT,
+            ).move_to([center_x + 0.15, center_y + 0.22, 0])
+            measurement = Text(
+                value,
+                font=MONO,
+                font_size=16,
+                color=WHITE,
+                weight=BOLD,
+            ).move_to([center_x, center_y - 0.2, 0])
+            cards.add(VGroup(card, status, name, measurement))
+
+        for card in cards:
+            self.play(FadeIn(card, shift=UP * 0.08), run_time=0.25)
+
+        supervised = RoundedRectangle(
+            width=3.9,
+            height=1.15,
+            corner_radius=0.12,
+            stroke_color=MUTED,
+            stroke_width=2,
+            fill_color=PANEL,
+            fill_opacity=1.0,
+        ).move_to([4.25, 1.2, 0])
+        supervised_title = Text(
+            "SUPERVISED",
+            font=SANS,
+            font_size=18,
+            color=MUTED,
+            weight=BOLD,
+        ).move_to([4.25, 1.45, 0])
+        supervised_detail = Text(
+            "ask or observe until all gates pass",
+            font=SANS,
+            font_size=15,
+            color=WHITE_SOFT,
+        ).move_to([4.25, 1.02, 0])
+        self.play(
+            FadeIn(VGroup(supervised, supervised_title, supervised_detail)),
+            run_time=0.45,
+        )
+
+        gate_arrow = Arrow(
+            [4.25, 0.55, 0],
+            [4.25, 0.05, 0],
+            buff=0,
+            color=BLUE,
+            stroke_width=3.5,
+        )
+        gate_label = Text(
+            "all six pass",
+            font=MONO,
+            font_size=14,
+            color=BLUE,
+        ).next_to(gate_arrow, RIGHT, buff=0.14)
+        self.play(GrowArrow(gate_arrow), FadeIn(gate_label), run_time=0.45)
+
+        autonomous = RoundedRectangle(
+            width=4.25,
+            height=1.55,
+            corner_radius=0.14,
+            stroke_color=GREEN,
+            stroke_width=2.8,
+            fill_color=GREEN,
+            fill_opacity=0.1,
+        ).move_to([4.25, -0.85, 0])
+        autonomous_title = Text(
+            "AUTONOMOUS",
+            font=SANS,
+            font_size=23,
+            color=GREEN,
+            weight=BOLD,
+        ).move_to([4.25, -0.45, 0])
+        autonomous_action = Text(
+            "greedy winner · no routine confirmation",
+            font=SANS,
+            font_size=15,
+            color=WHITE,
+        ).move_to([4.25, -0.88, 0])
+        autonomous_monitoring = Text(
+            "observe every outcome · request 10% drift audits",
+            font=SANS,
+            font_size=14,
+            color=WHITE_SOFT,
+        ).move_to([4.25, -1.25, 0])
+        self.play(
+            FadeIn(
+                VGroup(
+                    autonomous,
+                    autonomous_title,
+                    autonomous_action,
+                    autonomous_monitoring,
+                ),
+                shift=UP * 0.12,
+            ),
+            run_time=0.65,
+        )
+
+        drift = RoundedRectangle(
+            width=11.0,
+            height=0.78,
+            corner_radius=0.12,
+            stroke_color=ORANGE,
+            stroke_width=1.8,
+            fill_color=ORANGE,
+            fill_opacity=0.06,
+        ).move_to([0, -2.65, 0])
+        drift_text = Text(
+            "Negative observable outcomes or audits can revoke autonomy on the next decision.",
+            font=SANS,
+            font_size=18,
+            color=WHITE_SOFT,
+        ).move_to(drift)
+        self.play(FadeIn(VGroup(drift, drift_text), shift=UP * 0.1), run_time=0.55)
+        self.wait(1.5)
+        self._clear()
+
     def _closing(self) -> None:
         def stage_card(number: str, name: str, detail: str, color: str) -> VGroup:
             box = RoundedRectangle(
-                width=2.6,
+                width=2.25,
                 height=1.45,
                 corner_radius=0.14,
                 stroke_color=color,
@@ -624,14 +805,14 @@ class AgentDecisionMaking(Scene):
                 fill_opacity=0.08,
             )
             number_text = Text(number, font=MONO, font_size=14, color=color, weight=BOLD)
-            name_text = Text(name, font=SANS, font_size=24, color=WHITE, weight=BOLD)
-            detail_text = Text(detail, font=SANS, font_size=14, color=MUTED)
+            name_text = Text(name, font=SANS, font_size=21, color=WHITE, weight=BOLD)
+            detail_text = Text(detail, font=SANS, font_size=13, color=MUTED)
             content = VGroup(number_text, name_text, detail_text).arrange(DOWN, buff=0.12)
             content.move_to(box)
             return VGroup(box, content)
 
         title = Text(
-            "Make the next decision better",
+            "Better decisions. Earned autonomy.",
             font=SANS,
             font_size=38,
             color=WHITE,
@@ -642,7 +823,8 @@ class AgentDecisionMaking(Scene):
             stage_card("02", "Execute", "attributable result", GREEN),
             stage_card("03", "Score", "measured outcome", YELLOW),
             stage_card("04", "Improve", "new snapshot", ORANGE),
-        ).arrange(RIGHT, buff=0.55).move_to(UP * 0.55)
+            stage_card("05", "Gate", "earn autonomy", BLUE),
+        ).arrange(RIGHT, buff=0.34).move_to(UP * 0.55)
 
         self.play(FadeIn(title), run_time=0.45)
         for card in cards:
@@ -657,20 +839,20 @@ class AgentDecisionMaking(Scene):
                     color=MUTED,
                     stroke_width=3,
                 )
-                for index in range(3)
+                for index in range(4)
             ]
         )
         self.play(*[GrowArrow(arrow) for arrow in arrows], run_time=0.6)
 
         feedback = CurvedArrow(
-            cards[3].get_bottom() + DOWN * 0.08,
+            cards[4].get_bottom() + DOWN * 0.08,
             cards[0].get_bottom() + DOWN * 0.08,
             angle=-TAU / 7,
             color=GREEN,
             stroke_width=3.5,
         )
         feedback_label = Text(
-            "evidence improves the next choice",
+            "observable outcomes + sampled audits",
             font=SANS,
             font_size=17,
             color=GREEN,
@@ -678,9 +860,9 @@ class AgentDecisionMaking(Scene):
         self.play(Create(feedback), FadeIn(feedback_label), run_time=0.7)
 
         tagline = Text(
-            "No model fine-tuning. No GPU jobs. Small, inspectable policy updates.",
+            "Observe every outcome. Audit for drift. Revoke autonomy when evidence changes.",
             font=SANS,
-            font_size=23,
+            font_size=21,
             color=WHITE_SOFT,
             weight=BOLD,
         ).move_to(DOWN * 2.65)

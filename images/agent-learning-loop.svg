@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 330" role="img" aria-labelledby="title description">
-  <title id="title">The Agent Learning Loop</title>
-  <desc id="description">An animated loop showing TaskPolicy choosing an action, Score evaluating an episode, and Learner updating the task-policy.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 390" role="img" aria-labelledby="title description">
+  <title id="title">The Agent Learning and Autonomy Loop</title>
+  <desc id="description">An animated loop showing TaskPolicy choosing an action, Score evaluating an episode, Learner updating the task-policy, and an evidence gate controlling supervised or autonomous execution.</desc>
   <style>
     .stage {
       opacity: 0.48;
@@ -33,6 +33,7 @@
     .policy-bars rect { animation: policy-bars 3s ease-in-out infinite; transform-box: fill-box; transform-origin: left; }
     .score-bars rect { animation: score-bars 3s ease-in-out infinite; transform-box: fill-box; transform-origin: left; }
     .chart-line { animation: chart-line 3s ease-in-out infinite; stroke-dasharray: 150; stroke-dashoffset: 150; }
+    .gate-stage { animation: gate-stage 3s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
 
     @keyframes policy-stage {
       0%, 22% { opacity: 1; transform: translateY(-5px); }
@@ -85,8 +86,13 @@
       0%, 68% { stroke-dashoffset: 150; }
       87%, 100% { stroke-dashoffset: 0; }
     }
+    @keyframes gate-stage {
+      0%, 76% { opacity: 0.4; transform: translateY(0); }
+      86%, 98% { opacity: 1; transform: translateY(-3px); }
+      100% { opacity: 0.4; transform: translateY(0); }
+    }
     @media (prefers-reduced-motion: reduce) {
-      .stage, .flow, .feedback, .feedback-label, .feedback-arrow, .policy-bars rect, .score-bars rect, .chart-line {
+      .stage, .flow, .feedback, .feedback-label, .feedback-arrow, .policy-bars rect, .score-bars rect, .chart-line, .gate-stage {
         animation: none;
       }
       .stage { opacity: 1; }
@@ -101,8 +107,8 @@
     </marker>
   </defs>
 
-  <rect width="1200" height="330" rx="8" fill="#0d1117"/>
-  <text x="60" y="45" fill="#8b949e" font-family="Segoe UI, sans-serif" font-size="15" font-weight="600">THE AGENT LEARNING LOOP</text>
+  <rect width="1200" height="390" rx="8" fill="#0d1117"/>
+  <text x="60" y="45" fill="#8b949e" font-family="Segoe UI, sans-serif" font-size="15" font-weight="600">THE AGENT LEARNING + AUTONOMY LOOP</text>
 
   <line x1="370" y1="154" x2="442" y2="154" stroke="#8b949e" stroke-width="3" opacity="0.3"/>
   <path d="M 442 147 L 454 154 L 442 161 Z" fill="#8b949e" opacity="0.55"/>
@@ -150,6 +156,13 @@
     <text x="1108" y="218" fill="#8b949e" font-family="Consolas, monospace" font-size="13" text-anchor="end">REINFORCE + baseline</text>
   </g>
 
-  <path class="feedback" d="M 1040 245 C 850 310, 350 310, 160 245" marker-end="url(#feedback-arrowhead)"/>
-  <text class="feedback-label" x="600" y="270" fill="#6ee7d0" font-family="Segoe UI, sans-serif" font-size="17" text-anchor="middle">improve TaskPolicy every batch</text>
+  <path class="feedback" d="M 1040 245 C 865 365, 335 365, 160 245" marker-end="url(#feedback-arrowhead)"/>
+
+  <g class="gate-stage">
+    <rect x="430" y="278" width="340" height="64" rx="8" fill="#10271f" stroke="#6ee7d0" stroke-width="2"/>
+    <text x="600" y="303" fill="#6ee7d0" font-family="Segoe UI, sans-serif" font-size="17" font-weight="700" text-anchor="middle">Evidence gate</text>
+    <text x="600" y="326" fill="#c9d1d9" font-family="Consolas, monospace" font-size="12" text-anchor="middle">outcomes · confidence · reward · margin · stability</text>
+  </g>
+
+  <text class="feedback-label" x="600" y="367" fill="#6ee7d0" font-family="Segoe UI, sans-serif" font-size="15" text-anchor="middle">supervised → autonomous · observable outcomes + sampled audits</text>
 </svg>

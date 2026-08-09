@@ -8,7 +8,7 @@
     and renders a selected Manim scene. The defaults render the original
     policy/score/learner loop. Pass decision_making_animation.py and
     AgentDecisionMaking to render the decision-focused choose/execute/score/
-    improve story.
+    improve/autonomy story, including observable outcomes and drift audits.
 
 .PARAMETER Quality
     Manim render quality: l (480p15), m (720p30), h (1080p60),
