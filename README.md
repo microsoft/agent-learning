@@ -1,30 +1,30 @@
 # agent-learning
 
 Native reinforcement learning SDK for AI agents. An in-process
-learner optimizes a small, interpretable policy over discrete agent choices (e.g., "take action A", "take action B", "take action C") using on-device evaluation scores as the reward
+Learner optimizes a small, interpretable TaskPolicy over discrete agent choices (e.g., "take action A", "take action B", "take action C") using on-device evaluation scores as the reward
 signal by default.
 
 <p align="center">
-   <img src="images/agent-learning-loop.svg" alt="Animated loop: Policy chooses an action, Score evaluates the episode, and Learner updates the policy" width="960" style="max-width:100%; height:auto;" />
+   <img src="images/agent-learning-loop.svg" alt="Animated TaskPolicy Score Learner loop: TaskPolicy chooses a task action, Score evaluates the episode, and Learner updates TaskPolicy" width="960" style="max-width:100%; height:auto;" />
 </p>
 
 ## How it works
 
 The SDK improves agents without LLM weight fine-tuning. There are no GPU fine-tune jobs and no opaque update cycles — just three pieces that run in your existing Python process:
 
-1. The **policy** is a softmax distribution over `N` discrete
+1. **TaskPolicy** is a softmax distribution over `N` discrete
    actions (e.g., "take action A", "take action B", "take action C"). It lives in Python and updates in milliseconds.
 
-   <img src="images/0f85e08d0c47cd01.png" alt="Policy selects one of N discrete actions" width="360" style="max-width:100%; height:auto;" />
+   <img src="images/0f85e08d0c47cd01.png" alt="TaskPolicy selects one of N discrete actions" width="360" style="max-width:100%; height:auto;" />
 
-2. Each episode is **evaluated** locally by three stdlib scorers for intent
+2. **Score** evaluates each episode locally with three stdlib scorers for intent
    resolution, task adherence, and task completion. Their scores are combined
    into one scalar reward. No scoring endpoint or environment variable is
    required. Configured Azure AI evaluators remain available as an opt-in.
 
    <img src="images/246d112f995b785a.png" alt="Three evaluator scores feed a single scalar reward" width="360" style="max-width:100%; height:auto;" />
 
-3. A **Reinforce-with-baseline** learner updates the policy logits
+3. **Learner** applies REINFORCE-with-baseline to update TaskPolicy logits
    directly from stored episodes. Updates are tiny gradient steps
    that run on local compute and persist through a pluggable store — in-memory
    or local files by default, with Azure Cosmos DB optional.

@@ -19,7 +19,7 @@ File: [quickstart.py](quickstart.py)
 
 ## Flow
 1. Build a `SoftmaxPolicy` from two `Action`s and store its snapshot.
-2. Simulate 40 episodes: the policy chooses an action; a synthetic reward is attached in metadata.
+2. Simulate 40 episodes: TaskPolicy chooses an action; a synthetic reward is attached in metadata.
 3. `run_offline_batch("demo", episode_limit=200)` scores episodes, shapes rewards, and applies one learner update.
 4. Print run status plus the action probabilities before and after learning.
 

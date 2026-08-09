@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 330" role="img" aria-labelledby="title description">
-  <title id="title">Agent learning loop</title>
-  <desc id="description">A three-second animation showing a policy choosing an action, a score evaluating the episode, and a learner updating the policy.</desc>
+  <title id="title">The Agent Learning Loop</title>
+  <desc id="description">An animated loop showing TaskPolicy choosing an action, Score evaluating an episode, and Learner updating the task-policy.</desc>
   <style>
     .stage {
       opacity: 0.48;
@@ -24,11 +24,12 @@
       stroke: #6ee7d0;
       stroke-linecap: round;
       stroke-width: 3;
-      stroke-dasharray: 850;
-      stroke-dashoffset: 850;
+      stroke-dasharray: 900;
+      stroke-dashoffset: 900;
       animation: feedback 3s ease-in-out infinite;
     }
     .feedback-label { animation: feedback-label 3s ease-in-out infinite; }
+    .feedback-arrow { opacity: 0; animation: feedback-arrow 3s ease-in-out infinite; }
     .policy-bars rect { animation: policy-bars 3s ease-in-out infinite; transform-box: fill-box; transform-origin: left; }
     .score-bars rect { animation: score-bars 3s ease-in-out infinite; transform-box: fill-box; transform-origin: left; }
     .chart-line { animation: chart-line 3s ease-in-out infinite; stroke-dasharray: 150; stroke-dashoffset: 150; }
@@ -58,7 +59,7 @@
       66%, 100% { opacity: 0.3; stroke-dashoffset: 0; }
     }
     @keyframes feedback {
-      0%, 84% { opacity: 0; stroke-dashoffset: 850; }
+      0%, 84% { opacity: 0; stroke-dashoffset: 900; }
       98% { opacity: 0.9; stroke-dashoffset: 0; }
       100% { opacity: 0; stroke-dashoffset: 0; }
     }
@@ -66,6 +67,11 @@
       0%, 86% { opacity: 0.28; }
       95% { opacity: 1; }
       100% { opacity: 0.28; }
+    }
+    @keyframes feedback-arrow {
+      0%, 94% { opacity: 0; }
+      98% { opacity: 0.8; }
+      100% { opacity: 0; }
     }
     @keyframes policy-bars {
       0% { transform: scaleX(0.25); }
@@ -80,17 +86,23 @@
       87%, 100% { stroke-dashoffset: 0; }
     }
     @media (prefers-reduced-motion: reduce) {
-      .stage, .flow, .feedback, .feedback-label, .policy-bars rect, .score-bars rect, .chart-line {
+      .stage, .flow, .feedback, .feedback-label, .feedback-arrow, .policy-bars rect, .score-bars rect, .chart-line {
         animation: none;
       }
       .stage { opacity: 1; }
       .flow, .feedback, .chart-line { opacity: 1; stroke-dashoffset: 0; }
+      .feedback-arrow { opacity: 0.8; }
     }
   </style>
 
+  <defs>
+    <marker id="feedback-arrowhead" viewBox="0 0 18 16" refX="14" refY="8" markerWidth="18" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="feedback-arrow" d="M 0 0 L 18 8 L 0 16 Z" fill="#6ee7d0"/>
+    </marker>
+  </defs>
+
   <rect width="1200" height="330" rx="8" fill="#0d1117"/>
   <text x="60" y="45" fill="#8b949e" font-family="Segoe UI, sans-serif" font-size="15" font-weight="600">THE AGENT LEARNING LOOP</text>
-  <text x="1140" y="45" fill="#6ee7d0" font-family="Consolas, monospace" font-size="14" text-anchor="end">3 seconds / every batch</text>
 
   <line x1="370" y1="154" x2="442" y2="154" stroke="#8b949e" stroke-width="3" opacity="0.3"/>
   <path d="M 442 147 L 454 154 L 442 161 Z" fill="#8b949e" opacity="0.55"/>
@@ -103,7 +115,7 @@
   <g class="stage policy-stage">
     <rect x="60" y="82" width="300" height="144" rx="8" fill="#121b27" stroke="#4c9be8" stroke-width="2"/>
     <rect x="60" y="82" width="7" height="144" rx="3" fill="#4c9be8"/>
-    <text x="91" y="122" fill="#4c9be8" font-family="Segoe UI, sans-serif" font-size="27" font-weight="700">Policy</text>
+    <text x="91" y="122" fill="#4c9be8" font-family="Segoe UI, sans-serif" font-size="27" font-weight="700">TaskPolicy</text>
     <text x="91" y="149" fill="#c9d1d9" font-family="Segoe UI, sans-serif" font-size="16">choose an action</text>
     <g class="policy-bars">
       <rect x="91" y="172" width="142" height="7" rx="3" fill="#4c9be8"/>
@@ -117,7 +129,7 @@
     <rect x="450" y="82" width="300" height="144" rx="8" fill="#1b1722" stroke="#c792ea" stroke-width="2"/>
     <rect x="450" y="82" width="7" height="144" rx="3" fill="#c792ea"/>
     <text x="481" y="122" fill="#c792ea" font-family="Segoe UI, sans-serif" font-size="27" font-weight="700">Score</text>
-    <text x="481" y="149" fill="#c9d1d9" font-family="Segoe UI, sans-serif" font-size="16">evaluate the episode</text>
+    <text x="481" y="149" fill="#c9d1d9" font-family="Segoe UI, sans-serif" font-size="16">evaluate an episode</text>
     <g class="score-bars">
       <rect x="481" y="174" width="70" height="9" rx="4" fill="#e8a24c"/>
       <rect x="566" y="174" width="70" height="9" rx="4" fill="#5fb878"/>
@@ -132,13 +144,12 @@
     <rect x="840" y="82" width="300" height="144" rx="8" fill="#251719" stroke="#e85c5c" stroke-width="2"/>
     <rect x="840" y="82" width="7" height="144" rx="3" fill="#e85c5c"/>
     <text x="871" y="122" fill="#e85c5c" font-family="Segoe UI, sans-serif" font-size="27" font-weight="700">Learner</text>
-    <text x="871" y="149" fill="#c9d1d9" font-family="Segoe UI, sans-serif" font-size="16">update the policy</text>
+    <text x="871" y="149" fill="#c9d1d9" font-family="Segoe UI, sans-serif" font-size="16">update the task-policy</text>
     <line x1="871" y1="205" x2="1108" y2="205" stroke="#8b949e" stroke-width="1" opacity="0.4"/>
     <path class="chart-line" d="M 876 196 L 916 190 L 956 194 L 996 174 L 1036 181 L 1076 160 L 1106 166" fill="none" stroke="#f2c94c" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
     <text x="1108" y="218" fill="#8b949e" font-family="Consolas, monospace" font-size="13" text-anchor="end">REINFORCE + baseline</text>
   </g>
 
-  <path class="feedback" d="M 1040 245 C 850 310, 350 310, 160 245"/>
-  <path d="M 160 245 L 177 242 L 169 258 Z" fill="#6ee7d0" opacity="0.8"/>
-  <text class="feedback-label" x="600" y="294" fill="#6ee7d0" font-family="Segoe UI, sans-serif" font-size="17" text-anchor="middle">improve every batch</text>
+  <path class="feedback" d="M 1040 245 C 850 310, 350 310, 160 245" marker-end="url(#feedback-arrowhead)"/>
+  <text class="feedback-label" x="600" y="270" fill="#6ee7d0" font-family="Segoe UI, sans-serif" font-size="17" text-anchor="middle">improve TaskPolicy every batch</text>
 </svg>
