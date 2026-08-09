@@ -11,7 +11,7 @@ Install:
 
 .. code-block:: bash
 
-    pip install agents-learning-sdk[slm]
+    pip install agent-learning[slm]
 """
 
 from .adherence import SlmAdherenceScorer

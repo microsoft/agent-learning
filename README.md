@@ -52,10 +52,10 @@ agent-learn.exe --help
 ### Python SDK
 
 Released versions are published to PyPI:
-<https://pypi.org/project/agents-learning-sdk/>.
+<https://pypi.org/project/agent-learning/>.
 
 ```powershell
-py -m pip install agents-learning-sdk
+py -m pip install agent-learning
 agent-learn.exe --help
 ```
 

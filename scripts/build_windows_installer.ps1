@@ -46,7 +46,7 @@ try {
         throw "Inno Setup compiler failed with exit code $LASTEXITCODE."
     }
 
-    $zipPath = "dist-installer/agents-learning-sdk-cli-$AppVersion-windows-x64.zip"
+    $zipPath = "dist-installer/agent-learning-cli-$AppVersion-windows-x64.zip"
     Compress-Archive -Path "dist/agent-learn.exe" -DestinationPath $zipPath -Force
 
     Write-Host "Built installer artifacts in dist-installer/" -ForegroundColor Green

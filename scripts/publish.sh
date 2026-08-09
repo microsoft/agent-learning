@@ -118,7 +118,7 @@ case "${TARGET}" in
         "${PYTHON}" -m twine upload --repository-url https://test.pypi.org/legacy/ dist/*
         echo ""
         echo "Published. View at:"
-        echo "  https://test.pypi.org/project/agents-learning-sdk/"
+        echo "  https://test.pypi.org/project/agent-learning/"
         ;;
     pypi)
         echo "[5/5] Uploading to PyPI (production) ..."
@@ -129,6 +129,6 @@ case "${TARGET}" in
         "${PYTHON}" -m twine upload dist/*
         echo ""
         echo "Published. View at:"
-        echo "  https://pypi.org/project/agents-learning-sdk/"
+        echo "  https://pypi.org/project/agent-learning/"
         ;;
 esac

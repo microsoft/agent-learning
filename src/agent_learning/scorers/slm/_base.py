@@ -41,7 +41,7 @@ from ..base import ScoreResult
 
 _GENAI_IMPORT_ERROR = (
     "Tier 3 SLM scorers require the [slm] extra. Install with: "
-    "pip install agents-learning-sdk[slm]"
+    "pip install agent-learning[slm]"
 )
 
 
