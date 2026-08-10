@@ -498,8 +498,12 @@ def _cmd_decide_task_policy(args: argparse.Namespace) -> int:
     rng = random.Random(args.seed) if args.seed is not None else None
     policy = SoftmaxPolicy.from_snapshot(snapshot, rng=rng)
     probabilities = policy.probabilities()
-    recommended_index = max(range(len(probabilities)), key=probabilities.__getitem__)
     autonomy_assessment = assess_autonomy(store, snapshot)
+    recommended_index = next(
+        index
+        for index, action in enumerate(snapshot.actions)
+        if action.id == autonomy_assessment.recommended_action_id
+    )
     audit_sampled = False
     if autonomy_assessment.eligible:
         selected_index = recommended_index
@@ -732,6 +736,25 @@ def _cmd_register_task_episode(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             return 2
+        feedback_status = str(
+            episode.metadata.get("feedback_status") or ""
+        ).strip().lower()
+        if (
+            feedback_status == "accepted"
+            and correct_action_id is not None
+            and correct_action_id != episode.action_id
+        ):
+            print(
+                "Accepted feedback requires metadata.correct_action_id to match action_id.",
+                file=sys.stderr,
+            )
+            return 2
+        if feedback_status in {"accepted", "rejected"} and not episode.is_full:
+            print(
+                "Accepted or rejected feedback requires a completed episode.",
+                file=sys.stderr,
+            )
+            return 2
 
     existing = store.get_episode(episode.id, args.agent_id)
     if existing is not None and not existing.is_full and episode.is_full:
@@ -739,6 +762,17 @@ def _cmd_register_task_episode(args: argparse.Namespace) -> int:
         episode.created_at = datetime.now(timezone.utc).isoformat()
 
     store.store_episode(episode)
+    if args.require_decision_policy and feedback_status in {"accepted", "rejected"}:
+        active_policy = store.get_active_policy(args.agent_id, args.task_id)
+        if active_policy is not None:
+            active_policy.metadata["explicit_user_feedback"] = {
+                "status": feedback_status,
+                "action_id": episode.action_id,
+                "correct_action_id": episode.metadata.get("correct_action_id"),
+                "episode_id": episode.id,
+                "recorded_at": episode.created_at,
+            }
+            store.store_policy(active_policy)
     print(json.dumps(episode.to_dict(), indent=2))
     return 0
 

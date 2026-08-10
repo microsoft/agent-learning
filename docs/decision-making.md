@@ -2,7 +2,7 @@
 title: Agentic decision making with measurable feedback
 description: Use agent-learning to improve recurring agent decisions with explicit alternatives, observable outcomes, local scoring, and small inspectable policy updates.
 author: Microsoft
-ms.date: 2026-08-09
+ms.date: 2026-08-10
 ms.topic: concept
 keywords:
   - agentic decision making
@@ -25,7 +25,7 @@ is a separate decision layer whose action set, evidence, probabilities, and
 history can be inspected.
 
 <p align="center">
-  <img src="../images/agent-decision-making.svg" alt="Agentic decision loop: choose, execute, score, improve, and pass an evidence gate before autonomous execution" width="960" style="max-width:100%; height:auto;" />
+  <img src="../images/agent-decision-making.svg" alt="Agentic decision loop: choose, execute, score, improve, then become autonomous through explicit user acceptance or proportional statistical evidence" width="960" style="max-width:100%; height:auto;" />
 </p>
 
 ## Start with a decision, not a conversation
@@ -145,6 +145,13 @@ perfect independently labeled outcomes pass. Probability is policy preference,
 not calibrated correctness confidence, so probability alone never grants
 autonomy.
 
+Explicit user acceptance is a separate authorization path. When a completed
+episode records `metadata.feedback_status: accepted`, the accepted action is
+used for that agent and task without waiting for statistical thresholds. The
+response reports `authorization_basis: user_acceptance`, uses an audit rate of
+zero, and does not ask again. A later explicit `rejected` episode revokes that
+approval. Deterministic `requires_human_approval` policies remain supervised.
+
 The response's `autonomy.criteria` object reports the actual, required, and
 pass/fail value for every gate. Agents consume these authoritative fields:
 
@@ -162,11 +169,11 @@ execution result replaces a user prompt even in supervised mode. It is false for
 a sampled drift audit because that audit deliberately requests an external user
 label.
 
-The standard drift-audit rate is 10% of autonomous decisions. Low, high, and
-critical tiers use 5%, 25%, and 50%. A negative audit or observable execution
-result changes reward and correctness evidence; subsequent training can lower
-probability, break snapshot stability, or fail another gate, returning the
-policy to supervised mode.
+The standard drift-audit rate is 10% of statistically autonomous decisions.
+Low, high, and critical tiers use 5%, 25%, and 50%. Explicitly accepted policies
+use 0%. A negative audit or observable execution result changes reward and
+correctness evidence; subsequent training can lower probability, break snapshot
+stability, or fail another gate, returning the policy to supervised mode.
 
 The tier comes from a persisted profile of intent ambiguity, context
 variability, outcome observability, decision impact, reversibility, and derived
@@ -193,10 +200,10 @@ Safety, compliance, financial, and destructive-operation approvals remain
 outside the learned autonomy gate. A policy preference must never override a
 deterministic approval requirement.
 
-The visual represents autonomy as a fifth stage after policy improvement. Its
-return path remains active in autonomous mode: every observable outcome is
-scored, 10% of decisions request a user drift audit by default, and failing
-evidence can return the next decision to supervised mode.
+The visual represents statistical autonomy as a fifth stage after policy
+improvement. Its return path remains active: every observable outcome is scored,
+10% of standard-tier statistical decisions request a user drift audit by
+default, and failing evidence can return the next decision to supervised mode.
 
 ## CLI walkthrough
 

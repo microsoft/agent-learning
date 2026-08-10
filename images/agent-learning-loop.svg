@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 390" role="img" aria-labelledby="title description">
-  <title id="title">The Agent Learning and Proportional Autonomy Loop</title>
-  <desc id="description">An animated loop showing TaskPolicy choosing an action, Score evaluating an episode, Learner updating the task-policy, and a complexity-proportional evidence gate controlling supervised or autonomous execution.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 450" role="img" aria-labelledby="title description">
+  <title id="title">The Agent Learning and Durable Autonomy Loop</title>
+  <desc id="description">An animated loop showing TaskPolicy choosing an action, Score evaluating an episode, and Learner updating the task policy. Autonomy follows either durable explicit user acceptance with no audits or complexity-proportional statistical evidence with drift audits. Mandatory approval can block both routes, and rejection revokes acceptance.</desc>
   <style>
     .stage {
       opacity: 0.48;
@@ -107,8 +107,8 @@
     </marker>
   </defs>
 
-  <rect width="1200" height="390" rx="8" fill="#0d1117"/>
-  <text x="60" y="45" fill="#8b949e" font-family="Segoe UI, sans-serif" font-size="15" font-weight="600">THE AGENT LEARNING + PROPORTIONAL AUTONOMY LOOP</text>
+  <rect width="1200" height="450" rx="8" fill="#0d1117"/>
+  <text x="60" y="45" fill="#8b949e" font-family="Segoe UI, sans-serif" font-size="15" font-weight="600">THE AGENT LEARNING + DURABLE AUTONOMY LOOP</text>
 
   <line x1="370" y1="154" x2="442" y2="154" stroke="#8b949e" stroke-width="3" opacity="0.3"/>
   <path d="M 442 147 L 454 154 L 442 161 Z" fill="#8b949e" opacity="0.55"/>
@@ -159,10 +159,19 @@
   <path class="feedback" d="M 1040 245 C 865 365, 335 365, 160 245" marker-end="url(#feedback-arrowhead)"/>
 
   <g class="gate-stage">
-    <rect x="430" y="278" width="340" height="64" rx="8" fill="#10271f" stroke="#6ee7d0" stroke-width="2"/>
-    <text x="600" y="303" fill="#6ee7d0" font-family="Segoe UI, sans-serif" font-size="17" font-weight="700" text-anchor="middle">Evidence gate</text>
-    <text x="600" y="326" fill="#c9d1d9" font-family="Consolas, monospace" font-size="12" text-anchor="middle">complexity tier → proportional evidence → approval override</text>
+    <rect x="330" y="270" width="540" height="122" rx="8" fill="#10271f" stroke="#6ee7d0" stroke-width="2"/>
+    <text x="600" y="296" fill="#6ee7d0" font-family="Segoe UI, sans-serif" font-size="17" font-weight="700" text-anchor="middle">Autonomy routes</text>
+
+    <rect x="355" y="309" width="230" height="50" rx="6" fill="#173421" stroke="#5fb878" stroke-width="1.5"/>
+    <text x="470" y="329" fill="#8ee3a7" font-family="Segoe UI, sans-serif" font-size="11" font-weight="700" text-anchor="middle">USER ACCEPTANCE</text>
+    <text x="470" y="347" fill="#c9d1d9" font-family="Consolas, monospace" font-size="10" text-anchor="middle">pin action · 0% audits</text>
+
+    <rect x="615" y="309" width="230" height="50" rx="6" fill="#14263a" stroke="#4c9be8" stroke-width="1.5"/>
+    <text x="730" y="329" fill="#75d7ff" font-family="Segoe UI, sans-serif" font-size="11" font-weight="700" text-anchor="middle">STATISTICAL EVIDENCE</text>
+    <text x="730" y="347" fill="#c9d1d9" font-family="Consolas, monospace" font-size="10" text-anchor="middle">tier gates · drift audits</text>
+
+    <text x="600" y="380" fill="#c9d1d9" font-family="Consolas, monospace" font-size="11" text-anchor="middle">mandatory approval blocks · REJECT revokes ACCEPT</text>
   </g>
 
-  <text class="feedback-label" x="600" y="367" fill="#6ee7d0" font-family="Segoe UI, sans-serif" font-size="15" text-anchor="middle">supervised → autonomous · outcomes + tier-scaled audits</text>
+  <text class="feedback-label" x="600" y="425" fill="#6ee7d0" font-family="Segoe UI, sans-serif" font-size="14" text-anchor="middle">supervised → accepted action or statistical winner · observable outcomes continue</text>
 </svg>

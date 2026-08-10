@@ -29,12 +29,12 @@ _VALID_SCORE_TIERS: frozenset[str] = frozenset(
 )
 _AUTONOMY_TIER_DEFAULTS: dict[str, dict[str, float | int]] = {
     "low": {
-        "min_outcomes": 12,
-        "min_correctness_lower_bound": 0.80,
+        "min_outcomes": 3,
+        "min_correctness_lower_bound": 0.40,
         "min_mean_reward": 0.0,
-        "min_action_probability": 0.55,
-        "min_probability_margin": 0.10,
-        "stable_snapshots": 2,
+        "min_action_probability": 0.0,
+        "min_probability_margin": 0.0,
+        "stable_snapshots": 1,
         "audit_rate": 0.05,
     },
     "standard": {

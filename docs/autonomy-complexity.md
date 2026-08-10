@@ -2,7 +2,7 @@
 title: Complexity-proportional autonomy
 description: Declare and score intent and decision complexity so agent-learning requires proportionally stronger evidence before autonomous execution.
 author: Microsoft
-ms.date: 2026-08-09
+ms.date: 2026-08-10
 ms.topic: concept
 keywords:
   - agent autonomy
@@ -94,23 +94,41 @@ Risk floors prevent averaging away a severe dimension:
 
 ## Proportional evidence
 
-Every criterion remains conjunctive. A policy earns autonomy only when all
-criteria for its tier pass.
+Every statistical criterion remains conjunctive. A policy earns statistical
+autonomy only when all criteria for its tier pass.
 
 | Criterion | Low | Standard | High | Critical |
 |---|---:|---:|---:|---:|
-| Scored outcomes | 12 | 20 | 50 | 100 |
-| 95% Wilson correctness lower bound | 80% | 90% | 95% | 97.5% |
+| Scored outcomes | 3 | 20 | 50 | 100 |
+| 95% Wilson correctness lower bound | 40% | 90% | 95% | 97.5% |
 | Mean aggregate reward | > 0.00 | > 0.00 | > 0.10 | > 0.20 |
-| Winner probability | 55% | 60% | 75% | 85% |
-| Margin over runner-up | 10 points | 15 points | 30 points | 45 points |
-| Consecutive trained snapshots with same winner | 2 | 3 | 4 | 5 |
+| Winner probability | Not gated | 60% | 75% | 85% |
+| Margin over runner-up | Not gated | 15 points | 30 points | 45 points |
+| Consecutive trained snapshots with same winner | 1 | 3 | 4 | 5 |
 | Autonomous drift-audit rate | 5% | 10% | 25% | 50% |
 
-The Wilson threshold usually requires more correctness labels than the scored
-outcome minimum. That is intentional: a small perfect sample is not strong
-evidence. Global environment variables can raise or lower numeric thresholds,
-but the resolved values are always returned in `autonomy.criteria` for audit.
+The low tier is calibrated for bounded, reversible preferences with direct
+feedback: three unanimous, positively rewarded outcomes can earn autonomy after
+one policy update, while mixed correctness evidence does not. Higher tiers keep
+strong probability and stability gates. Their Wilson thresholds usually require
+more correctness labels than the scored-outcome minimum. Global environment
+variables can raise or lower numeric thresholds, but the resolved values are
+always returned in `autonomy.criteria` for audit.
+
+## Explicit user acceptance
+
+Explicit acceptance is authorization, not a statistical sample. A completed
+episode with `metadata.feedback_status: accepted` grants autonomy immediately
+for that `(agent_id, task_id)` decision and pins its accepted `action_id`, even
+when the policy logits currently prefer another action. The assessment returns
+`authorization_basis: user_acceptance`, sets the audit rate to zero, and does
+not request routine or drift-audit feedback again.
+
+The newest explicit feedback wins. A later completed episode with
+`metadata.feedback_status: rejected` revokes the acceptance and returns the
+policy to its statistical evidence gates. `requires_human_approval: true`
+continues to block autonomy because it represents a deterministic approval
+requirement rather than a reusable policy preference.
 
 ## Human approval and execution authority
 
@@ -130,8 +148,9 @@ remain authoritative even when the policy is statistically autonomous.
    and proportional threshold set.
 3. The response exposes `autonomy.complexity`, every threshold, every observed
    value, and the resulting mode.
-4. Autonomous execution continues recording observable outcomes and requesting
-   tier-proportional drift audits.
+4. Statistically autonomous execution continues recording observable outcomes
+   and requesting tier-proportional drift audits. Explicitly accepted policies
+   continue recording outcomes without requesting feedback.
 5. Negative outcomes, a changed winner, or a stricter profile can immediately
    return the next decision to supervised mode.
 

@@ -27,5 +27,8 @@ derived. The resulting low, standard, high, or critical tier scales required
 outcomes, Wilson confidence, reward, probability, margin, stable snapshots, and
 drift-audit rate. Autonomous executions continue learning from observable
 outcomes, while tier-scaled samples request user feedback to detect drift.
+An explicit accepted-feedback episode is a separate durable authorization path:
+it pins that action for the task policy and suppresses future feedback prompts
+until the user explicitly rejects it.
 
 Every episode, reward, run, and deployment is captured by the configured store — in-memory or local files by default, or Azure Cosmos DB — giving you a complete lineage and audit trail of how the policy evolved over time.

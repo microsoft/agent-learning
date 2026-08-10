@@ -202,6 +202,9 @@ class AutonomyAssessment:
     """Inspectable evidence supporting or blocking autonomous execution."""
 
     eligible: bool
+    authorization_basis: str
+    user_feedback_status: str | None
+    user_feedback_episode_id: str | None
     recommended_action_id: str
     scored_outcomes: int
     correctness_evaluated: int
@@ -219,6 +222,9 @@ class AutonomyAssessment:
     def to_dict(self) -> dict[str, Any]:
         return {
             "eligible": self.eligible,
+            "authorization_basis": self.authorization_basis,
+            "user_feedback_status": self.user_feedback_status,
+            "user_feedback_episode_id": self.user_feedback_episode_id,
             "recommended_action_id": self.recommended_action_id,
             "scored_outcomes": self.scored_outcomes,
             "correctness_evaluated": self.correctness_evaluated,
@@ -259,6 +265,70 @@ def _recommended_action(snapshot: PolicySnapshot) -> tuple[str, float, float]:
         winner_probability,
         winner_probability - runner_up,
     )
+
+
+def _action_confidence(
+    snapshot: PolicySnapshot, action_id: str
+) -> tuple[float, float]:
+    probabilities = SoftmaxPolicy.from_snapshot(snapshot).probabilities()
+    action_index = next(
+        index for index, action in enumerate(snapshot.actions) if action.id == action_id
+    )
+    action_probability = probabilities[action_index]
+    runner_up = max(
+        (
+            probability
+            for index, probability in enumerate(probabilities)
+            if index != action_index
+        ),
+        default=0.0,
+    )
+    return action_probability, action_probability - runner_up
+
+
+def _latest_explicit_user_feedback(
+    snapshot: PolicySnapshot,
+    episodes: list[Episode],
+    action_ids: set[str],
+) -> tuple[str | None, str | None, str | None]:
+    candidates: list[tuple[str, str, str | None, str | None]] = []
+    persisted = snapshot.metadata.get("explicit_user_feedback")
+    if isinstance(persisted, dict):
+        status = str(persisted.get("status") or "").strip().lower()
+        action_id = persisted.get("action_id")
+        episode_id = persisted.get("episode_id")
+        if status in {"accepted", "rejected"}:
+            if status == "accepted" and action_id not in action_ids:
+                status = "rejected"
+            candidates.append(
+                (
+                    str(persisted.get("recorded_at") or ""),
+                    status,
+                    str(action_id) if action_id in action_ids else None,
+                    str(episode_id or "") or None,
+                )
+            )
+    for episode in episodes:
+        status = str(episode.metadata.get("feedback_status") or "").strip().lower()
+        if status not in {"accepted", "rejected"}:
+            continue
+        action_id = episode.action_id
+        if episode.action_id not in action_ids:
+            status = "rejected"
+            action_id = None
+        correct_action_id = episode.metadata.get("correct_action_id")
+        if status == "accepted" and correct_action_id not in {
+            None,
+            episode.action_id,
+        }:
+            status = "rejected"
+            action_id = None
+        candidates.append((episode.created_at, status, action_id, episode.id))
+        break
+    if candidates:
+        _, status, action_id, episode_id = max(candidates, key=lambda item: item[0])
+        return status, action_id, episode_id
+    return None, None, None
 
 
 def _stable_snapshot_count(
@@ -315,6 +385,18 @@ def assess_autonomy(
         limit=500,
         full_only=True,
     )
+    (
+        user_feedback_status,
+        user_feedback_action_id,
+        user_feedback_episode_id,
+    ) = _latest_explicit_user_feedback(
+        snapshot, episodes, action_ids
+    )
+    if user_feedback_status == "accepted" and user_feedback_action_id is not None:
+        recommended_action_id = user_feedback_action_id
+        action_probability, probability_margin = _action_confidence(
+            snapshot, recommended_action_id
+        )
     for episode in episodes:
         if episode.action_id != recommended_action_id:
             continue
@@ -380,10 +462,30 @@ def assess_autonomy(
             "required": False,
             "met": not complexity.profile.requires_human_approval,
         },
+        "latest_user_feedback_not_rejected": {
+            "actual": user_feedback_status,
+            "required_not": "rejected",
+            "met": user_feedback_status != "rejected",
+        },
     }
-    eligible = all(criterion["met"] for criterion in criteria.values())
+    statistically_eligible = all(criterion["met"] for criterion in criteria.values())
+    explicitly_approved = (
+        user_feedback_status == "accepted"
+        and not complexity.profile.requires_human_approval
+    )
+    eligible = explicitly_approved or statistically_eligible
+    authorization_basis = (
+        "user_acceptance"
+        if explicitly_approved
+        else "statistical_evidence"
+        if statistically_eligible
+        else "none"
+    )
     return AutonomyAssessment(
         eligible=eligible,
+        authorization_basis=authorization_basis,
+        user_feedback_status=user_feedback_status,
+        user_feedback_episode_id=user_feedback_episode_id,
         recommended_action_id=recommended_action_id,
         scored_outcomes=scored_outcomes,
         correctness_evaluated=correctness_evaluated,
@@ -394,7 +496,7 @@ def assess_autonomy(
         action_probability=action_probability,
         probability_margin=probability_margin,
         stable_snapshots=stable_snapshots,
-        audit_rate=config.audit_rate,
+        audit_rate=0.0 if explicitly_approved else config.audit_rate,
         complexity=complexity,
         criteria=criteria,
     )

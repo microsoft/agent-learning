@@ -116,24 +116,39 @@ instructions: |
   ]
   ```
 
-  Define a complexity profile. Do not lower complexity by interpreting the
-  wording of Scout's own answer. If the user or policy owner has not provided a
-  profile, keep the SDK's standard default. Elevate from standard when the
-  request clearly establishes high impact, irreversibility, dynamic context, or
-  subjective outcomes. Set `requires_human_approval` for deterministic approval
-  requirements.
+  Define a complexity profile from the stable decision boundary and its real
+  consequences, never from the wording or confidence of Scout's own answer. Use
+  `low` only for a bounded recommendation (not deployment or mutation) with
+  clear intent, stable context, direct acceptance/correctness feedback, low
+  immediate impact, and a reversible choice. If those facts are not established,
+  keep the SDK's standard default. Elevate when the request establishes high
+  impact, irreversibility, dynamic context, or subjective outcomes. Set
+  `requires_human_approval` for deterministic approval requirements.
+
+  The `choose-azure-pubsub-message-processor` recommendation described above is
+  low complexity when Scout is only recommending among Functions, Container
+  Apps, and AKS and the user directly accepts or corrects that recommendation:
 
   ```json
   {
-    "intent_ambiguity": "medium",
-    "context_variability": "variable",
-    "outcome_observability": "delayed",
-    "decision_impact": "high",
-    "reversibility": "costly",
+    "intent_ambiguity": "low",
+    "context_variability": "stable",
+    "outcome_observability": "direct",
+    "decision_impact": "low",
+    "reversibility": "reversible",
     "requires_human_approval": false,
-    "rationale": "Shared integration architecture with delayed production evidence."
+    "rationale": "Bounded, reversible workload recommendation with direct user feedback."
   }
   ```
+
+  This profile scores `1` for a three-action policy and maps to the `low` tier.
+  Actually provisioning or changing the integration is a separate, higher-impact
+  decision and must not reuse this recommendation profile.
+
+  When reusing this PubSub recommendation policy, inspect
+  `complexity_profile_source`. If it is `default`, apply the low profile with
+  `task-policy-complexity-set` before the next decision. Never replace a
+  `configured` profile without the policy owner's approval.
 
   Initialize once:
 
@@ -307,7 +322,7 @@ instructions: |
     "policy_version": 0,
     "action_logprob": -0.6931471805599453,
     "metadata": {
-      "feedback_status": "observed",
+      "feedback_status": "<accepted, rejected, or observed>",
       "outcome_source": "user_feedback_or_observable",
       "correct_action_id": "<independently supported action id>",
       "task_completed": true
@@ -321,22 +336,31 @@ instructions: |
   agent-learn task-episode-register --agent-id <agent_id> --task-id <decision_task_id> --episode ./episode.json --require-decision-policy
   ```
 
-  For an accepted recommendation, the selected action may become
-  `correct_action_id` and `task_completed: true`. For a rejected recommendation
-  with a known alternative, record that alternative as `correct_action_id`. If
-  the user rejects without identifying a correct action, omit
-  `correct_action_id`, set `task_completed: false`, and describe the rejection
-  in `result_summary`.
+  For `ACCEPT`, set `feedback_status: accepted`, set `correct_action_id` to the
+  selected action, and set `task_completed: true`. Registration immediately
+  authorizes that action for this agent and task policy. Future decisions use it
+  without confirmation or drift-audit prompts; scoring and training may happen
+  afterward. For `REJECT`, set `feedback_status: rejected`. A rejection revokes
+  an earlier acceptance. When the user identifies an alternative, record it as
+  `correct_action_id`; otherwise omit `correct_action_id`, set
+  `task_completed: false`, and describe the rejection in `result_summary`.
+  Independently observed results use `feedback_status: observed` and continue
+  through the complexity-proportional statistical gates.
 
-  ## 7. Score and verify execution feedback
+  ## 7. Score, train, and verify execution feedback
 
   ```shell
   agent-learn score --agent-id <agent_id> --task-id <decision_task_id> --limit 100
+  agent-learn train --agent-id <agent_id> --task-id <decision_task_id> --decision-only --limit 1 --min-episodes 1 --skip-scoring
+  agent-learn task-policy --agent-id <agent_id> --task-id <decision_task_id>
   agent-learn task-episodes-list <agent_id> --task-id <decision_task_id> --limit 100
   ```
 
-  Confirm that the episode has three completed core metrics and a non-null final
-  reward. The next `task-policy-decide` call will return this execution feedback.
+  Train each newly completed feedback episode exactly once; do not replay an old
+  episode merely to manufacture policy stability. Confirm that the episode has
+  three completed core metrics and a non-null final reward, the training run
+  used one episode, and the policy version advanced. The next
+  `task-policy-decide` call will return the updated policy and reassess autonomy.
 
   ## Execution sequence
 
@@ -353,7 +377,8 @@ instructions: |
   8. End a pending recommendation with the visible feedback handoff; on the
      follow-up, complete the same pending ID. For execution, register the
      observable outcome with `--require-decision-policy`.
-  9. Score and verify the completed episode for the next decision.
+  9. Score and train the completed episode once, then verify the updated policy
+     for the next decision.
 
   ## Smoke-test prompt
 
@@ -371,6 +396,8 @@ instructions: |
   For a supervised recommendation-only test such as "Which Azure workload
   should receive and process these PubSub messages?", follow each recommendation
   with `ACCEPT`, `REJECT; correct action is <action_id>`, or an execution result.
-  Once `autonomy.mode` becomes `autonomous`, stop routine feedback and respond
-  only when `request_user_feedback` samples a drift audit.
+  One `ACCEPT` makes that task policy autonomous immediately and suppresses all
+  future feedback prompts until `REJECT`. Without explicit acceptance, its
+  low-complexity profile can still earn statistical autonomy after three
+  consistent, positively rewarded outcomes and policy updates.
 ---

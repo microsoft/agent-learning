@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-learning"
-version = "0.6.1"
+version = "0.7.0"
 description = "Evidence-driven decision learning for AI agents with inspectable autonomy gates."
 readme = "PYPI.md"
 requires-python = ">=3.10"

@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 560" role="img" aria-labelledby="title description">
-  <title id="title">Agentic decision making with complexity-proportional autonomy</title>
-  <desc id="description">An animated loop in which an agent chooses a bounded action, executes it, scores the outcome, improves the policy, and earns autonomy only after complexity-proportional evidence gates pass and no mandatory approval applies. Observable outcomes and tier-scaled audits continue monitoring drift.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 620" role="img" aria-labelledby="title description">
+  <title id="title">Agentic decision making with durable and statistical autonomy</title>
+  <desc id="description">An animated loop in which an agent chooses a bounded action, executes it, scores the outcome, and improves the policy. A task policy becomes autonomous through durable explicit user acceptance or complexity-proportional statistical evidence. Mandatory approval can block autonomy, rejection revokes acceptance, and only statistical autonomy samples drift audits.</desc>
   <style>
     .stage {
       opacity: 0.52;
@@ -152,7 +152,7 @@
     </marker>
   </defs>
 
-  <rect width="1200" height="560" rx="8" fill="#18213a"/>
+  <rect width="1200" height="620" rx="8" fill="#18213a"/>
   <text x="45" y="38" fill="#ffffff" font-family="Segoe UI, sans-serif" font-size="22" font-weight="700">AGENTIC DECISION MAKING</text>
   <text x="45" y="64" fill="#aebbd2" font-family="Segoe UI, sans-serif" font-size="15">Explicit choices. Observable outcomes. Better decisions.</text>
   <text x="1155" y="45" fill="#75d7ff" font-family="Consolas, monospace" font-size="15" text-anchor="end">agent-learn</text>
@@ -243,36 +243,48 @@
   <path class="flow flow-three" d="M 1035 320 L 1035 340 L 1000 360" stroke="#75d7ff" marker-end="url(#arrowhead)"/>
 
   <g class="stage autonomy-stage">
-    <rect x="45" y="350" width="1110" height="130" rx="8" fill="#10192c" stroke="#75d7ff" stroke-width="2"/>
-    <rect x="45" y="350" width="7" height="130" rx="3" fill="#75d7ff"/>
+    <rect x="45" y="350" width="1110" height="205" rx="8" fill="#10192c" stroke="#75d7ff" stroke-width="2"/>
+    <rect x="45" y="350" width="7" height="205" rx="3" fill="#75d7ff"/>
     <text x="70" y="378" fill="#75d7ff" font-family="Segoe UI, sans-serif" font-size="13" font-weight="700">05</text>
-    <text x="100" y="379" fill="#ffffff" font-family="Segoe UI, sans-serif" font-size="22" font-weight="700">Evidence gate</text>
-    <text x="70" y="402" fill="#aebbd2" font-family="Segoe UI, sans-serif" font-size="13">declared profile → tier → proportional gates</text>
+    <text x="100" y="379" fill="#ffffff" font-family="Segoe UI, sans-serif" font-size="22" font-weight="700">Autonomy routes</text>
+    <text x="300" y="379" fill="#aebbd2" font-family="Segoe UI, sans-serif" font-size="12">same task policy · newest explicit feedback wins</text>
 
-    <g class="gate-check" font-family="Consolas, monospace" font-size="11">
-      <text x="70" y="430" fill="#9bd43a">✓ low · standard · high · critical</text>
-      <text x="70" y="452" fill="#9bd43a">✓ outcomes + Wilson scale by tier</text>
-      <text x="300" y="430" fill="#9bd43a">✓ reward + probability + margin</text>
-      <text x="300" y="452" fill="#9bd43a">✓ stable snapshots scale by tier</text>
-      <text x="520" y="430" fill="#9bd43a">✓ risk floors raise tier</text>
-      <text x="520" y="452" fill="#9bd43a">✓ approval can block</text>
+    <rect x="70" y="420" width="180" height="100" rx="6" fill="#202b40" stroke="#8aa0be"/>
+    <text x="160" y="446" fill="#aebbd2" font-family="Segoe UI, sans-serif" font-size="12" font-weight="700" text-anchor="middle">SUPERVISED</text>
+    <text x="160" y="470" fill="#ffffff" font-family="Segoe UI, sans-serif" font-size="11" text-anchor="middle">ask once or observe</text>
+    <text x="160" y="493" fill="#8aa0be" font-family="Consolas, monospace" font-size="10" text-anchor="middle">choose one route</text>
+
+    <path d="M 250 470 L 270 470 L 270 444 L 290 444" fill="none" stroke="#75d7ff" stroke-width="2" marker-end="url(#arrowhead)"/>
+    <path d="M 250 470 L 270 470 L 270 506 L 290 506" fill="none" stroke="#75d7ff" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+    <g class="gate-check">
+      <rect x="300" y="420" width="270" height="48" rx="6" fill="#173421" stroke="#7fba00" stroke-width="1.5"/>
+      <text x="315" y="441" fill="#9bd43a" font-family="Segoe UI, sans-serif" font-size="11" font-weight="700">USER ACCEPTANCE</text>
+      <text x="315" y="458" fill="#ffffff" font-family="Consolas, monospace" font-size="10">pin action · 0% audits · REJECT revokes</text>
+
+      <rect x="300" y="482" width="270" height="48" rx="6" fill="#18384f" stroke="#4cc2ff" stroke-width="1.5"/>
+      <text x="315" y="503" fill="#75d7ff" font-family="Segoe UI, sans-serif" font-size="11" font-weight="700">STATISTICAL EVIDENCE</text>
+      <text x="315" y="520" fill="#ffffff" font-family="Consolas, monospace" font-size="10">tier gates · proportional drift audits</text>
     </g>
 
-    <rect x="716" y="370" width="174" height="82" rx="6" fill="#202b40" stroke="#8aa0be"/>
-    <text x="803" y="393" fill="#aebbd2" font-family="Segoe UI, sans-serif" font-size="12" font-weight="700" text-anchor="middle">SUPERVISED</text>
-    <text x="803" y="415" fill="#d8e2f1" font-family="Segoe UI, sans-serif" font-size="11" text-anchor="middle">ask or observe</text>
-    <text x="803" y="435" fill="#8aa0be" font-family="Consolas, monospace" font-size="10" text-anchor="middle">until every gate passes</text>
+    <path d="M 570 444 L 595 444 L 595 458 L 615 458" fill="none" stroke="#75d7ff" stroke-width="2" marker-end="url(#arrowhead)"/>
+    <path d="M 570 506 L 595 506 L 595 492 L 615 492" fill="none" stroke="#75d7ff" stroke-width="2" marker-end="url(#arrowhead)"/>
 
-    <path d="M 894 411 L 927 411" stroke="#75d7ff" stroke-width="3" marker-end="url(#arrowhead)"/>
+    <rect x="625" y="425" width="220" height="95" rx="6" fill="#2b2230" stroke="#ffb900" stroke-width="1.5"/>
+    <text x="735" y="451" fill="#ffcf40" font-family="Segoe UI, sans-serif" font-size="11" font-weight="700" text-anchor="middle">AUTHORITY CHECK</text>
+    <text x="735" y="476" fill="#ffffff" font-family="Segoe UI, sans-serif" font-size="11" text-anchor="middle">mandatory approval blocks</text>
+    <text x="735" y="499" fill="#d8e2f1" font-family="Consolas, monospace" font-size="10" text-anchor="middle">otherwise continue</text>
+
+    <path d="M 845 472 L 895 472" stroke="#75d7ff" stroke-width="3" marker-end="url(#arrowhead)"/>
     <g class="autonomous-mode">
-      <rect x="935" y="365" width="190" height="92" rx="6" fill="#173421" stroke="#7fba00" stroke-width="2"/>
-      <text x="1030" y="389" fill="#9bd43a" font-family="Segoe UI, sans-serif" font-size="12" font-weight="700" text-anchor="middle">AUTONOMOUS</text>
-      <text x="1030" y="411" fill="#ffffff" font-family="Segoe UI, sans-serif" font-size="11" text-anchor="middle">greedy winner · no routine ask</text>
-      <text x="1030" y="431" fill="#d8e2f1" font-family="Segoe UI, sans-serif" font-size="10" text-anchor="middle">observe every outcome</text>
-      <text x="1030" y="448" fill="#9bd43a" font-family="Consolas, monospace" font-size="10" text-anchor="middle">tier-scaled drift audits</text>
+      <rect x="905" y="420" width="220" height="100" rx="6" fill="#173421" stroke="#7fba00" stroke-width="2"/>
+      <text x="1015" y="445" fill="#9bd43a" font-family="Segoe UI, sans-serif" font-size="12" font-weight="700" text-anchor="middle">AUTONOMOUS</text>
+      <text x="1015" y="469" fill="#ffffff" font-family="Segoe UI, sans-serif" font-size="11" text-anchor="middle">accepted action or winner</text>
+      <text x="1015" y="491" fill="#d8e2f1" font-family="Segoe UI, sans-serif" font-size="10" text-anchor="middle">no routine ask</text>
+      <text x="1015" y="510" fill="#9bd43a" font-family="Consolas, monospace" font-size="10" text-anchor="middle">observe every outcome</text>
     </g>
   </g>
 
-  <text class="feedback-label" x="600" y="500" fill="#9bd43a" font-family="Segoe UI, sans-serif" font-size="14" text-anchor="middle">observable outcomes and proportional audits keep checking for drift</text>
-  <path class="feedback" d="M 1030 520 C 850 558, 350 558, 170 520" marker-end="url(#feedback-arrowhead)"/>
+  <text class="feedback-label" x="600" y="580" fill="#9bd43a" font-family="Segoe UI, sans-serif" font-size="14" text-anchor="middle">observable outcomes continue · audits apply only to statistical autonomy</text>
+  <path class="feedback" d="M 1015 596 C 850 615, 350 615, 170 596" marker-end="url(#feedback-arrowhead)"/>
 </svg>

@@ -13,7 +13,7 @@ user-visible outcome, scores the evidence, and applies a small CPU update to
 the next decision.
 
 <p align="center">
-   <img src="images/agent-decision-making.svg" alt="Animated agentic decision loop: choose, execute, score, improve, and earn autonomy only after all evidence gates pass" width="960" style="max-width:100%; height:auto;" />
+   <img src="images/agent-decision-making.svg" alt="Animated agentic decision loop: choose, execute, score, improve, then become autonomous through explicit user acceptance or proportional statistical evidence" width="960" style="max-width:100%; height:auto;" />
 </p>
 
 ## The decision loop
@@ -37,11 +37,12 @@ the next decision.
    probability, worse-than-usual choices lose probability, and exploration
    remains available.
 
-5. **Earn autonomy.** `task-policy-decide` stops routine confirmation only after
-   the recommended action passes every evidence gate. Required outcomes,
-   correctness confidence, reward, probability, margin, stable snapshots, and
-   drift-audit rate scale with a persisted intent/decision complexity profile.
-   Autonomous actions still record observable outcomes.
+5. **Earn or grant autonomy.** `task-policy-decide` stops routine confirmation
+   when the recommended action passes every evidence gate or the user explicitly
+   accepts an action for that task policy. Explicit acceptance is durable, pins
+   the accepted action, and disables repeat feedback prompts until a later
+   rejection. Statistical thresholds and drift audits still scale with the
+   persisted complexity profile. Autonomous actions record observable outcomes.
 
 Everything runs in the existing Python process. Scoring is local by default;
 configured Azure AI evaluators remain available as an opt-in. Stores can be
@@ -73,6 +74,8 @@ The response also contains an `autonomy` block. Agents must follow
 `outcome_recording` rather than inventing their own confidence threshold.
 `autonomy.complexity` explains the declared profile, derived action-space
 points, risk floors, tier, and resolved proportional criteria.
+`authorization_basis` distinguishes explicit `user_acceptance` from
+`statistical_evidence`.
 
 ## Install
 
@@ -186,8 +189,8 @@ python tests/functional_cli_batch.py
 
 The animated SVG above shows the full five-stage loop. The retained
 [learning-loop SVG](images/agent-learning-loop.svg) keeps the compact
-TaskPolicy → Score → Learner view and places the evidence gate on its return
-path.
+TaskPolicy → Score → Learner view and places explicit acceptance and statistical
+evidence routes on its return path.
 
 Render the decision animation with Manim:
 

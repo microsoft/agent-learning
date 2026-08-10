@@ -316,7 +316,7 @@ def test_task_policy_init_persists_configured_complexity(
     )
     inspected = json.loads(capsys.readouterr().out)
     assert inspected["autonomy"]["complexity"]["tier"] == "low"
-    assert inspected["autonomy"]["criteria"]["minimum_outcomes"]["required"] == 12
+    assert inspected["autonomy"]["criteria"]["minimum_outcomes"]["required"] == 3
     assert inspected["autonomy"]["audit_rate"] == 0.05
 
 
@@ -572,6 +572,66 @@ def test_task_policy_decide_uses_autonomy_and_samples_drift_audits(
     assert audit["autonomy"]["audit"] == {"rate": 1.0, "sampled": True}
 
 
+def test_task_policy_decide_never_reprompts_after_user_acceptance(
+    monkeypatch, capsys
+) -> None:
+    store = InMemoryStore()
+    monkeypatch.setattr(cli, "get_default_store", lambda: store)
+    monkeypatch.setenv("AGENT_LEARNING_AUTONOMY_AUDIT_RATE", "1")
+    snapshot = SoftmaxPolicy.from_actions(
+        [Action(id="functions"), Action(id="container_apps")],
+        agent_id="scout",
+        task_id="choose-message-processor",
+        initial_logits={"functions": 2.0, "container_apps": 0.0},
+    ).snapshot()
+    snapshot.metadata = {
+        "policy_scope": "delegated_decision",
+        "decision_context": "Choose a message-processing workload",
+    }
+    store.store_policy(snapshot)
+    store.store_episode(
+        Episode(
+            id="accepted-policy",
+            agent_id="scout",
+            task_id="choose-message-processor",
+            intent_summary="Choose a message-processing workload",
+            action_id="container_apps",
+            expected_outcome="Use the accepted workload",
+            execution_status="completed",
+            result_summary="The user accepted Container Apps",
+            metadata={
+                "feedback_status": "accepted",
+                "correct_action_id": "container_apps",
+                "task_completed": True,
+            },
+        )
+    )
+
+    assert (
+        cli.main(
+            [
+                "task-policy-decide",
+                "--agent-id",
+                "scout",
+                "--task-id",
+                "choose-message-processor",
+                "--seed",
+                "7",
+            ]
+        )
+        == 0
+    )
+    result = json.loads(capsys.readouterr().out)
+
+    assert result["selection_mode"] == "autonomous-greedy"
+    assert result["selected_action"]["id"] == "container_apps"
+    assert result["recommended_action"]["id"] == "container_apps"
+    assert result["autonomy"]["authorization_basis"] == "user_acceptance"
+    assert result["autonomy"]["execute_without_confirmation"]
+    assert not result["autonomy"]["request_user_feedback"]
+    assert result["autonomy"]["audit"] == {"rate": 0.0, "sampled": False}
+
+
 def test_decision_only_excludes_unmarked_question_policy(monkeypatch, capsys) -> None:
     store = InMemoryStore()
     monkeypatch.setattr(cli, "get_default_store", lambda: store)
@@ -617,7 +677,9 @@ def test_decision_episode_registration_requires_marked_policy(
     store = InMemoryStore()
     monkeypatch.setattr(cli, "get_default_store", lambda: store)
     policy = SoftmaxPolicy.from_actions(
-        [Action(id="delegate")], agent_id="scout", task_id="choose-delegation"
+        [Action(id="delegate"), Action(id="alternative")],
+        agent_id="scout",
+        task_id="choose-delegation",
     ).snapshot()
     policy.metadata = {
         "policy_scope": "delegated_decision",
@@ -678,6 +740,33 @@ def test_decision_episode_registration_requires_marked_policy(
         == 2
     )
     assert "correct_action_id" in capsys.readouterr().err
+
+    contradictory_path = tmp_path / "contradictory-acceptance.json"
+    contradictory_payload = json.loads(episode_path.read_text(encoding="utf-8"))
+    contradictory_payload["metadata"] = {
+        "feedback_status": "accepted",
+        "correct_action_id": "alternative",
+        "task_completed": True,
+    }
+    contradictory_path.write_text(
+        json.dumps(contradictory_payload), encoding="utf-8"
+    )
+    assert (
+        cli.main(
+            [
+                "task-episode-register",
+                "--agent-id",
+                "scout",
+                "--task-id",
+                "choose-delegation",
+                "--episode",
+                str(contradictory_path),
+                "--require-decision-policy",
+            ]
+        )
+        == 2
+    )
+    assert "Accepted feedback" in capsys.readouterr().err
 
 
 def test_pending_decision_episode_can_be_completed_in_place(
@@ -792,6 +881,15 @@ def test_pending_decision_episode_can_be_completed_in_place(
     assert completed.is_full
     assert completed.created_at > "2026-08-09T10:00:00+00:00"
     assert completed.metadata["decision_created_at"] == "2026-08-09T10:00:00+00:00"
+    active_policy = store.get_active_policy("scout", "choose-message-processor")
+    assert active_policy is not None
+    assert active_policy.metadata["explicit_user_feedback"] == {
+        "status": "accepted",
+        "action_id": "use_functions",
+        "correct_action_id": "use_functions",
+        "episode_id": "pending-decision",
+        "recorded_at": completed.created_at,
+    }
     assert cli.main(["task-episodes-count", "scout"]) == 0
     assert capsys.readouterr().out.strip() == "1"
     assert (
