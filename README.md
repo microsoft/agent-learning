@@ -91,6 +91,21 @@ The installer can add its installation directory to your user `PATH`, so
 agent-learn.exe --help
 ```
 
+### Linux CLI
+
+For Debian/Ubuntu, RHEL-compatible distributions, containers, and CI runners,
+download the standalone Linux archive from the
+[latest GitHub release](https://github.com/microsoft/agent-learning/releases/latest)
+or install it with the automation script:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/microsoft/agent-learning/main/scripts/install-linux.sh -o /tmp/install-linux.sh
+bash /tmp/install-linux.sh --version 0.7.0 --install-dir /usr/local/bin
+```
+
+The Linux installation guide covers Debian/Ubuntu, RHEL-compatible, and
+container-first deployment examples in [docs/linux-installation.md](docs/linux-installation.md).
+
 ### Python SDK
 
 Released versions are published to PyPI:
