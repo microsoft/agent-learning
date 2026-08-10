@@ -1,6 +1,6 @@
 ---
 name: agent-learn
-description: "Use when Scout must make a delegated decision among two or more explicit execution alternatives, or when the user accepts, rejects, or reports the outcome of a prior agent-learn recommendation. Examples include choosing a language model, skill, automation, tool, workflow, escalation path, or Azure workload. Do not use for factual questions, ordinary chat answers, summaries, reporting, or running agent-learning scoring/training automation."
+description: "Use when Scout must choose or recommend among two or more executable alternatives, including requests such as 'which Azure workload should we use?', 'recommend an Azure workload', or choosing a language model, skill, automation, tool, workflow, escalation path, or implementation strategy. Also use when the user accepts, rejects, or reports the outcome of a prior agent-learn recommendation. Do not use for factual questions, ordinary chat answers, summaries, reporting, or running agent-learning scoring/training automation."
 instructions: |
   # Agent Learn: delegated decisions only
 
@@ -156,12 +156,15 @@ instructions: |
   `task-policy` and then choose independently.
 
   ```shell
-  agent-learn task-policy-decide --agent-id <agent_id> --task-id <decision_task_id>
+  agent-learn task-policy-decide --agent-id <agent_id> --task-id <decision_task_id> --greedy
   ```
 
-  By default, the command samples from the learned probabilities to preserve a
-  small amount of exploration. Use `--greedy` only when deterministic exploitation
-  is required.
+  **User-facing recommendations must use `--greedy`.** This returns the current
+  highest-probability action while still exposing all alternatives and their
+  evidence. Do not expose a sampled exploratory action as the recommended
+  answer. Sampling is allowed only for an explicitly identified exploration
+  trial whose selected action will actually be executed and whose independent
+  outcome can be observed; run that trial separately without `--greedy`.
 
   The output provides:
 
@@ -245,12 +248,26 @@ instructions: |
   agent-learn task-episode-register --agent-id <agent_id> --task-id <decision_task_id> --episode ./pending-episode.json --require-decision-policy
   ```
 
-  When `autonomy.request_user_feedback` is true, tell the user why feedback is
-  requested and ask for one of:
+  Pending registration is mandatory before sending a supervised or audited
+  recommendation. If registration fails, do not silently return an ordinary
+  recommendation. Report that feedback capture failed, include the CLI error,
+  and do not claim that the decision will be learned.
 
-  - `ACCEPT`, when the selected recommendation is endorsed;
-  - `REJECT`, plus the correct action when known;
-  - the observed execution or test result.
+  When `autonomy.request_user_feedback` is true and no independent execution
+  outcome has satisfied feedback, the final response must end with this visible
+  handoff (substitute the selected and alternative action IDs):
+
+  ```text
+  Feedback requested (<feedback_reason>).
+  Reply with one of:
+  - ACCEPT
+  - REJECT: <correct_action_id>
+  - RESULT: <observed execution or test result>
+  ```
+
+  Do not bury this handoff in rationale and do not omit it merely because the
+  answer sounds confident. A recommendation-only response has no independent
+  observable outcome, so supervised mode always requires the handoff.
 
   Five supervised or audited recommendation prompts with no follow-up are five
   pending attempts, not five trainable outcomes. Autonomous non-audit
@@ -326,14 +343,16 @@ instructions: |
   1. Apply the eligibility gate; stop if no delegated decision exists.
   2. Establish the durable store.
   3. Resolve or initialize a marked delegated-decision policy.
-  4. Call `task-policy-decide` and consume its learned feedback.
-    5. Follow `autonomy.execute_without_confirmation`, `request_user_feedback`,
-      and `outcome_recording` exactly.
-    6. Execute `selected_action`, or preserve a supervised/audited recommendation
-      as pending when no observable outcome exists.
+  4. Call `task-policy-decide --greedy` for a user-facing recommendation and
+     consume its learned feedback.
+  5. Follow `autonomy.execute_without_confirmation`, `request_user_feedback`,
+     `observable_outcome_satisfies_feedback`, and `outcome_recording` exactly.
+  6. Execute `selected_action`, or register a supervised/audited recommendation
+     as pending before responding when no observable outcome exists.
   7. Evaluate user-visible correctness and completion.
-    8. Complete the same pending ID, or register the automatic observable outcome,
-      with `--require-decision-policy`.
+  8. End a pending recommendation with the visible feedback handoff; on the
+     follow-up, complete the same pending ID. For execution, register the
+     observable outcome with `--require-decision-policy`.
   9. Score and verify the completed episode for the next decision.
 
   ## Smoke-test prompt
