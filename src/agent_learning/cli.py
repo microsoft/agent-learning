@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import math
 import random
 import sys
 import uuid
@@ -15,6 +14,14 @@ from typing import Any
 
 from ._version import __version__
 from .autonomy import ComplexityProfile, assess_autonomy
+from .decision import (
+    DecisionAuthority,
+    DecisionFrame,
+    DecisionResult,
+    DecisionStatus,
+    TaskPolicy,
+    TieBreakDisposition,
+)
 from .policy.softmax_bandit import SoftmaxPolicy
 from .storage.cosmos import get_default_store
 from .training.runner import LearningRunner
@@ -50,6 +57,34 @@ def _load_complexity_profile(path: str) -> ComplexityProfile:
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"Unable to read complexity profile: {exc}") from exc
     return ComplexityProfile.from_dict(payload)
+
+
+def _load_decision_frame(path: str, snapshot: PolicySnapshot) -> DecisionFrame:
+    try:
+        with open(path, "r", encoding="utf-8") as frame_file:
+            payload = json.load(frame_file)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Unable to read decision frame: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise TypeError("Decision frame must be a JSON object")
+    try:
+        return DecisionFrame.from_dict(payload, snapshot.actions)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid decision frame: {exc}") from exc
+
+
+def _load_decision_result(path: str) -> DecisionResult:
+    try:
+        with open(path, "r", encoding="utf-8") as result_file:
+            payload = json.load(result_file)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Unable to read decision result: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise TypeError("Decision result must be a JSON object")
+    try:
+        return DecisionResult.from_dict(payload)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid decision result: {exc}") from exc
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
@@ -123,6 +158,23 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     decide.add_argument("--history-limit", type=_episode_limit, default=100)
     decide.add_argument("--greedy", action="store_true")
     decide.add_argument("--seed", type=int)
+    decide.add_argument(
+        "--decision-frame",
+        help="JSON evidence frame required by policies with full decision authority.",
+    )
+
+    adjudicate = sub.add_parser(
+        "task-policy-adjudicate",
+        help="Apply accept or reject to a pending reasoned task-policy result.",
+    )
+    adjudicate.add_argument("--agent-id", required=True)
+    adjudicate.add_argument("--task-id", required=True)
+    adjudicate.add_argument("--decision-result", required=True)
+    adjudicate.add_argument(
+        "--disposition",
+        choices=[disposition.value for disposition in TieBreakDisposition],
+        required=True,
+    )
 
     init = sub.add_parser(
         "task-policy-init",
@@ -144,6 +196,11 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         "--complexity-profile",
         help="Path to a JSON complexity profile. Defaults conservatively to standard.",
     )
+    init.add_argument(
+        "--decision-authority",
+        choices=[authority.value for authority in DecisionAuthority],
+        help="Action-selection authority: low uses learned policy evidence; full resolves a decision frame.",
+    )
 
     complexity = sub.add_parser(
         "task-policy-complexity-set",
@@ -152,6 +209,18 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     complexity.add_argument("--agent-id", required=True)
     complexity.add_argument("--task-id", required=True)
     complexity.add_argument("--profile", required=True)
+
+    authority = sub.add_parser(
+        "task-policy-authority-set",
+        help="Configure action-selection authority for an existing task policy.",
+    )
+    authority.add_argument("--agent-id", required=True)
+    authority.add_argument("--task-id", required=True)
+    authority.add_argument(
+        "--authority",
+        choices=[decision_authority.value for decision_authority in DecisionAuthority],
+        required=True,
+    )
 
     register = sub.add_parser(
         "task-episode-register",
@@ -261,6 +330,17 @@ def _cmd_train(args: argparse.Namespace) -> int:
             continue
         if args.decision_only and not _is_decision_policy(snapshot):
             skipped.append({"task_id": task_id, "reason": "not a delegated decision policy"})
+            continue
+        if (
+            _is_decision_policy(snapshot)
+            and TaskPolicy(snapshot).authority is DecisionAuthority.FULL
+        ):
+            skipped.append(
+                {
+                    "task_id": task_id,
+                    "reason": "full decision authority uses reasoned resolution, not REINFORCE",
+                }
+            )
             continue
         episode_limit = episode_limits.get(task_id, 0)
         if episode_limit == 0:
@@ -496,8 +576,80 @@ def _cmd_decide_task_policy(args: argparse.Namespace) -> int:
         )
         return 2
     rng = random.Random(args.seed) if args.seed is not None else None
-    policy = SoftmaxPolicy.from_snapshot(snapshot, rng=rng)
-    probabilities = policy.probabilities()
+    task_policy = TaskPolicy(snapshot, rng=rng)
+    if task_policy.authority is DecisionAuthority.FULL:
+        if not args.decision_frame:
+            print(
+                "A policy with full decision authority requires --decision-frame.",
+                file=sys.stderr,
+            )
+            return 2
+        try:
+            frame = _load_decision_frame(args.decision_frame, snapshot)
+            result = task_policy.decide(frame)
+        except (TypeError, ValueError) as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+
+        feedback = _decision_feedback(store, snapshot, args.history_limit)
+        focus_action = result.selected_action or result.proposed_action
+        learned_assessment = assess_autonomy(store, snapshot)
+        execute_without_confirmation = result.status is DecisionStatus.RESOLVED
+        request_user_feedback = result.status in {
+            DecisionStatus.NEEDS_USER_FEEDBACK,
+            DecisionStatus.NEEDS_USER_TIE_BREAK,
+        }
+        if result.status is DecisionStatus.NEEDS_USER_TIE_BREAK:
+            feedback_reason = "decision_tie"
+            outcome_recording = "user_feedback"
+        elif result.status is DecisionStatus.NEEDS_USER_FEEDBACK:
+            feedback_reason = "human_approval_required"
+            outcome_recording = "user_feedback"
+        elif result.status is DecisionStatus.NEEDS_EVIDENCE:
+            feedback_reason = "additional_evidence_required"
+            outcome_recording = "additional_evidence"
+        elif result.status is DecisionStatus.RESOLVED:
+            feedback_reason = "observable_outcome"
+            outcome_recording = "observable_outcome"
+        else:
+            feedback_reason = "decision_reframe_required"
+            outcome_recording = "decision_reframe"
+        payload = result.to_dict()
+        payload.update(
+            {
+                "decision_context": snapshot.metadata.get("decision_context"),
+                "decision_authority": task_policy.authority.value,
+                "selection_mode": "reasoned",
+                "selected_action_feedback": (
+                    feedback["actions"].get(focus_action.id) if focus_action else None
+                ),
+                "historical_feedback": feedback,
+                "autonomy": {
+                    "eligible": execute_without_confirmation,
+                    "authorization_basis": result.authorization_basis or "none",
+                    "decision_authority": task_policy.authority.value,
+                    "mode": (
+                        "autonomous" if execute_without_confirmation else "supervised"
+                    ),
+                    "execute_without_confirmation": execute_without_confirmation,
+                    "request_user_feedback": request_user_feedback,
+                    "observable_outcome_satisfies_feedback": execute_without_confirmation,
+                    "feedback_reason": feedback_reason,
+                    "outcome_recording": outcome_recording,
+                    "complexity": learned_assessment.complexity.to_dict(),
+                    "learned_policy_assessment": learned_assessment.to_dict(),
+                },
+            }
+        )
+        print(json.dumps(payload, indent=2))
+        return 0
+    if args.decision_frame:
+        print(
+            "--decision-frame is only valid for a policy with full decision authority.",
+            file=sys.stderr,
+        )
+        return 2
+
     autonomy_assessment = assess_autonomy(store, snapshot)
     recommended_index = next(
         index
@@ -506,30 +658,28 @@ def _cmd_decide_task_policy(args: argparse.Namespace) -> int:
     )
     audit_sampled = False
     if autonomy_assessment.eligible:
-        selected_index = recommended_index
-        selected_action = snapshot.actions[selected_index]
-        selected_probability = probabilities[selected_index]
-        logprob = math.log(max(selected_probability, 1e-12))
+        learned_result = task_policy.decide(
+            selected_action_id=autonomy_assessment.recommended_action_id
+        )
         mode = "autonomous-greedy"
         audit_rng = rng or random.Random()
         audit_sampled = audit_rng.random() < autonomy_assessment.audit_rate
     elif args.greedy:
-        selected_index = recommended_index
-        selected_action = snapshot.actions[selected_index]
-        selected_probability = probabilities[selected_index]
-        logprob = math.log(max(selected_probability, 1e-12))
+        learned_result = task_policy.decide(
+            selected_action_id=autonomy_assessment.recommended_action_id
+        )
         mode = "greedy"
     else:
-        decision = policy.choose()
-        selected_action = decision.action
-        selected_index = next(
-            index
-            for index, action in enumerate(snapshot.actions)
-            if action.id == selected_action.id
-        )
-        selected_probability = probabilities[selected_index]
-        logprob = decision.logprob
+        learned_result = task_policy.decide()
         mode = "sampled"
+    selected_action = learned_result.proposed_action
+    if selected_action is None:  # pragma: no cover - TaskPolicy low contract
+        raise RuntimeError("low-authority TaskPolicy returned no proposed action")
+    selected_probability = learned_result.action_probabilities[selected_action.id]
+    logprob = learned_result.action_logprob
+    probabilities = [
+        learned_result.action_probabilities[action.id] for action in snapshot.actions
+    ]
     feedback = _decision_feedback(store, snapshot, args.history_limit)
     selected_stats = feedback["actions"][selected_action.id]
     recommendation = snapshot.actions[recommended_index]
@@ -544,6 +694,7 @@ def _cmd_decide_task_policy(args: argparse.Namespace) -> int:
         outcome_recording = "observable_outcome"
     autonomy_payload = {
         **autonomy_assessment.to_dict(),
+        "decision_authority": task_policy.authority.value,
         "mode": "autonomous" if autonomy_assessment.eligible else "supervised",
         "execute_without_confirmation": autonomy_assessment.eligible,
         "request_user_feedback": not autonomy_assessment.eligible or audit_sampled,
@@ -561,6 +712,7 @@ def _cmd_decide_task_policy(args: argparse.Namespace) -> int:
                 "agent_id": snapshot.agent_id,
                 "task_id": snapshot.task_id,
                 "decision_context": snapshot.metadata.get("decision_context"),
+                "decision_authority": task_policy.authority.value,
                 "policy_id": snapshot.id,
                 "policy_version": snapshot.version,
                 "selection_mode": mode,
@@ -584,6 +736,34 @@ def _cmd_decide_task_policy(args: argparse.Namespace) -> int:
             indent=2,
         )
     )
+    return 0
+
+
+def _cmd_adjudicate_task_policy(args: argparse.Namespace) -> int:
+    store = get_default_store()
+    snapshot = store.get_active_policy(args.agent_id, args.task_id)
+    if not _is_decision_policy(snapshot):
+        print(
+            "Decision adjudication requires an active delegated decision policy.",
+            file=sys.stderr,
+        )
+        return 2
+    task_policy = TaskPolicy(snapshot)
+    if task_policy.authority is not DecisionAuthority.FULL:
+        print(
+            "Decision-result adjudication requires full decision authority.",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        pending = _load_decision_result(args.decision_result)
+        result = task_policy.adjudicate(pending, args.disposition)
+    except (TypeError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    payload = result.to_dict()
+    payload["decision_authority"] = task_policy.authority.value
+    print(json.dumps(payload, indent=2))
     return 0
 
 
@@ -638,6 +818,12 @@ def _cmd_init_task_policy(args: argparse.Namespace) -> int:
         {
             "policy_scope": _DECISION_POLICY_SCOPE,
             "decision_context": args.decision_context,
+            "decision_authority": (
+                args.decision_authority or DecisionAuthority.LOW.value
+            ),
+            "decision_authority_source": (
+                "configured" if args.decision_authority else "default"
+            ),
             "complexity_profile": complexity_profile.to_dict(),
             "complexity_profile_source": (
                 "configured" if args.complexity_profile else "default"
@@ -680,6 +866,35 @@ def _cmd_set_task_policy_complexity(args: argparse.Namespace) -> int:
                     **assessment.to_dict(),
                     "mode": "autonomous" if assessment.eligible else "supervised",
                 },
+            },
+            indent=2,
+        )
+    )
+    return 0
+
+
+def _cmd_set_task_policy_authority(args: argparse.Namespace) -> int:
+    store = get_default_store()
+    snapshot = store.get_active_policy(args.agent_id, args.task_id)
+    if not _is_decision_policy(snapshot):
+        print(
+            "Authority configuration requires an active delegated decision policy.",
+            file=sys.stderr,
+        )
+        return 2
+    snapshot.metadata.update(
+        {
+            "decision_authority": args.authority,
+            "decision_authority_source": "configured",
+            "decision_authority_updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+    store.store_policy(snapshot)
+    print(
+        json.dumps(
+            {
+                "current_policy": _policy_payload(snapshot),
+                "decision_authority": TaskPolicy(snapshot).authority.value,
             },
             indent=2,
         )
@@ -790,7 +1005,9 @@ def main(argv: list[str] | None = None) -> int:
         "score": _cmd_score,
         "task-policy": _cmd_show_task_policy,
         "task-policy-decide": _cmd_decide_task_policy,
+        "task-policy-adjudicate": _cmd_adjudicate_task_policy,
         "task-policy-init": _cmd_init_task_policy,
+        "task-policy-authority-set": _cmd_set_task_policy_authority,
         "task-policy-complexity-set": _cmd_set_task_policy_complexity,
         "task-episode-register": _cmd_register_task_episode,
     }

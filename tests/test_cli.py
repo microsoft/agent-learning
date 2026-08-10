@@ -177,6 +177,8 @@ def test_task_policy_init_and_inspection(monkeypatch, capsys, tmp_path: Path) ->
     assert initialized["metadata"] == {
         "policy_scope": "delegated_decision",
         "decision_context": "Choose how the agent should respond to a chat request",
+        "decision_authority": "low",
+        "decision_authority_source": "default",
         "complexity_profile": {
             "intent_ambiguity": "medium",
             "context_variability": "variable",
@@ -199,6 +201,186 @@ def test_task_policy_init_and_inspection(monkeypatch, capsys, tmp_path: Path) ->
     assert inspected["current_policy"]["task_id"] == "chat"
     assert inspected["previous_policy"] is None
     assert inspected["autonomy"]["complexity"]["tier"] == "standard"
+
+
+def test_full_authority_task_policy_decide_resolves_a_frame(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    store = InMemoryStore()
+    monkeypatch.setattr(cli, "get_default_store", lambda: store)
+    snapshot = SoftmaxPolicy.from_actions(
+        [Action(id="east"), Action(id="west")],
+        agent_id="agent-1",
+        task_id="choose-region",
+    ).snapshot()
+    snapshot.metadata = {
+        "policy_scope": "delegated_decision",
+        "decision_context": "Choose a deployment region",
+        "decision_authority": "full",
+    }
+    store.store_policy(snapshot)
+    frame_path = tmp_path / "decision-frame.json"
+    frame_path.write_text(
+        json.dumps(
+            {
+                "task": "Choose a deployment region",
+                "criteria": [{"id": "fit"}],
+                "options": [
+                    {
+                        "action_id": "east",
+                        "evidence": [
+                            {
+                                "criterion_id": "fit",
+                                "source": "capacity",
+                                "support": 0.9,
+                            }
+                        ],
+                    },
+                    {
+                        "action_id": "west",
+                        "evidence": [
+                            {
+                                "criterion_id": "fit",
+                                "source": "capacity",
+                                "support": 0.6,
+                            }
+                        ],
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert (
+        cli.main(
+            [
+                "task-policy-decide",
+                "--agent-id",
+                "agent-1",
+                "--task-id",
+                "choose-region",
+                "--decision-frame",
+                str(frame_path),
+            ]
+        )
+        == 0
+    )
+    result = json.loads(capsys.readouterr().out)
+
+    assert result["policy_id"] == snapshot.id
+    assert result["policy_version"] == snapshot.version
+    assert result["decision_authority"] == "full"
+    assert result["selection_mode"] == "reasoned"
+    assert result["selection_basis"] == "bayesian_decision"
+    assert result["selected_action"]["id"] == "east"
+    assert result["action_logprob"] is None
+    assert result["autonomy"]["execute_without_confirmation"]
+    assert not result["autonomy"]["request_user_feedback"]
+
+
+def test_task_policy_authority_can_be_configured_without_new_snapshot(
+    monkeypatch, capsys
+) -> None:
+    store = InMemoryStore()
+    monkeypatch.setattr(cli, "get_default_store", lambda: store)
+    snapshot = SoftmaxPolicy.from_actions(
+        [Action(id="east"), Action(id="west")],
+        agent_id="agent-1",
+        task_id="choose-region",
+    ).snapshot()
+    snapshot.metadata = {
+        "policy_scope": "delegated_decision",
+        "decision_context": "Choose a deployment region",
+    }
+    store.store_policy(snapshot)
+
+    assert (
+        cli.main(
+            [
+                "task-policy-authority-set",
+                "--agent-id",
+                "agent-1",
+                "--task-id",
+                "choose-region",
+                "--authority",
+                "full",
+            ]
+        )
+        == 0
+    )
+    result = json.loads(capsys.readouterr().out)
+
+    assert result["current_policy"]["id"] == snapshot.id
+    assert result["current_policy"]["version"] == snapshot.version
+    assert result["decision_authority"] == "full"
+    assert result["current_policy"]["metadata"]["decision_authority_source"] == "configured"
+    assert len(store.list_policies("agent-1", "choose-region")) == 1
+
+
+def test_full_authority_tie_is_adjudicated_against_same_task_policy(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    store = InMemoryStore()
+    monkeypatch.setattr(cli, "get_default_store", lambda: store)
+    snapshot = SoftmaxPolicy.from_actions(
+        [Action(id="east"), Action(id="west")],
+        agent_id="agent-1",
+        task_id="choose-region",
+    ).snapshot()
+    snapshot.metadata = {
+        "policy_scope": "delegated_decision",
+        "decision_context": "Choose a deployment region",
+        "decision_authority": "full",
+    }
+    store.store_policy(snapshot)
+    decision_path = tmp_path / "decision-result.json"
+    decision_path.write_text(
+        json.dumps(
+            {
+                "agent_id": "agent-1",
+                "task_id": "choose-region",
+                "policy_id": snapshot.id,
+                "policy_version": snapshot.version,
+                "status": "needs_user_tie_break",
+                "reason": "Two options tied.",
+                "selection_basis": "bayesian_decision",
+                "selected_action": None,
+                "proposed_action": {"id": "east"},
+                "candidate_actions": [{"id": "east"}, {"id": "west"}],
+                "assessments": [],
+                "information_needs": [],
+                "rejected_action_ids": [],
+                "authorization_basis": None,
+                "action_probabilities": {"east": 0.5, "west": 0.5},
+                "action_logprob": None,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    command = [
+        "task-policy-adjudicate",
+        "--agent-id",
+        "agent-1",
+        "--task-id",
+        "choose-region",
+        "--decision-result",
+        str(decision_path),
+    ]
+    assert cli.main([*command, "--disposition", "reject"]) == 0
+    rejected = json.loads(capsys.readouterr().out)
+    assert rejected["status"] == "needs_user_tie_break"
+    assert rejected["proposed_action"]["id"] == "west"
+    assert rejected["rejected_action_ids"] == ["east"]
+    assert rejected["policy_id"] == snapshot.id
+
+    decision_path.write_text(json.dumps(rejected), encoding="utf-8")
+    assert cli.main([*command, "--disposition", "accept"]) == 0
+    accepted = json.loads(capsys.readouterr().out)
+    assert accepted["status"] == "resolved"
+    assert accepted["selected_action"]["id"] == "west"
+    assert accepted["authorization_basis"] == "user_acceptance"
 
 
 def test_task_policy_complexity_profile_can_be_configured_without_new_snapshot(
@@ -669,6 +851,61 @@ def test_decision_only_excludes_unmarked_question_policy(monkeypatch, capsys) ->
     assert result["skipped"] == [
         {"task_id": "answer-question", "reason": "not a delegated decision policy"}
     ]
+
+
+def test_train_skips_full_authority_reasoned_policy(monkeypatch, capsys) -> None:
+    store = InMemoryStore()
+    monkeypatch.setattr(cli, "get_default_store", lambda: store)
+    snapshot = SoftmaxPolicy.from_actions(
+        [Action(id="east"), Action(id="west")],
+        agent_id="scout",
+        task_id="choose-region",
+    ).snapshot()
+    snapshot.metadata = {
+        "policy_scope": "delegated_decision",
+        "decision_context": "Choose a deployment region",
+        "decision_authority": "full",
+    }
+    store.store_policy(snapshot)
+    episode = _full_episode()
+    episode.agent_id = "scout"
+    episode.task_id = "choose-region"
+    episode.policy_id = snapshot.id
+    episode.action_id = "east"
+    store.store_episode(episode)
+    store.store_reward(
+        Reward(
+            episode_id=episode.id,
+            agent_id=episode.agent_id,
+            source=RewardSource.AGGREGATE,
+            value=0.8,
+        )
+    )
+
+    assert (
+        cli.main(
+            [
+                "train",
+                "--agent-id",
+                "scout",
+                "--task-id",
+                "choose-region",
+                "--decision-only",
+                "--skip-scoring",
+            ]
+        )
+        == 2
+    )
+    result = json.loads(capsys.readouterr().out)
+
+    assert result["runs"] == []
+    assert result["skipped"] == [
+        {
+            "task_id": "choose-region",
+            "reason": "full decision authority uses reasoned resolution, not REINFORCE",
+        }
+    ]
+    assert store.get_active_policy("scout", "choose-region").version == 0
 
 
 def test_decision_episode_registration_requires_marked_policy(

@@ -1,0 +1,209 @@
+erDiagram
+    AGENT ||--o{ DECISION_TASK : owns
+    DECISION_TASK ||--|| TASK_POLICY : has_one
+    TASK_POLICY ||--|{ POLICY_SNAPSHOT : versions
+    POLICY_SNAPSHOT ||--|{ ACTION : declares
+    DECISION_AUTHORITY ||--o{ POLICY_SNAPSHOT : configures
+    POLICY_SNAPSHOT ||--|| COMPLEXITY_PROFILE : constrains
+    COMPLEXITY_PROFILE ||--o{ COMPLEXITY_ASSESSMENT : derives
+    POLICY_SNAPSHOT ||--o{ AUTONOMY_ASSESSMENT : evaluates
+    COMPLEXITY_ASSESSMENT ||--o{ AUTONOMY_ASSESSMENT : scales
+
+    TASK_POLICY ||--o| SOFTMAX_POLICY : delegates_low
+    POLICY_SNAPSHOT ||--o| SOFTMAX_POLICY : hydrates
+    SOFTMAX_POLICY ||--o{ POLICY_DECISION : samples
+    POLICY_DECISION }o--|| ACTION : chooses
+    POLICY_DECISION o|--|| DECISION_RESULT : normalizes_to
+    EPISODE ||--o{ METRIC_RESULT : evaluates_as
+    EPISODE ||--o{ REWARD : receives
+    REWARD_SHAPER ||--o{ METRIC_RESULT : combines
+    REWARD_SHAPER ||--o{ REWARD : produces
+    REINFORCE_LEARNER ||--o{ EPISODE : consumes_low_only
+    REINFORCE_LEARNER ||--o{ REWARD : optimizes_from
+    REINFORCE_LEARNER ||--o{ TRAINING_RUN : records
+    REINFORCE_LEARNER ||--o{ POLICY_SNAPSHOT : advances
+
+    TASK_POLICY ||--o| DECISION_RESOLVER : delegates_full
+    DECISION_TASK ||--o{ DECISION_FRAME : contextualizes
+    DECISION_RESOLVER ||--o{ DECISION_FRAME : evaluates
+    DECISION_FRAME ||--|{ DECISION_CRITERION : defines
+    DECISION_FRAME ||--|{ DECISION_OPTION : compares
+    DECISION_OPTION }o--|| ACTION : references
+    DECISION_OPTION ||--o{ EVIDENCE_POINT : contains
+    DECISION_CRITERION ||--o{ EVIDENCE_POINT : measures
+    DECISION_RESOLVER o|--o{ DECISION_RESULT : emits
+    DECISION_RESULT ||--o{ OPTION_ASSESSMENT : contains
+    OPTION_ASSESSMENT }o--|| ACTION : assesses
+    OPTION_ASSESSMENT ||--o{ CRITERION_ASSESSMENT : decomposes_into
+    DECISION_CRITERION ||--o{ CRITERION_ASSESSMENT : summarizes
+    DECISION_RESULT ||--o{ INFORMATION_NEED : requests
+    DECISION_STATUS ||--o{ DECISION_RESULT : classifies
+    TIE_BREAK_DISPOSITION o|--o{ DECISION_RESULT : adjudicates
+
+    AUTONOMY_ASSESSMENT o|--o{ DECISION_RESULT : gates_low_execution
+    DECISION_RESULT }o--o| ACTION : selects_or_proposes
+    DECISION_RESULT o|--o| EPISODE : becomes_after_execution
+    POLICY_SNAPSHOT ||--o{ EPISODE : attributes
+    ACTION ||--o{ EPISODE : executes_in
+
+    AGENT {
+        string agent_id PK
+        string name
+    }
+    DECISION_TASK {
+        string agent_id PK, FK
+        string task_id PK
+        string decision_context
+    }
+    TASK_POLICY {
+        string agent_id FK
+        string task_id FK
+        enum authority
+    }
+    POLICY_SNAPSHOT {
+        string policy_id PK
+        string agent_id FK
+        string task_id FK
+        int version
+        json logits
+        float baseline
+        json metadata
+    }
+    DECISION_AUTHORITY {
+        enum value PK
+    }
+    COMPLEXITY_PROFILE {
+        string policy_id PK, FK
+        string intent_ambiguity
+        string context_variability
+        string outcome_observability
+        string decision_impact
+        string reversibility
+        bool requires_human_approval
+    }
+    COMPLEXITY_ASSESSMENT {
+        int score
+        string tier
+        json risk_floors
+    }
+    AUTONOMY_ASSESSMENT {
+        bool eligible
+        string authorization_basis
+        string recommended_action_id FK
+        json criteria
+    }
+    ACTION {
+        string policy_id PK, FK
+        string action_id PK
+        string description
+        json parameters
+    }
+    SOFTMAX_POLICY {
+        string policy_id FK
+        float max_logit_abs
+    }
+    POLICY_DECISION {
+        string action_id FK
+        float logprob
+        json probabilities
+    }
+    DECISION_RESOLVER {
+        string algorithm
+    }
+    DECISION_FRAME {
+        string task
+        float minimum_margin
+        float uncertainty_penalty
+        float max_uncertainty
+    }
+    DECISION_CRITERION {
+        string criterion_id
+        float weight
+        int minimum_sources
+    }
+    DECISION_OPTION {
+        string action_id FK
+        json constraint_results
+    }
+    EVIDENCE_POINT {
+        string criterion_id FK
+        string source
+        float support
+        float confidence
+    }
+    CRITERION_ASSESSMENT {
+        string criterion_id FK
+        float posterior_support
+        float entropy_bits
+        float disagreement_bits
+        int source_count
+    }
+    OPTION_ASSESSMENT {
+        string action_id FK
+        bool feasible
+        float expected_utility
+        float uncertainty
+        float robust_utility
+    }
+    INFORMATION_NEED {
+        string kind
+        string option_id FK
+        string field_id
+        float information_gain_bits
+    }
+    TIE_BREAK_DISPOSITION {
+        enum value PK
+    }
+    DECISION_STATUS {
+        enum value PK
+    }
+    DECISION_RESULT {
+        string policy_id FK
+        int policy_version
+        string status
+        string selection_basis
+        string selected_action_id FK
+        string proposed_action_id FK
+        string authorization_basis
+        float action_logprob
+    }
+    EPISODE {
+        string episode_id PK
+        string agent_id FK
+        string task_id FK
+        string policy_id FK
+        int policy_version
+        string action_id FK
+        float action_logprob
+        string execution_status
+        json metadata
+    }
+    METRIC_RESULT {
+        string episode_id FK
+        enum metric
+        float normalized
+        string status
+    }
+    REWARD {
+        string reward_id PK
+        string episode_id FK
+        enum source
+        float value
+    }
+    REWARD_SHAPER {
+        float intent_weight
+        float adherence_weight
+        float completion_weight
+    }
+    REINFORCE_LEARNER {
+        float learning_rate
+        float baseline_decay
+        float entropy_bonus
+    }
+    TRAINING_RUN {
+        string run_id PK
+        string policy_id FK
+        string task_id FK
+        string algorithm
+        string status
+    }

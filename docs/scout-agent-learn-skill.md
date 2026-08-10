@@ -145,6 +145,21 @@ instructions: |
   Actually provisioning or changing the integration is a separate, higher-impact
   decision and must not reuse this recommendation profile.
 
+  Configure decision authority independently from complexity and execution
+  permission:
+
+  - `low` uses the TaskPolicy's learned softmax probabilities and learns from
+    explicit accept/reject feedback or independently observed outcomes. This is
+    the default for new and legacy policies.
+  - `full` lets Scout resolve a structured DecisionFrame with hard constraints,
+    Bayesian evidence aggregation, robust utility, and information gain. Use it
+    only when the policy owner explicitly delegates that reasoning authority.
+
+  Never infer `full` from Scout's confidence, model capability, policy
+  probability, or a low complexity tier. Full decision authority does not
+  override `requires_human_approval`, safety controls, service permissions, or
+  the returned execution authorization.
+
   When reusing this PubSub recommendation policy, inspect
   `complexity_profile_source`. If it is `default`, apply the low profile with
   `task-policy-complexity-set` before the next decision. Never replace a
@@ -153,7 +168,7 @@ instructions: |
   Initialize once:
 
   ```shell
-  agent-learn task-policy-init --agent-id <agent_id> --task-id <decision_task_id> --decision-context "<stable delegated choice>" --actions ./actions.json --complexity-profile ./complexity.json
+  agent-learn task-policy-init --agent-id <agent_id> --task-id <decision_task_id> --decision-context "<stable delegated choice>" --actions ./actions.json --complexity-profile ./complexity.json --decision-authority <low_or_full>
   ```
 
   The CLI marks the policy as `delegated_decision`. Existing unmarked question or
@@ -165,10 +180,32 @@ instructions: |
   agent-learn task-policy-complexity-set --agent-id <agent_id> --task-id <decision_task_id> --profile ./complexity.json
   ```
 
-  ## 4. Consume learned policy feedback before execution
+  Existing policies with no `decision_authority` are `low`. Apply an explicit
+  owner-approved authority without creating a second policy or learned snapshot:
+
+  ```shell
+  agent-learn task-policy-authority-set --agent-id <agent_id> --task-id <decision_task_id> --authority <low_or_full>
+  ```
+
+  Never create separate reasoned and learned policies for the same
+  `(agent_id, task_id)` decision. Both routes use the one active TaskPolicy and
+  its exact action taxonomy.
+
+  ## 4. Select through the active TaskPolicy
 
   This step is mandatory for every eligible decision. Do not merely inspect
   `task-policy` and then choose independently.
+
+  Inspect the active policy first:
+
+  ```shell
+  agent-learn task-policy --agent-id <agent_id> --task-id <decision_task_id>
+  ```
+
+  Read `current_policy.metadata.decision_authority`. Treat a missing field as
+  `low`; do not upgrade it during execution.
+
+  ### Low decision authority
 
   ```shell
   agent-learn task-policy-decide --agent-id <agent_id> --task-id <decision_task_id> --greedy
@@ -214,6 +251,87 @@ instructions: |
   per-criterion required values. Never override them in Scout. A true
   `requires_human_approval` profile always remains supervised.
 
+  ### Full decision authority
+
+  Build one JSON DecisionFrame from the current request and independently
+  supported evidence. Include every TaskPolicy action exactly once by
+  `action_id`; do not add, remove, or redefine actions in the frame:
+
+  ```json
+  {
+    "task": "Choose a deployment region for this workload",
+    "criteria": [
+      {"id": "capacity_fit", "weight": 0.6, "minimum_sources": 2},
+      {"id": "latency_fit", "weight": 0.4, "minimum_sources": 1}
+    ],
+    "constraints": ["data_residency"],
+    "options": [
+      {
+        "action_id": "east",
+        "constraint_results": {"data_residency": true},
+        "evidence": [
+          {"criterion_id": "capacity_fit", "source": "capacity_api", "support": 0.9, "confidence": 0.9},
+          {"criterion_id": "capacity_fit", "source": "quota_report", "support": 0.8, "confidence": 0.8},
+          {"criterion_id": "latency_fit", "source": "latency_test", "support": 0.7, "confidence": 0.9}
+        ]
+      },
+      {
+        "action_id": "west",
+        "constraint_results": {"data_residency": true},
+        "evidence": [
+          {"criterion_id": "capacity_fit", "source": "capacity_api", "support": 0.6, "confidence": 0.9},
+          {"criterion_id": "capacity_fit", "source": "quota_report", "support": 0.7, "confidence": 0.8},
+          {"criterion_id": "latency_fit", "source": "latency_test", "support": 0.9, "confidence": 0.9}
+        ]
+      }
+    ],
+    "minimum_margin": 0.05,
+    "uncertainty_penalty": 0.1,
+    "max_uncertainty": 1.0
+  }
+  ```
+
+  Evidence `support` is a probability in `[0,1]`; `confidence` is in `(0,1]`.
+  Source names must identify genuinely independent observations. Do not split
+  one source into aliases to satisfy `minimum_sources`, and do not convert
+  Scout's own recommendation into evidence.
+
+  ```shell
+  agent-learn task-policy-decide --agent-id <agent_id> --task-id <decision_task_id> --decision-frame ./decision-frame.json
+  ```
+
+  Follow the returned `status` exactly:
+
+  - `resolved`: execute `selected_action` only when
+    `autonomy.execute_without_confirmation` is true, then record its observable
+    outcome against the returned policy ID and version;
+  - `needs_evidence`: gather the first `information_needs` item, update the
+    frame, and decide again; do not guess or ask for a tie-break yet;
+  - `needs_user_tie_break`: persist the complete result JSON, present
+    `proposed_action`, and request exactly `ACCEPT` or `REJECT`;
+  - `needs_user_feedback`: deterministic human approval is required; persist
+    the result and request exactly `ACCEPT` or `REJECT`;
+  - `no_viable_option`: stop and reframe the constraints or action taxonomy;
+    never select a ruled-out action.
+
+  A reasoned result has `selection_basis: bayesian_decision` and
+  `action_logprob: null`. Never invent a softmax probability or log-probability
+  for it.
+
+  For a pending reasoned result, apply one user disposition to that exact file:
+
+  ```shell
+  agent-learn task-policy-adjudicate --agent-id <agent_id> --task-id <decision_task_id> --decision-result ./decision-result.json --disposition <accept_or_reject>
+  ```
+
+  `accept` resolves the proposed action. For a tie, `reject` advances to the
+  next tied action, which still requires explicit acceptance; persist the new
+  result before asking again. `rejected` or `no_viable_option` requires a new
+  frame. Never interpret rejection as proof that an unreviewed alternative is
+  correct. The result is bound to its exact policy ID and version. If the active
+  snapshot changes before the user replies, discard the stale result and rerun
+  the DecisionFrame against the current TaskPolicy before asking again.
+
   ## 5. Execute or preserve a pending recommendation
 
   When Scout can perform the chosen delegation now, execute it and evaluate the
@@ -223,7 +341,7 @@ instructions: |
   `correct_action_id` only when the result independently establishes the correct
   alternative. Automatic tool success alone is not task completion.
 
-  For a recommendation without an immediate observable outcome:
+  For a low-authority recommendation without an immediate observable outcome:
 
   - supervised mode: preserve it as pending and ask for feedback;
   - autonomous mode without an audit: present the recommendation without
@@ -288,10 +406,19 @@ instructions: |
   pending attempts, not five trainable outcomes. Autonomous non-audit
   recommendations do not create pending feedback debt.
 
+  For full authority, preserve the complete reasoned result JSON before a
+  binary tie-break or approval request. Do not register an action episode until
+  an action has been resolved. After accepted adjudication, use
+  `metadata.feedback_status: adjudicated` and
+  `metadata.decision_disposition: accepted`; do not use the low
+  authority durable `accepted`/`rejected` authorization statuses for a
+  frame-local tie-break. A rejected or exhausted result has no selected action;
+  retain the result for audit and reframe instead of fabricating an episode.
+
   ## 6. Complete or register the decision episode
 
   For immediate execution, build a full episode using the decision command's
-  policy fields. For a pending recommendation, retrieve the incomplete record
+  policy fields. For a pending low-authority recommendation, retrieve the incomplete record
   with `task-episodes-list --include-incomplete`, update the same episode ID,
   and register it again. Never create a second episode for the feedback. The SDK
   preserves the original decision time in `metadata.decision_created_at` and
@@ -320,9 +447,10 @@ instructions: |
     "result_summary": "<quality, correctness, failures, and remaining work>",
     "policy_id": "<policy_id from task-policy-decide>",
     "policy_version": 0,
-    "action_logprob": -0.6931471805599453,
+    "action_logprob": null,
     "metadata": {
-      "feedback_status": "<accepted, rejected, or observed>",
+      "feedback_status": "<accepted, rejected, observed, or adjudicated>",
+      "selection_basis": "<learned_policy or bayesian_decision>",
       "outcome_source": "user_feedback_or_observable",
       "correct_action_id": "<independently supported action id>",
       "task_completed": true
@@ -330,14 +458,19 @@ instructions: |
   }
   ```
 
+  Copy the numeric `action_logprob` returned by a low-authority learned
+  decision. Keep it `null` for a full-authority reasoned decision; never derive
+  one from `action_probabilities`.
+
   Register only against a marked decision policy:
 
   ```shell
   agent-learn task-episode-register --agent-id <agent_id> --task-id <decision_task_id> --episode ./episode.json --require-decision-policy
   ```
 
-  For `ACCEPT`, set `feedback_status: accepted`, set `correct_action_id` to the
-  selected action, and set `task_completed: true`. Registration immediately
+  For low-authority `ACCEPT`, set `feedback_status: accepted`, set
+  `correct_action_id` to the selected action, and set `task_completed: true`.
+  Registration immediately
   authorizes that action for this agent and task policy. Future decisions use it
   without confirmation or drift-audit prompts; scoring and training may happen
   afterward. For `REJECT`, set `feedback_status: rejected`. A rejection revokes
@@ -347,7 +480,15 @@ instructions: |
   Independently observed results use `feedback_status: observed` and continue
   through the complexity-proportional statistical gates.
 
+  For a full-authority tie-break, use `feedback_status: adjudicated` and record
+  the binary response in `decision_disposition`. Acceptance resolves only that
+  framed decision; it does not pin the action for later frames. Set
+  `correct_action_id` only when execution or another independent observation,
+  not the tie-break alone, establishes correctness.
+
   ## 7. Score, train, and verify execution feedback
+
+  For low authority:
 
   ```shell
   agent-learn score --agent-id <agent_id> --task-id <decision_task_id> --limit 100
@@ -362,23 +503,38 @@ instructions: |
   used one episode, and the policy version advanced. The next
   `task-policy-decide` call will return the updated policy and reassess autonomy.
 
+  For full authority, score completed episodes for quality and audit, but do
+  not apply REINFORCE. The reasoned action was not sampled from the softmax
+  behavior policy, and logits do not control full-authority selection:
+
+  ```shell
+  agent-learn score --agent-id <agent_id> --task-id <decision_task_id> --limit 100
+  agent-learn task-policy --agent-id <agent_id> --task-id <decision_task_id>
+  agent-learn task-episodes-list <agent_id> --task-id <decision_task_id> --limit 100
+  ```
+
+  `agent-learn train --decision-only` rejects full-authority policies with the
+  reason `full decision authority uses reasoned resolution, not REINFORCE`.
+
   ## Execution sequence
 
   1. Apply the eligibility gate; stop if no delegated decision exists.
   2. Establish the durable store.
   3. Resolve or initialize a marked delegated-decision policy.
-  4. Call `task-policy-decide --greedy` for a user-facing recommendation and
-     consume its learned feedback.
+  4. Read `decision_authority`: call `task-policy-decide --greedy` for `low`, or
+     build a complete frame and call `task-policy-decide --decision-frame` for
+     `full`.
   5. Follow `autonomy.execute_without_confirmation`, `request_user_feedback`,
      `observable_outcome_satisfies_feedback`, and `outcome_recording` exactly.
   6. Execute `selected_action`, or register a supervised/audited recommendation
      as pending before responding when no observable outcome exists.
   7. Evaluate user-visible correctness and completion.
-  8. End a pending recommendation with the visible feedback handoff; on the
-     follow-up, complete the same pending ID. For execution, register the
-     observable outcome with `--require-decision-policy`.
-  9. Score and train the completed episode once, then verify the updated policy
-     for the next decision.
+  8. End a low-authority pending recommendation with the visible feedback
+     handoff and complete the same pending ID on follow-up. For a full-authority
+     tie, persist and adjudicate the exact result until accepted or exhausted.
+  9. Register observable outcomes with `--require-decision-policy`. Score every
+     completed episode; train only low-authority policies, then verify the policy
+     before its next decision.
 
   ## Smoke-test prompt
 

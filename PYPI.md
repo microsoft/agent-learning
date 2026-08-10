@@ -1,6 +1,7 @@
 # agent-learning
 
-Native reinforcement learning SDK for AI agents. An in-process Learner optimizes a small, interpretable TaskPolicy over discrete agent choices (understand intent and complete task by choosing the right outcome).
+Evidence-driven decision SDK for AI agents. Each recurring agent-task decision
+has one small, interpretable TaskPolicy over explicit executable alternatives.
 
 TaskPolicies model reusable decisions among executable alternatives such as
 models, skills, tools, workflows, or workloads. Factual questions, ordinary
@@ -8,17 +9,29 @@ chat, reporting, and learning automation are not policy tasks.
 
 ## How it works
 
-The SDK improves agents without LLM weight fine-tuning. There are no GPU fine-tune jobs and no opaque update cycles — just three pieces that run in your existing Python process:
+The SDK improves decisions without LLM weight fine-tuning. There are no GPU
+fine-tune jobs and no opaque update cycles. Four pieces run in the existing
+Python process:
 
-1. **TaskPolicy** is a softmax distribution over `N` discrete actions (e.g., "take action A", "take action B", "take action C"). It lives in Python and updates in milliseconds.
+1. **TaskPolicy** owns `N` discrete actions and one persisted decision authority.
+	`low` selects from learned softmax evidence; `full` evaluates a structured
+	DecisionFrame against the same action set.
 
-2. **Score** evaluates each episode on-device with three stdlib scorers for intent resolution, task adherence, and task completion. Their scores are combined into a single scalar reward with no scoring endpoint or environment variables required. Azure AI evaluators remain available as an opt-in.
+2. **DecisionResolver** applies hard constraints, confidence-weighted Bayesian
+	evidence aggregation, Pareto elimination, robust utility, and information
+	needs. A close result requires an explicit accept/reject tie-break.
 
-3. **Learner** applies REINFORCE-with-baseline to update TaskPolicy logits directly from logged episodes. Updates are tiny gradient steps that run on local compute and persist through a pluggable store — in-memory or local files by default, with Azure Cosmos DB optional.
+3. **Score** evaluates each episode on-device for intent resolution, task
+	adherence, and task completion. Azure AI evaluators remain opt-in.
 
-`task-policy-decide` closes the loop at execution time by returning the selected
-action plus historical correctness, reward, result summaries, and per-metric
-quality feedback for the agent to use on its next delegated decision.
+4. **Learner** applies REINFORCE-with-baseline to low-authority TaskPolicy
+	logits from observed outcomes and accept/reject feedback. Full-authority
+	episodes are scored and audited but are not treated as softmax samples.
+
+`task-policy-decide` closes the loop at execution time. It returns learned
+feedback for low authority or an auditable decision certificate, information
+needs, and any required tie-break for full authority. Both routes preserve the
+same policy ID, version lineage, and action taxonomy.
 
 It also returns a complexity-proportional autonomy assessment. A persisted
 profile covers intent ambiguity, context variability, outcome observability,

@@ -1,4 +1,4 @@
-"""Native reinforcement learning SDK for AI agents.
+"""Evidence-driven reasoned and learned decision SDK for AI agents.
 
 Replaces the agent-lightning LLM fine-tuning loop with a fully
 native, in-process learner. The SDK is organised into five layers:
@@ -11,6 +11,7 @@ native, in-process learner. The SDK is organised into five layers:
     with optional Azure AI evaluators for Intent Resolution, Task
     Adherence, and Task Completion.
 - ``agent_learning.rewards``  - reward shaping + persistence.
+- ``agent_learning.decision`` - unified reasoned and learned task decisions.
 - ``agent_learning.policy``   - discrete softmax bandit policy.
 - ``agent_learning.learners`` - REINFORCE-with-baseline learner.
 - ``agent_learning.training`` - end-to-end :class:`LearningRunner`.
@@ -78,9 +79,24 @@ from .config import (
     AutonomyTier,
     CaptureConfig,
     CosmosConfig,
-    ScoreConfig,
     LearnerConfig,
+    ScoreConfig,
     ShapingConfig,
+)
+from .decision import (
+    CriterionAssessment,
+    DecisionAuthority,
+    DecisionCriterion,
+    DecisionFrame,
+    DecisionOption,
+    DecisionResolver,
+    DecisionResult,
+    DecisionStatus,
+    EvidencePoint,
+    InformationNeed,
+    OptionAssessment,
+    TaskPolicy,
+    TieBreakDisposition,
 )
 from .learners import Learner, LearnerResult, ReinforceLearner
 from .metrics import (
@@ -119,12 +135,12 @@ from .types import (
 
 __all__ = [
     "Action",
-        "AutonomyAssessment",
-        "AutonomyConfig",
-        "AutonomyTier",
     "AdherenceScorer",
     "AgentSummary",
     "AgentTaskSummary",
+    "AutonomyAssessment",
+    "AutonomyConfig",
+    "AutonomyTier",
     "CaptureConfig",
     "CaptureContext",
     "Classifier",
@@ -135,12 +151,21 @@ __all__ = [
     "ContextualSoftmaxPolicy",
     "CosmosConfig",
     "CosmosStore",
+    "CriterionAssessment",
+    "DecisionAuthority",
+    "DecisionCriterion",
+    "DecisionFrame",
+    "DecisionOption",
+    "DecisionResolver",
+    "DecisionResult",
+    "DecisionStatus",
     "Episode",
     "EpisodeCapture",
+    "EvidencePoint",
     "InMemoryStore",
-    "IntentScorer",
+    "InformationNeed",
     "IntentResolutionMetric",
-    "ScoreConfig",
+    "IntentScorer",
     "Learner",
     "LearnerConfig",
     "LearnerResult",
@@ -151,6 +176,7 @@ __all__ = [
     "MetricName",
     "MetricRequest",
     "MetricResult",
+    "OptionAssessment",
     "Policy",
     "PolicySnapshot",
     "ReinforceLearner",
@@ -159,10 +185,13 @@ __all__ = [
     "RewardSource",
     "RewardWriter",
     "RouterClassifier",
+    "ScoreConfig",
     "ShapingConfig",
     "SoftmaxPolicy",
     "TaskAdherenceMetric",
     "TaskCompletionMetric",
+    "TaskPolicy",
+    "TieBreakDisposition",
     "ToolCall",
     "TrainingRun",
     "TrainingStatus",

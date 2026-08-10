@@ -1,14 +1,15 @@
 ---
-title: Scout delegated-decision policy training
-description: Train only Scout policies explicitly marked as delegated decisions; exclude questions, reporting tasks, ordinary chat, and the agent-learning automation itself
+title: Scout delegated-decision policy maintenance
+description: Train low-authority Scout decision policies, audit full-authority policies, and exclude questions, reporting tasks, ordinary chat, and the agent-learning automation itself
 author: Microsoft
-ms.date: 2026-08-09
+ms.date: 2026-08-10
 ms.topic: how-to
 instructions: |
-  # Scout delegated-decision policy training
+  # Scout delegated-decision policy maintenance
 
-  This automation trains reusable delegated decisions only. It is control-plane
-  maintenance, not a user decision task.
+  This automation trains reusable low-authority delegated decisions and audits
+  full-authority reasoned decisions. It is control-plane maintenance, not a
+  user decision task.
 
   **Never create a TaskPolicy or episode for this automation run. Never train a
   `run-agent-learning-automation` policy.** Its status report is operational
@@ -58,6 +59,18 @@ instructions: |
   `decision_context` describes a real reusable choice, and at least two actions
   map to executable delegates or strategies. Skip anything else.
 
+  Inspect `current_policy.metadata.decision_authority` and
+  `decision_authority_source`. A missing authority is the backward-compatible
+  `low` default. Do not infer or upgrade authority in automation:
+
+  - `low`: eligible for scored accept/reject or observable-outcome learning and
+    REINFORCE after the remaining gates pass;
+  - `full`: resolved from a request-specific DecisionFrame and never trained by
+    REINFORCE. Keep it in the report as a reasoned, score-and-audit policy.
+
+  Do not create separate learned and reasoned TaskPolicies for one task. Both
+  authority routes share this active policy ID, version lineage, and action set.
+
   Inspect `autonomy.complexity`. Report policies whose `profile_source` is
   `default` so the owner can review them; do not invent a lower profile during
   automation. Verify configured fields, derived action count, score, tier, risk
@@ -74,10 +87,11 @@ instructions: |
   agent-learn task-episodes-list <agent_id> --task-id <task_id> --limit 500 --include-incomplete --start-date <checkpoint_end_date> --end-date <end_date>
   ```
 
-  The default count and list are full, potentially trainable episodes. The
-  `--include-incomplete` count and list are all attempts, including pending
-  recommendations. Each count and its corresponding list length must agree when
-  the count is at most `500`. Pending count is all attempts minus full episodes.
+  The default count and list are full episodes: potentially trainable for low
+  authority and scoreable for full authority. The `--include-incomplete` count
+  and list are all attempts, including pending recommendations. Each count and
+  its corresponding list length must agree when the count is at most `500`.
+  Pending count is all attempts minus full episodes.
 
   Never calculate `total episodes - current_policy.episodes_seen`.
   `episodes_seen` counts training usages, not unique records. Never reuse another
@@ -85,7 +99,7 @@ instructions: |
 
   ## 4. Verify usable execution feedback
 
-  Require at least five selected episodes. Every episode must:
+  For low authority, require at least five selected episodes. Every episode must:
 
   - reference this delegated decision policy and one of its actions;
   - contain user-visible execution results;
@@ -102,13 +116,21 @@ instructions: |
   episodes; 5 pending feedback" rather than only "0 eligible episodes." Never
   train or advance a checkpoint for pending records.
 
-  Rescore incomplete evaluations locally when needed:
+  Score missing evaluations locally when needed:
 
   ```shell
   agent-learn score --agent-id <agent_id> --task-id <task_id> --limit 500
   ```
 
-  ## 5. Train with CLI-side eligibility enforcement
+  For full authority, verify completed episodes reference the same policy and
+  actions, carry `selection_basis: bayesian_decision`, keep
+  `action_logprob: null`, and contain observable or adjudicated result details.
+  Score them for quality and audit, but do not count them toward a REINFORCE
+  minimum. A frame-local accept/reject is not a behavior-policy propensity.
+
+  ## 5. Train low-authority policies only
+
+  Run the training command only when `decision_authority` is `low`:
 
   ```shell
   agent-learn train --agent-id <agent_id> --task-id <task_id> --decision-only --limit 500 --min-episodes 5 --start-date <checkpoint_end_date> --end-date <end_date> --skip-scoring
@@ -118,9 +140,19 @@ instructions: |
   accidental question or automation policies from training. `--min-episodes 5`
   prevents an undersized update even if orchestration counted incorrectly.
 
+  For `full`, do not invoke training. The CLI independently rejects it with:
+
+  ```text
+  full decision authority uses reasoned resolution, not REINFORCE
+  ```
+
+  Report its completed, scored, pending, and adjudicated episode counts, plus
+  any missing evidence or quality failures. Do not downgrade authority to make
+  the policy trainable.
+
   ## 6. Verify usefulness for the next execution
 
-  Inspect the new policy:
+  For low authority, inspect the new policy and its next learned decision:
 
   ```shell
   agent-learn task-policy --agent-id <agent_id> --task-id <task_id>
@@ -145,21 +177,30 @@ instructions: |
   delegated execution. Report the autonomy mode and unmet criteria, but never
   override the SDK assessment in automation.
 
+  For full authority, run only `task-policy`. Confirm the active policy ID,
+  version, exact actions, `decision_authority: full`, configured complexity,
+  and episode quality report. Do not call `task-policy-decide`: automation has
+  no user request-specific DecisionFrame and must not fabricate evidence merely
+  to produce a recommendation. The next Scout execution supplies its own frame.
+
   ## 7. Advance only the trained task checkpoint
 
   Persist the fixed `end_date`, run ID, policy ID/version, and episodes used for
-  this `(agent_id, task_id)` only. Do not advance checkpoints for skipped tasks.
+  this `(agent_id, task_id)` only after successful low-authority training. Do
+  not advance training checkpoints for skipped or full-authority tasks.
 
   ## Execution sequence
 
   1. Establish the store and fixed cutoff.
   2. Discover with `tasks-list --decision-only`.
-  3. Verify decision metadata and action space.
+  3. Verify decision metadata, authority, and action space.
   4. Count/list full episodes and all attempts in the exact task-local window.
   5. Verify or repair execution scores.
-  6. Train with `--decision-only --min-episodes 5`.
-  7. Verify policy update and next-execution feedback.
-  8. Advance only that decision task's checkpoint.
+  6. Train low authority with `--decision-only --min-episodes 5`; score and
+     audit full authority without training.
+  7. Verify the low-authority update and next-execution feedback, or verify the
+     unchanged full-authority policy metadata and audit report.
+  8. Advance only a successfully trained low-authority task checkpoint.
   9. Return the operational report without capturing this automation as an
      agent-learning episode.
 ---

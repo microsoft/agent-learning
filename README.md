@@ -2,10 +2,11 @@
 
 Helping agents make better decisions with measurable feedback.
 
-`agent-learning` is a lightweight decision layer for an existing agent. It
-learns which option works best for a recurring task from a small, explicit set
-of executable alternatives, such as prompt variants, retrieval depths, tools,
-models, workflows, or escalation paths.
+`agent-learning` is a lightweight decision layer for an existing agent. One
+TaskPolicy owns each recurring agent-task decision and its small, explicit set
+of executable alternatives. Low-authority policies learn which option works;
+full-authority policies resolve current evidence with Bayesian decision theory,
+hard constraints, robust utility, and information gain.
 
 The foundation model stays frozen. There are no GPU training jobs and no
 hidden prompt rewrites. The agent makes an explicit choice, records the
@@ -22,20 +23,20 @@ the next decision.
    least two actions the agent can actually execute. A TaskPolicy owns the
    probability distribution for that `(agent_id, task_id)` pair.
 
-2. **Choose and execute.** `task-policy-decide` samples from the active softmax
-   policy while supervised, then uses the stable winner greedily after autonomy
-   is earned. The agent consumes learned feedback and executes the selected
-   action.
+2. **Choose and execute.** `task-policy-decide` follows the authority persisted
+   on that same TaskPolicy. `low` selects from learned softmax evidence; `full`
+   resolves a structured DecisionFrame and requests more evidence or an
+   accept/reject tie-break when no unique robust winner exists.
 
 3. **Observe and score.** A completed episode preserves the decision context,
    selected action, output, result summary, latency, and independently
    supported correctness evidence. Local scorers measure intent resolution,
    task adherence, and task completion and shape them into one reward.
 
-4. **Improve the next decision.** REINFORCE-with-baseline nudges a few policy
-   logits, then persists a new policy snapshot. Better-than-usual choices gain
-   probability, worse-than-usual choices lose probability, and exploration
-   remains available.
+4. **Improve the next decision.** For `low`, REINFORCE-with-baseline nudges a
+   few policy logits and persists a new snapshot. For `full`, completed episodes
+   are scored and audited but not passed to REINFORCE because the reasoned
+   choice was not sampled from the softmax behavior policy.
 
 5. **Earn or grant autonomy.** `task-policy-decide` stops routine confirmation
    when the recommended action passes every evidence gate or the user explicitly
@@ -100,7 +101,7 @@ or install it with the automation script:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/microsoft/agent-learning/main/scripts/install-linux.sh -o /tmp/install-linux.sh
-bash /tmp/install-linux.sh --version 0.7.0 --install-dir /usr/local/bin
+bash /tmp/install-linux.sh --version 0.8.0 --install-dir /usr/local/bin
 ```
 
 The Linux installation guide covers Debian/Ubuntu, RHEL-compatible, and
@@ -163,7 +164,8 @@ agent-learn task-policy-init `
    --task-id choose-repository-search `
    --decision-context "Choose a repository search strategy for a coding task" `
    --actions .\actions.json `
-   --complexity-profile .\complexity.json
+   --complexity-profile .\complexity.json `
+   --decision-authority low
 
 agent-learn task-policy-decide `
    --agent-id code-reviewer `
@@ -228,9 +230,11 @@ agent-learn --version
 agent-learn tasks-list <agent_id> [--decision-only]
 agent-learn task-episodes-count <agent_id> [--task-id <task_id>] [--include-incomplete] [--start-date <date>] [--end-date <date>]
 agent-learn task-episodes-list <agent_id> [--task-id <task_id>] [--limit <1-500>] [--include-incomplete] [--start-date <date>] [--end-date <date>]
-agent-learn task-policy-init --agent-id <agent_id> --task-id <task_id> --decision-context <context> --actions ./actions.json [--complexity-profile ./complexity.json]
+agent-learn task-policy-init --agent-id <agent_id> --task-id <task_id> --decision-context <context> --actions ./actions.json [--complexity-profile ./complexity.json] [--decision-authority <low|full>]
 agent-learn task-policy-complexity-set --agent-id <agent_id> --task-id <task_id> --profile ./complexity.json
-agent-learn task-policy-decide --agent-id <agent_id> --task-id <task_id> [--history-limit <1-500>] [--greedy] [--seed <integer>]
+agent-learn task-policy-authority-set --agent-id <agent_id> --task-id <task_id> --authority <low|full>
+agent-learn task-policy-decide --agent-id <agent_id> --task-id <task_id> [--decision-frame ./frame.json] [--history-limit <1-500>] [--greedy] [--seed <integer>]
+agent-learn task-policy-adjudicate --agent-id <agent_id> --task-id <task_id> --decision-result ./result.json --disposition <accept|reject>
 agent-learn task-episode-register --agent-id <agent_id> --task-id <task_id> --episode ./episode.json [--require-decision-policy]
 agent-learn score --agent-id <agent_id> [--task-id <task_id>] [--limit <1-500>]
 agent-learn train --agent-id <agent_id> [--task-id <task_id>] [--decision-only] [--limit <1-500>] [--min-episodes <1-500>] [--start-date <date>] [--end-date <date>] [--skip-scoring]
@@ -243,10 +247,10 @@ agent-learn task-policy --agent-id <agent_id> --task-id <task_id>
    workflow, math, and deployment.
 - [Complexity-proportional autonomy](docs/autonomy-complexity.md): declared
    complexity dimensions, tier calculation, risk floors, and scaled gates.
-- [Scout decision integration](docs/scout-agent-learn-skill.md): apply learned
-   delegated decisions during execution.
-- [Scout decision training](docs/scout-automation-agent-learning.md): train
-   eligible policies without turning automation into a policy task.
+- [Scout decision integration](docs/scout-agent-learn-skill.md): apply reasoned
+   or learned delegated decisions during execution.
+- [Scout decision maintenance](docs/scout-automation-agent-learning.md): train
+   low-authority policies and audit full-authority policies.
 - [The math, explained simply](docs/math-explained-simply.md) and
    [mathematical reference](docs/math.md): softmax, rewards, baselines, and
    REINFORCE.
