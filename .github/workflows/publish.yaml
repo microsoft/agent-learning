@@ -214,7 +214,7 @@ jobs:
             echo "::error::The Windows build did not produce the versioned ZIP."
             exit 1
           fi
-          if [[ ! -f "release-assets/dist-installer/agent-learning-cli-${VERSION}-linux-x64.tar.gz" ]]; then
+          if [[ ! -f "release-assets/agent-learning-cli-${VERSION}-linux-x64.tar.gz" ]]; then
             echo "::error::The Linux build did not produce the versioned archive."
             exit 1
           fi

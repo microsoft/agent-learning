@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 
+import pytest
 
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Linux installer requires POSIX Bash")
 def test_install_script_reports_the_release_artifact(tmp_path: Path) -> None:
     repo_root = Path(__file__).resolve().parents[1]
     script_path = repo_root / "scripts" / "install-linux.sh"
