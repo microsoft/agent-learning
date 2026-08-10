@@ -1,0 +1,62 @@
+name: Build Linux CLI
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_call:
+    inputs:
+      app_version:
+        description: "Version embedded in the installer name"
+        required: false
+        default: ""
+        type: string
+  workflow_dispatch:
+    inputs:
+      app_version:
+        description: "Installer version override (defaults to tag name or dev)"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build-installer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Resolve installer version
+        id: vars
+        shell: bash
+        run: |
+          if [[ -n "${{ inputs.app_version }}" ]]; then
+            version="${{ inputs.app_version }}"
+          elif [[ "${{ github.ref_type }}" == "tag" ]]; then
+            version="${{ github.ref_name }}"
+            version="${version#v}"
+          else
+            version="dev"
+          fi
+          echo "app_version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Build Linux installer
+        shell: bash
+        run: |
+          ./scripts/build_linux_installer.sh --app-version "${{ steps.vars.outputs.app_version }}"
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-learning-linux-installer-${{ steps.vars.outputs.app_version }}
+          path: |
+            dist-installer/*.tar.gz
+          if-no-files-found: error
+          overwrite: true

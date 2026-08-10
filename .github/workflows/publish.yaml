@@ -154,12 +154,21 @@ jobs:
     with:
       app_version: ${{ needs.release-metadata.outputs.version }}
 
+  build-linux:
+    name: Build Linux release
+    needs: release-metadata
+    if: github.event_name == 'push' || inputs.target == 'pypi'
+    uses: ./.github/workflows/linux-installer.yaml
+    with:
+      app_version: ${{ needs.release-metadata.outputs.version }}
+
   github-release:
     name: Create GitHub release
     needs:
       - release-metadata
       - build
       - build-windows
+      - build-linux
     if: >-
       github.repository == 'microsoft/agent-learning' &&
       (github.event_name == 'push' || inputs.target == 'pypi')
@@ -175,6 +184,12 @@ jobs:
           name: agent-learning-windows-installer-${{ needs.release-metadata.outputs.version }}
           path: release-assets
 
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: agent-learning-linux-installer-${{ needs.release-metadata.outputs.version }}
+          path: release-assets
+
       - name: Create release and attach executables
         shell: bash
         env:
@@ -185,7 +200,7 @@ jobs:
           VERSION: ${{ needs.release-metadata.outputs.version }}
         run: |
           mapfile -t assets < <(
-            find release-assets -type f \( -name '*.exe' -o -name '*.zip' \) -print | sort
+            find release-assets -type f \( -name '*.exe' -o -name '*.zip' -o -name '*.tar.gz' \) -print | sort
           )
           if [[ ! -f "release-assets/dist/agent-learn.exe" ]]; then
             echo "::error::The Windows build did not produce agent-learn.exe."
@@ -197,6 +212,10 @@ jobs:
           fi
           if [[ ! -f "release-assets/dist-installer/agent-learning-cli-${VERSION}-windows-x64.zip" ]]; then
             echo "::error::The Windows build did not produce the versioned ZIP."
+            exit 1
+          fi
+          if [[ ! -f "release-assets/dist-installer/agent-learning-cli-${VERSION}-linux-x64.tar.gz" ]]; then
+            echo "::error::The Linux build did not produce the versioned archive."
             exit 1
           fi
 
