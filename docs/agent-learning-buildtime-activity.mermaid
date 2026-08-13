@@ -1,0 +1,15 @@
+flowchart TD
+    START([Start])
+    TRAIN[Starts policy training]
+    POLICY[Obtains active task policy]
+    EPISODES[Collects completed episodes]
+    ELIGIBLE{Enough evidence?}
+    EVALUATE[Evaluates outcomes]
+    REWARD[Computes rewards]
+    LEARN[Updates policy]
+    STORE[Stores new policy]
+    END([End])
+
+    START --> TRAIN --> POLICY --> EPISODES --> ELIGIBLE
+    ELIGIBLE -->|Yes| EVALUATE --> REWARD --> LEARN --> STORE --> END
+    ELIGIBLE -->|No| END

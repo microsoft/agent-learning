@@ -14,6 +14,7 @@ AppPublisher={#AppPublisher}
 DefaultDirName={autopf}\Agent Learning
 DefaultGroupName=Agent Learning
 DisableProgramGroupPage=yes
+PrivilegesRequired=lowest
 ChangesEnvironment=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -32,14 +33,13 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "addtopath"; Description: "Add agent-learn command to user PATH"; GroupDescription: "Additional tasks:"
 
 [Files]
-Source: "dist\agent-learn.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "dist\agent-learn\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{autoprograms}\Agent Learning CLI"; Filename: "{app}\{#AppExeName}"
 
 [Registry]
-Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}"; Tasks: addtopath; Check: HasNonEmptyPathValue() and NeedsAddPath(ExpandConstant('{app}'))
-Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{app}"; Tasks: addtopath; Check: not HasNonEmptyPathValue()
+Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{code:PathWithEntryFirst|{app}}"; Tasks: addtopath
 Root: HKCU; Subkey: "Software\AgentLearningCLI"; ValueType: string; ValueName: "AddedToUserPath"; ValueData: "1"; Tasks: addtopath; Flags: uninsdeletekey
 
 [Code]
@@ -130,16 +130,18 @@ begin
   end;
 end;
 
-function NeedsAddPath(Dir: string): Boolean;
+function PathWithEntryFirst(Dir: string): string;
 var
   OrigPath: string;
+  RemainingPath: string;
 begin
-  Result := True;
-  if not RegQueryStringValue(HKCU, 'Environment', 'Path', OrigPath) then
+  Result := Dir;
+  if not RegQueryStringValue(HKCU, 'Environment', 'Path', OrigPath) or (Trim(OrigPath) = '') then
     Exit;
 
-  if PathContainsEntry(OrigPath, Dir) then
-    Result := False;
+  RemainingPath := RemovePathEntry(OrigPath, Dir);
+  if RemainingPath <> '' then
+    Result := Dir + ';' + RemainingPath;
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);

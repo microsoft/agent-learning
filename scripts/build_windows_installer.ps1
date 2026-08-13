@@ -32,13 +32,22 @@ try {
     python -m PyInstaller `
         --clean `
         --noconfirm `
-        --onefile `
+        --onedir `
+        --specpath "build" `
         --name "agent-learn" `
         "packaging/windows/agent_learning_entry.py"
 
-    $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-    if (-not (Test-Path $iscc)) {
-        throw "Inno Setup not found at '$iscc'. Install Inno Setup 6 and retry."
+    $isccCandidates = @(
+        "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+        "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+        "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
+    )
+    $iscc = $isccCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $iscc) {
+        $iscc = (Get-Command "ISCC.exe" -ErrorAction SilentlyContinue).Source
+    }
+    if (-not $iscc) {
+        throw "Inno Setup 6 not found. Install it and retry."
     }
 
     & $iscc "/DAppVersion=$AppVersion" "packaging/windows/agent-learning-installer.iss"
@@ -47,7 +56,7 @@ try {
     }
 
     $zipPath = "dist-installer/agent-learning-cli-$AppVersion-windows-x64.zip"
-    Compress-Archive -Path "dist/agent-learn.exe" -DestinationPath $zipPath -Force
+    Compress-Archive -Path "dist/agent-learn/*" -DestinationPath $zipPath -Force
 
     Write-Host "Built installer artifacts in dist-installer/" -ForegroundColor Green
 }

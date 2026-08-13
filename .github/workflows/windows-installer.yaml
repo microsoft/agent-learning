@@ -57,7 +57,6 @@ jobs:
         with:
           name: agent-learning-windows-installer-${{ steps.vars.outputs.app_version }}
           path: |
-            dist/agent-learn.exe
             dist-installer/*.exe
             dist-installer/*.zip
           if-no-files-found: error

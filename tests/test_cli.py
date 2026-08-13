@@ -37,6 +37,8 @@ def _full_episode() -> Episode:
 
 def test_help_and_version_print_sdk_version(capsys) -> None:
     assert f"SDK version {__version__}" in cli._build_arg_parser().format_help()
+    assert cli.main([]) == 0
+    assert "usage: agent-learn" in capsys.readouterr().out
     with pytest.raises(SystemExit) as exit_info:
         cli.main(["--version"])
     assert exit_info.value.code == 0
