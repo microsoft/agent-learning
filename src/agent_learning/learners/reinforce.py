@@ -53,6 +53,8 @@ class ReinforceLearner(Learner):
         for r in rewards:
             if r.source != RewardSource.AGGREGATE:
                 continue
+            if not math.isfinite(r.value) or not -1.0 <= r.value <= 1.0:
+                raise ValueError("aggregate reward value must be finite and within [-1, 1]")
             # Rescoring may append a replacement aggregate. Keep the newest.
             current = aggregate_rewards.get(r.episode_id)
             if current is None or r.created_at > current.created_at:
