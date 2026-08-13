@@ -1,0 +1,54 @@
+flowchart TB
+    AGENT["<b>Agent</b><br/>Receives a recurring task and executes an authorized result."]
+    TASK["<b>Decision Task</b><br/>Names the reusable decision context for one agent-task pair."]
+    STORE["<b>Learning Store</b><br/>Provides the active policy and prior outcomes, then persists execution evidence."]
+    SNAPSHOT["<b>Active Policy Snapshot</b><br/>Holds the exact version, logits, authority, complexity metadata, and actions."]
+    TASK_POLICY["<b>Task Policy</b><br/>Wraps one active snapshot and exposes a unified decision operation."]
+    ACTIONS["<b>Action Taxonomy</b><br/>Defines the stable executable alternatives owned by the snapshot."]
+    AUTHORITY["<b>Decision Authority</b><br/>Routes low authority to learned selection and full authority to reasoned resolution."]
+    SOFTMAX["<b>Softmax Policy</b><br/>Uses learned probabilities to sample or select a policy-owned action."]
+    FRAME["<b>Decision Frame</b><br/>Supplies current criteria, constraints, options, and independent evidence."]
+    RESOLVER["<b>Decision Resolver</b><br/>Evaluates current evidence and finds a robust winner or requests more input."]
+    RESULT["<b>Decision Result</b><br/>Normalizes the selected or proposed action, status, rationale, and policy lineage."]
+    HISTORY["<b>Historical Outcomes</b><br/>Provides prior completed episodes, rewards, and explicit user feedback."]
+    GATE["<b>Autonomy and Approval Gate</b><br/>Combines result status, complexity, and learned evidence to govern confirmation."]
+    EXECUTION["<b>Agent Execution</b><br/>Runs the selected action after authorization or user confirmation."]
+    CAPTURE["<b>Episode Capture</b><br/>Observes the interaction, selected action, policy lineage, and outcome."]
+    EPISODE["<b>Episode</b><br/>Preserves the durable execution record consumed by scoring and learning."]
+
+    AGENT -->|undertakes| TASK
+    TASK -->|requests the active policy from| STORE
+    STORE -->|returns| SNAPSHOT
+    SNAPSHOT -->|hydrates| TASK_POLICY
+    SNAPSHOT -->|declares| ACTIONS
+    SNAPSHOT -->|configures| AUTHORITY
+    TASK_POLICY -->|reads| AUTHORITY
+    AUTHORITY -->|delegates low-authority selection to| SOFTMAX
+    SNAPSHOT -->|hydrates| SOFTMAX
+    ACTIONS -->|bounds choices for| SOFTMAX
+    AUTHORITY -->|delegates full-authority resolution to| RESOLVER
+    FRAME -->|supplies current evidence to| RESOLVER
+    ACTIONS -->|bounds options for| RESOLVER
+    SOFTMAX -->|normalizes its choice into| RESULT
+    RESOLVER -->|emits| RESULT
+    STORE -->|returns| HISTORY
+    SNAPSHOT -->|supplies complexity and confidence to| GATE
+    HISTORY -->|supplies observed evidence to| GATE
+    RESULT -->|is governed by| GATE
+    GATE -->|authorizes or requests confirmation for| EXECUTION
+    RESULT -->|provides the selected action to| EXECUTION
+    EXECUTION -->|is observed by| CAPTURE
+    CAPTURE -->|creates or completes| EPISODE
+    EPISODE -->|is persisted through| STORE
+
+    classDef identity fill:#e8f1f8,stroke:#315f7d,color:#17202a,stroke-width:1.5px;
+    classDef state fill:#eaf4e8,stroke:#4d7047,color:#17202a,stroke-width:1.5px;
+    classDef runtime fill:#fff3d8,stroke:#8a6d2f,color:#17202a,stroke-width:1.5px;
+    classDef evidence fill:#f1f2f4,stroke:#626b73,color:#17202a,stroke-width:1.5px;
+    classDef outcome fill:#f8e9e7,stroke:#8a5149,color:#17202a,stroke-width:1.5px;
+
+    class AGENT,TASK identity;
+    class STORE,SNAPSHOT,ACTIONS,EPISODE state;
+    class TASK_POLICY,AUTHORITY,SOFTMAX,RESOLVER,GATE,EXECUTION,CAPTURE runtime;
+    class FRAME,HISTORY evidence;
+    class RESULT outcome;

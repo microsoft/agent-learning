@@ -202,15 +202,11 @@ jobs:
           mapfile -t assets < <(
             find release-assets -type f \( -name '*.exe' -o -name '*.zip' -o -name '*.tar.gz' \) -print | sort
           )
-          if [[ ! -f "release-assets/dist/agent-learn.exe" ]]; then
-            echo "::error::The Windows build did not produce agent-learn.exe."
-            exit 1
-          fi
-          if [[ ! -f "release-assets/dist-installer/agent-learning-cli-${VERSION}-windows-x64.exe" ]]; then
+          if [[ ! -f "release-assets/agent-learning-cli-${VERSION}-windows-x64.exe" ]]; then
             echo "::error::The Windows build did not produce the versioned installer."
             exit 1
           fi
-          if [[ ! -f "release-assets/dist-installer/agent-learning-cli-${VERSION}-windows-x64.zip" ]]; then
+          if [[ ! -f "release-assets/agent-learning-cli-${VERSION}-windows-x64.zip" ]]; then
             echo "::error::The Windows build did not produce the versioned ZIP."
             exit 1
           fi

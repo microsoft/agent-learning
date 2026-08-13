@@ -12,6 +12,7 @@ htmlcov/
 # Build artifacts
 build/
 dist/
+dist-installer/
 *.whl
 
 # Local environment
@@ -22,5 +23,6 @@ dist/
 # Editor
 .idea/
 .vscode/
+docs/.$erd.drawio.bkp
 
 .token

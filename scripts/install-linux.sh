@@ -42,8 +42,8 @@ Usage: ./scripts/install-linux.sh --version <version> [--install-dir <dir>] [--u
 
 Install the standalone agent-learn binary from a Linux release artifact.
 Examples:
-    ./scripts/install-linux.sh --version 0.8.0 --install-dir /usr/local/bin
-    ./scripts/install-linux.sh --version 0.8.0 --install-dir "$HOME/.local/bin"
+    ./scripts/install-linux.sh --version 0.8.2 --install-dir /usr/local/bin
+    ./scripts/install-linux.sh --version 0.8.2 --install-dir "$HOME/.local/bin"
 EOF
             exit 0
             ;;

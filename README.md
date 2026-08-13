@@ -82,8 +82,7 @@ points, risk floors, tier, and resolved proportional criteria.
 
 ### Windows CLI
 
-For a Python-independent installation, download `agent-learn.exe` or the
-standalone installer from the
+For a Python-independent installation, download the Windows ZIP or installer from the
 [latest GitHub release](https://github.com/microsoft/agent-learning/releases/latest).
 The installer can add its installation directory to your user `PATH`, so
 `agent-learn` works from PowerShell or Command Prompt without Python or `pip`.
@@ -101,7 +100,7 @@ or install it with the automation script:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/microsoft/agent-learning/main/scripts/install-linux.sh -o /tmp/install-linux.sh
-bash /tmp/install-linux.sh --version 0.8.0 --install-dir /usr/local/bin
+bash /tmp/install-linux.sh --version 0.8.2 --install-dir /usr/local/bin
 ```
 
 The Linux installation guide covers Debian/Ubuntu, RHEL-compatible, and

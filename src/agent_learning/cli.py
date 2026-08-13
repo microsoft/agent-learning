@@ -93,7 +93,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         description=f"Evidence-driven decision CLI for AI agents. SDK version {__version__}.",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = parser.add_subparsers(dest="command")
 
     sub.add_parser("list", help="List discovered agent ids and names.")
 
@@ -996,6 +996,9 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s - %(message)s")
     parser = _build_arg_parser()
     args = parser.parse_args(argv)
+    if args.command is None:
+        parser.print_help()
+        return 0
     dispatch = {
         "list": _cmd_agents_list,
         "tasks-list": _cmd_agent_tasks_list,

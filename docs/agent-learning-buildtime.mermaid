@@ -1,0 +1,57 @@
+flowchart TB
+    REQUEST["<b>Training Request</b><br/>Starts a manual, scheduled, or event-driven offline policy update."]
+    STORE["<b>Learning Store</b><br/>Provides durable episodes, rewards, snapshots, and training-run records."]
+    SNAPSHOT["<b>Active Policy Snapshot</b><br/>Identifies the current low-authority policy state and action taxonomy."]
+    ELIGIBILITY["<b>Training Eligibility Gate</b><br/>Admits a low-authority policy with enough completed episodes for the batch."]
+    POLICY["<b>Softmax Policy</b><br/>Hydrates the active logits and baseline into an updatable runtime policy."]
+    RUNNER["<b>Learning Runner</b><br/>Orchestrates evaluation, reward creation, learning, and persistence."]
+    RUN["<b>Training Run</b><br/>Records batch status, input snapshot, episode IDs, metrics, and errors."]
+    EPISODES["<b>Completed Episodes</b><br/>Supplies durable runtime outcomes and behavior-policy lineage as training evidence."]
+    EVALUATORS["<b>Metric Evaluators</b><br/>Measure intent resolution, task adherence, and task completion."]
+    METRICS["<b>Metric Results</b><br/>Preserves normalized scores, status, rationale, evaluator, and provenance."]
+    SHAPER["<b>Reward Shaper</b><br/>Combines metric scores and configured penalties into one bounded signal."]
+    SHAPED["<b>Shaped Reward</b><br/>Carries the transient aggregate value, contributions, and penalties."]
+    WRITER["<b>Reward Writer</b><br/>Translates metric and shaped values into durable reward records."]
+    REWARDS["<b>Rewards</b><br/>Stores per-metric, penalty, and aggregate signals linked to each episode."]
+    LEARNER["<b>REINFORCE Learner</b><br/>Uses behavior samples and aggregate rewards to calculate one policy update."]
+    NEXT["<b>Next Policy Snapshot</b><br/>Persists advanced logits, baseline, counters, version, and lineage metadata."]
+
+    REQUEST -->|requests the active policy from| STORE
+    STORE -->|returns| SNAPSHOT
+    REQUEST -->|is screened by| ELIGIBILITY
+    SNAPSHOT -->|declares authority to| ELIGIBILITY
+    ELIGIBILITY -->|starts an eligible batch in| RUNNER
+    SNAPSHOT -->|hydrates| POLICY
+    POLICY -->|is supplied to| RUNNER
+    RUNNER -->|creates and updates| RUN
+    RUNNER -->|queries completed outcomes through| STORE
+    STORE -->|returns| EPISODES
+    RUNNER -->|invokes| EVALUATORS
+    EPISODES -->|are evaluated by| EVALUATORS
+    EVALUATORS -->|produce| METRICS
+    METRICS -->|are combined by| SHAPER
+    SHAPER -->|produces| SHAPED
+    METRICS -->|are persisted and translated by| WRITER
+    SHAPED -->|is translated by| WRITER
+    WRITER -->|creates| REWARDS
+    WRITER -->|persists metric and reward records in| STORE
+    RUNNER -->|invokes| LEARNER
+    EPISODES -->|supply behavior samples to| LEARNER
+    REWARDS -->|supply aggregate signals to| LEARNER
+    LEARNER -->|updates| POLICY
+    POLICY -->|emits an advanced| NEXT
+    NEXT -->|is persisted in| STORE
+    RUN -->|records IDs of| EPISODES
+    RUN -->|references its input| SNAPSHOT
+    RUN -->|summarizes the resulting version of| NEXT
+
+    classDef trigger fill:#e8f1f8,stroke:#315f7d,color:#17202a,stroke-width:1.5px;
+    classDef state fill:#eaf4e8,stroke:#4d7047,color:#17202a,stroke-width:1.5px;
+    classDef runtime fill:#fff3d8,stroke:#8a6d2f,color:#17202a,stroke-width:1.5px;
+    classDef transient fill:#f1f2f4,stroke:#626b73,color:#17202a,stroke-width:1.5px;
+    classDef result fill:#f8e9e7,stroke:#8a5149,color:#17202a,stroke-width:1.5px;
+
+    class REQUEST trigger;
+    class STORE,SNAPSHOT,RUN,EPISODES,METRICS,REWARDS,NEXT state;
+    class ELIGIBILITY,POLICY,RUNNER,EVALUATORS,SHAPER,WRITER,LEARNER runtime;
+    class SHAPED transient;
