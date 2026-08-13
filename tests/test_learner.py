@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import random
 
+import pytest
+
 from agent_learning.config import LearnerConfig
 from agent_learning.learners import ReinforceLearner
 from agent_learning.policy import SoftmaxPolicy
@@ -116,3 +118,22 @@ def test_most_recent_aggregate_reward_wins() -> None:
 
     assert result.mean_reward == 0.8
     assert policy.snapshot().logits["a"] > 0.0
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf"), 1.01, -1.01])
+def test_invalid_aggregate_reward_is_rejected_without_policy_update(value: float) -> None:
+    policy = SoftmaxPolicy.from_actions([Action(id="a"), Action(id="b")])
+    learner = ReinforceLearner(LearnerConfig(learning_rate=0.5, entropy_bonus=0.0))
+    episode = _make_episode("default", "a")
+    reward = Reward(
+        episode_id=episode.id,
+        agent_id=episode.agent_id,
+        source=RewardSource.AGGREGATE,
+        value=value,
+    )
+    before = policy.snapshot()
+
+    with pytest.raises(ValueError, match=r"finite and within \[-1, 1\]"):
+        learner.update(policy, [episode], [reward])
+
+    assert policy.snapshot() == before
