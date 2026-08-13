@@ -1,0 +1,19 @@
+flowchart TD
+    START([Start])
+    TASK[Agent undertakes a decision task]
+    POLICY[Obtains active task policy]
+    DECIDE[Chooses an action]
+    APPROVAL{Approval required?}
+    REQUEST[Requests approval]
+    APPROVED{Approved?}
+    EXECUTE[Executes action]
+    CAPTURE[Records outcome]
+    STORE[Stores episode]
+    END([End])
+
+    START --> TASK --> POLICY --> DECIDE --> APPROVAL
+    APPROVAL -->|No| EXECUTE
+    APPROVAL -->|Yes| REQUEST --> APPROVED
+    APPROVED -->|Yes| EXECUTE
+    APPROVED -->|No| END
+    EXECUTE --> CAPTURE --> STORE --> END
