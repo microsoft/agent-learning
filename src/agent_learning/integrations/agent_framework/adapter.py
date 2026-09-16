@@ -22,7 +22,7 @@ from ...types import Action, PolicySnapshot
 from .actions import map_action_tools
 from .invocation import EpisodeMetadataResolver, invoke_selected_action
 from .schema import build_composite_schema
-from .state import RUN_STATE_KEY, AgentFrameworkRunState
+from .state import USER_INPUT_KEY
 
 StateEncoder = Callable[[dict[str, Any]], Mapping[str, Any]]
 TargetResolver = Callable[[dict[str, Any]], str | None]
@@ -236,8 +236,17 @@ class AgentFrameworkLearningAdapter:
         context: AgentContext,
         call_next: Callable[[], Awaitable[None]],
     ) -> None:
-        state = AgentFrameworkRunState(messages=tuple(context.messages))
-        context.function_invocation_kwargs[RUN_STATE_KEY] = state
+        # pass the latest user message to _execute_learning_action() through the function invocation context
+        # so it can pass it to episode capture
+        user_input = next(
+            (
+                str(getattr(message, "text", ""))
+                for message in reversed(context.messages)
+                if getattr(message, "role", None) == "user"
+            ),
+            "",
+        )
+        context.function_invocation_kwargs[USER_INPUT_KEY] = user_input
         await call_next()
 
     async def _execute_learning_action(
@@ -246,7 +255,9 @@ class AgentFrameworkLearningAdapter:
         action_inputs: dict[str, dict[str, Any]],
         context: FunctionInvocationContext,
     ) -> dict[str, Any]:
-        state = self._run_state(context)
+        user_input = context.kwargs.get(USER_INPUT_KEY)
+        if not isinstance(user_input, str):
+            raise TypeError("learning meta-tool invoked outside configured agent middleware")
         if self.task_policy.authority is DecisionAuthority.FULL:
             if self.decision_frame_resolver is None:  # pragma: no cover - constructor invariant
                 raise RuntimeError("full decision authority has no frame resolver")
@@ -270,7 +281,7 @@ class AgentFrameworkLearningAdapter:
             raise ValueError("policy decision did not select an executable action")
 
         capture_context = self.capture.start(
-            self._user_input(state),
+            user_input,
             task_id=decision.task_id,
             intent_summary=self.intent_summary,
             action_type="tool",
@@ -300,20 +311,6 @@ class AgentFrameworkLearningAdapter:
             context=context,
             episode_metadata_resolver=self.episode_metadata_resolver,
         )
-
-    @staticmethod
-    def _run_state(context: FunctionInvocationContext) -> AgentFrameworkRunState:
-        state = context.kwargs.get(RUN_STATE_KEY)
-        if not isinstance(state, AgentFrameworkRunState):
-            raise TypeError("learning meta-tool invoked outside configured agent middleware")
-        return state
-
-    @staticmethod
-    def _user_input(state: AgentFrameworkRunState) -> str:
-        for message in reversed(state.messages):
-            if getattr(message, "role", None) == "user":
-                return str(getattr(message, "text", ""))
-        return ""
 
 
 __all__ = [
