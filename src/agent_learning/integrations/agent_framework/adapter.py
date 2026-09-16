@@ -1,4 +1,4 @@
-"""Low-authority Microsoft Agent Framework integration."""
+"""Microsoft Agent Framework integration."""
 
 from __future__ import annotations
 
@@ -15,10 +15,10 @@ from agent_framework import (
 
 from ...capture import EpisodeCapture
 from ...config import CaptureConfig
-from ...decision import DecisionAuthority, TaskPolicy
+from ...decision import DecisionAuthority, DecisionFrame, DecisionStatus, TaskPolicy
 from ...policy import SoftmaxPolicy
 from ...storage import LearningStore, get_default_store
-from ...types import PolicySnapshot
+from ...types import Action, PolicySnapshot
 from .actions import map_action_tools
 from .invocation import EpisodeMetadataResolver, invoke_selected_action
 from .schema import build_composite_schema
@@ -26,6 +26,7 @@ from .state import RUN_STATE_KEY, AgentFrameworkRunState
 
 StateEncoder = Callable[[dict[str, Any]], Mapping[str, Any]]
 TargetResolver = Callable[[dict[str, Any]], str | None]
+DecisionFrameResolver = Callable[[Mapping[str, Any], Sequence[Action]], DecisionFrame]
 AgentMiddlewareMethod = Callable[
     [Any, AgentContext, Callable[[], Awaitable[None]]],
     Awaitable[None],
@@ -49,6 +50,7 @@ class AgentFrameworkLearningAdapter:
         expected_outcome: str,
         state_encoder: StateEncoder | None,
         target_resolver: TargetResolver | None,
+        decision_frame_resolver: DecisionFrameResolver | None,
         episode_metadata_resolver: EpisodeMetadataResolver | None,
         agent_name: str | None,
         rng: random.Random | None,
@@ -62,6 +64,20 @@ class AgentFrameworkLearningAdapter:
             raise NotImplementedError(
                 f"policy kind {policy_kind!r} is not supported by the MAF integration yet"
             )
+        if (
+            task_policy.authority is DecisionAuthority.FULL
+            and decision_frame_resolver is None
+        ):
+            raise ValueError(
+                "full decision authority requires a decision_frame_resolver"
+            )
+        if (
+            task_policy.authority is DecisionAuthority.LOW
+            and decision_frame_resolver is not None
+        ):
+            raise ValueError(
+                "decision_frame_resolver is only valid for full decision authority"
+            )
         self.task_policy = task_policy
         self.action_tools = dict(action_tools)
         self.capture = capture
@@ -69,6 +85,7 @@ class AgentFrameworkLearningAdapter:
         self.expected_outcome = expected_outcome
         self.state_encoder = state_encoder
         self.target_resolver = target_resolver
+        self.decision_frame_resolver = decision_frame_resolver
         self.episode_metadata_resolver = episode_metadata_resolver
         self.agent_name = agent_name
         self._rng = rng
@@ -77,8 +94,8 @@ class AgentFrameworkLearningAdapter:
             FunctionTool(
                 name="execute_learning_action",
                 description=(
-                    "Choose and execute one policy-controlled action. Supply valid "
-                    "arguments for every candidate action."
+                    "Resolve a policy-controlled decision and execute its authorized "
+                    "action when ready. Supply valid arguments for every candidate action."
                 ),
                 input_model=build_composite_schema(self.action_tools),
                 func=self._execute_learning_action,
@@ -96,6 +113,8 @@ class AgentFrameworkLearningAdapter:
         expected_outcome: str,
         state_encoder: StateEncoder | None = None,
         target_resolver: TargetResolver | None = None,
+        decision_authority: DecisionAuthority | str | None = None,
+        decision_frame_resolver: DecisionFrameResolver | None = None,
         episode_metadata_resolver: EpisodeMetadataResolver | None = None,
         store: LearningStore | None = None,
         agent_name: str | None = None,
@@ -109,7 +128,27 @@ class AgentFrameworkLearningAdapter:
         learning_store = store or get_default_store()
         tools_by_name, actions = map_action_tools(action_tools, task_id=task_id)
         active_snapshot = learning_store.get_active_policy(agent_id, task_id)
+        requested_authority = (
+            DecisionAuthority(decision_authority)
+            if decision_authority is not None
+            else None
+        )
         if active_snapshot is None:
+            initial_authority = requested_authority or DecisionAuthority.LOW
+            if (
+                initial_authority is DecisionAuthority.FULL
+                and decision_frame_resolver is None
+            ):
+                raise ValueError(
+                    "full decision authority requires a decision_frame_resolver"
+                )
+            if (
+                initial_authority is DecisionAuthority.LOW
+                and decision_frame_resolver is not None
+            ):
+                raise ValueError(
+                    "decision_frame_resolver is only valid for full decision authority"
+                )
             policy = SoftmaxPolicy.from_actions(
                 actions,
                 agent_id=agent_id,
@@ -117,14 +156,16 @@ class AgentFrameworkLearningAdapter:
                 rng=rng,
             )
             active_snapshot = policy.snapshot()
+            active_snapshot.metadata["decision_authority"] = initial_authority.value
             learning_store.store_policy(active_snapshot)
         elif active_snapshot.actions != actions:
             raise ValueError("registered MAF action tools do not match the active policy actions")
 
         task_policy = TaskPolicy(active_snapshot, rng=rng)
-        if task_policy.authority is not DecisionAuthority.LOW:
-            # TODO implement others
-            raise NotImplementedError("MAF integration only supports low decision authority")
+        if requested_authority is not None and requested_authority is not task_policy.authority:
+            raise ValueError(
+                "requested decision authority does not match the active policy"
+            )
 
         capture = EpisodeCapture(
             CaptureConfig(
@@ -143,6 +184,7 @@ class AgentFrameworkLearningAdapter:
             expected_outcome=expected_outcome,
             state_encoder=state_encoder,
             target_resolver=target_resolver,
+            decision_frame_resolver=decision_frame_resolver,
             episode_metadata_resolver=episode_metadata_resolver,
             agent_name=agent_name,
             rng=rng,
@@ -164,8 +206,20 @@ class AgentFrameworkLearningAdapter:
             )
 
         task_policy = TaskPolicy(snapshot, rng=self._rng)
-        if task_policy.authority is not DecisionAuthority.LOW:
-            raise NotImplementedError("MAF integration only supports low decision authority")
+        if (
+            task_policy.authority is DecisionAuthority.FULL
+            and self.decision_frame_resolver is None
+        ):
+            raise ValueError(
+                "full decision authority requires a decision_frame_resolver"
+            )
+        if (
+            task_policy.authority is DecisionAuthority.LOW
+            and self.decision_frame_resolver is not None
+        ):
+            raise ValueError(
+                "decision_frame_resolver is only valid for full decision authority"
+            )
         self.task_policy = task_policy
 
     @property
@@ -193,17 +247,34 @@ class AgentFrameworkLearningAdapter:
         context: FunctionInvocationContext,
     ) -> dict[str, Any]:
         state = self._run_state(context)
-        decision = self.task_policy.decide()
-        proposed_action = decision.proposed_action
-        if proposed_action is None:
-            raise ValueError("low-authority decision did not propose an action")
+        if self.task_policy.authority is DecisionAuthority.FULL:
+            if self.decision_frame_resolver is None:  # pragma: no cover - constructor invariant
+                raise RuntimeError("full decision authority has no frame resolver")
+            decision = self.task_policy.decide(
+                self.decision_frame_resolver(
+                    decision_context,
+                    self.task_policy.snapshot().actions,
+                )
+            )
+            if decision.status is not DecisionStatus.RESOLVED:
+                return {
+                    "decision": decision.to_dict(),
+                    "selected_action": None,
+                    "result": None,
+                }
+            action = decision.selected_action
+        else:
+            decision = self.task_policy.decide()
+            action = decision.proposed_action
+        if action is None:
+            raise ValueError("policy decision did not select an executable action")
 
         capture_context = self.capture.start(
             self._user_input(state),
             task_id=decision.task_id,
             intent_summary=self.intent_summary,
             action_type="tool",
-            action_name=proposed_action.id,
+            action_name=action.id,
             target=(
                 self.target_resolver(decision_context)
                 if self.target_resolver
@@ -213,13 +284,14 @@ class AgentFrameworkLearningAdapter:
             expected_outcome=self.expected_outcome,
             policy_id=decision.policy_id,
             policy_version=decision.policy_version,
-            action_id=proposed_action.id,
+            action_id=action.id,
             action_logprob=decision.action_logprob,
             context_features={},
             metadata={"decision": decision.to_dict()},
         )
         return await invoke_selected_action(
             decision=decision,
+            action=action,
             action_tools=self.action_tools,
             action_inputs=action_inputs,
             decision_context=decision_context,
@@ -246,6 +318,7 @@ class AgentFrameworkLearningAdapter:
 
 __all__ = [
     "AgentFrameworkLearningAdapter",
+    "DecisionFrameResolver",
     "EpisodeMetadataResolver",
     "StateEncoder",
     "TargetResolver",

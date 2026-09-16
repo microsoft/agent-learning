@@ -11,6 +11,7 @@ from agent_framework import FunctionInvocationContext, FunctionTool
 
 from ...capture import CaptureContext, EpisodeCapture
 from ...decision import DecisionResult
+from ...types import Action
 
 EpisodeMetadataResolver = Callable[
     [str, Mapping[str, Any], Any],
@@ -27,6 +28,7 @@ def serialize_result(result: Any) -> str:
 async def invoke_selected_action(
     *,
     decision: DecisionResult,
+    action: Action,
     action_tools: Mapping[str, FunctionTool],
     action_inputs: Mapping[str, Mapping[str, Any]],
     decision_context: Mapping[str, Any],
@@ -35,14 +37,10 @@ async def invoke_selected_action(
     context: FunctionInvocationContext,
     episode_metadata_resolver: EpisodeMetadataResolver | None = None,
 ) -> dict[str, Any]:
-    """Invoke a low-authority proposal and close its capture context."""
-    proposed_action = decision.proposed_action
-    if proposed_action is None:
-        raise ValueError("low-authority decision did not propose an action")
-
-    selected_tool = action_tools.get(proposed_action.id)
+    """Invoke a resolved policy action and close its capture context."""
+    selected_tool = action_tools.get(action.id)
     if selected_tool is None:
-        raise ValueError(f"policy action {proposed_action.id!r} has no registered MAF tool")
+        raise ValueError(f"policy action {action.id!r} has no registered MAF tool")
     if selected_tool.name not in action_inputs:
         raise ValueError(f"missing arguments for selected action {selected_tool.name!r}")
 
@@ -87,7 +85,7 @@ async def invoke_selected_action(
         duration_ms=int((time.perf_counter() - started) * 1000),
     )
     extra_metadata = (
-        dict(episode_metadata_resolver(proposed_action.id, decision_context, result))
+        dict(episode_metadata_resolver(action.id, decision_context, result))
         if episode_metadata_resolver is not None
         else None
     )
@@ -100,7 +98,7 @@ async def invoke_selected_action(
     )
     return {
         "decision": decision.to_dict(),
-        "selected_action": proposed_action.id,
+        "selected_action": action.id,
         "result": result,
     }
 
