@@ -48,6 +48,12 @@ def map_action_tools(
     for function_tool in action_tools:
         if function_tool.name in tools_by_name:
             raise ValueError(f"duplicate action tool name: {function_tool.name!r}")
+        if function_tool.approval_mode != "never_require":
+            raise ValueError(
+                f"action tool {function_tool.name!r} must use "
+                "approval_mode='never_require'; agent-learning controls approval "
+                "for wrapped actions"
+            )
         if not belongs_to_task(function_tool, task_id):
             raise ValueError(
                 f"action tool {function_tool.name!r} is not marked for task {task_id!r}"

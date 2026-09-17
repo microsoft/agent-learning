@@ -26,7 +26,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from agent_framework import Agent, tool  # type: ignore[attr-defined]
+from agent_framework import Agent, AgentSession, tool  # type: ignore[attr-defined]
 from agent_framework.openai import OpenAIChatClient
 from azure.identity import DefaultAzureCredential
 
@@ -186,6 +186,22 @@ def probabilities(policy: SoftmaxPolicy) -> dict[str, float]:
     }
 
 
+def _format_distribution(distribution: Mapping[str, float]) -> str:
+    return "  ".join(
+        f"{action_id}={probability:.3f}"
+        for action_id, probability in distribution.items()
+    )
+
+
+def _report_policy(policy: SoftmaxPolicy, label: str) -> None:
+    distribution = probabilities(policy)
+    best = max(distribution, key=distribution.__getitem__)
+    print(
+        f"  {label:12s} -> best={best:20s} | "
+        f"{_format_distribution(distribution)}"
+    )
+
+
 def print_summary(
     round_number: int,
     training_run: TrainingRun,
@@ -202,17 +218,44 @@ def print_summary(
         episode.metadata.get("task_completed") is False
         for episode in round_episodes
     )
-    decisions = [
-        f"{episode.target}: {episode.action_id}"
+    executed_actions = [
+        f"{episode.target}={episode.action_id}"
         for episode in reversed(round_episodes)
     ]
     print(
-        f"Round {round_number}: "
-        f"reward={training_run.metrics['mean_reward']:+.3f} "
+        f"  round {round_number:3d}: "
+        f"mean_reward={training_run.metrics['mean_reward']:+.3f}  "
         f"mistakes={mistakes}/{len(round_episodes)} "
-        f"decisions={decisions} "
-        f"policy={before} -> {probabilities(policy)}"
     )
+    print(f"    executed actions:       {'  '.join(executed_actions)}")
+    print(
+        "    candidate probabilities: "
+        f"{_format_distribution(before)} -> "
+        f"{_format_distribution(probabilities(policy))}"
+    )
+
+
+async def run_with_approvals(
+    agent: Agent,
+    prompt: str,
+    session: AgentSession,
+) -> None:
+    """Resume one MAF run until every agent-learning approval is answered."""
+    response = await agent.run(prompt, session=session)
+    while response.user_input_requests:
+        request = response.user_input_requests[0]
+        approval = request.additional_properties.get("agent_learning", {})
+        action_id = approval.get("action_id", "unknown action")
+        answer = await asyncio.to_thread(
+            input,
+            f"Approve agent-learning action {action_id!r}? [y/N] ",
+        )
+        response = await agent.run(
+            request.to_function_approval_response(
+                approved=answer.strip().lower() in {"y", "yes"}
+            ),
+            session=session,
+        )
 
 
 async def main() -> None:
@@ -278,6 +321,12 @@ async def main() -> None:
     )
     try:
         async with agent:
+            print("=== Policy BEFORE training ===")
+            _report_policy(policy, "uniform prior")
+            print(
+                f"\nTraining for {args.rounds} rounds x {args.episodes} episodes "
+                "(stdlib scorers) ..."
+            )
             for round_index in range(args.rounds):
                 round_incidents = incident_catalog.incidents[
                     round_index * args.episodes: (round_index + 1) * args.episodes
@@ -285,12 +334,14 @@ async def main() -> None:
                 before = probabilities(policy)
 
                 for incident in round_incidents:
-                    await agent.run(
+                    await run_with_approvals(
+                        agent,
                         prompt.format(
                             incident_id=incident.incident_id,
                             error_rate=incident.current_error_rate,
                             cache_age=incident.cache_age_seconds,
-                        )
+                        ),
+                        AgentSession(),
                     )
 
                 training_run = runner.run_offline_batch(
@@ -306,6 +357,8 @@ async def main() -> None:
                     before,
                     policy,
                 )
+            print("\n=== Policy AFTER training ===")
+            _report_policy(policy, "learned")
     finally:
         credential.close()
 

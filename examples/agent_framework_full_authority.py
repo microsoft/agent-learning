@@ -28,7 +28,12 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from agent_framework import Agent, FunctionTool, tool  # type: ignore[attr-defined]
+from agent_framework import (  # type: ignore[attr-defined]
+    Agent,
+    AgentSession,
+    FunctionTool,
+    tool,
+)
 from agent_framework.openai import OpenAIChatClient
 from azure.identity import DefaultAzureCredential
 
@@ -302,6 +307,29 @@ def required_setting(name: str) -> str:
     return value
 
 
+async def run_with_approvals(
+    agent: Agent,
+    prompt: str,
+    session: AgentSession,
+) -> None:
+    """Resume one MAF run until every agent-learning approval is answered."""
+    response = await agent.run(prompt, session=session)
+    while response.user_input_requests:
+        request = response.user_input_requests[0]
+        approval = request.additional_properties.get("agent_learning", {})
+        action_id = approval.get("action_id", "unknown action")
+        answer = await asyncio.to_thread(
+            input,
+            f"Approve agent-learning action {action_id!r}? [y/N] ",
+        )
+        response = await agent.run(
+            request.to_function_approval_response(
+                approved=answer.strip().lower() in {"y", "yes"}
+            ),
+            session=session,
+        )
+
+
 async def main() -> None:
     catalog = IncidentCatalog()
     store = InMemoryStore()
@@ -345,8 +373,10 @@ async def main() -> None:
     try:
         async with agent:
             for incident in catalog.incidents:
-                await agent.run(
-                    f"Recover {incident.incident_id}: {incident.diagnosis}."
+                await run_with_approvals(
+                    agent,
+                    f"Recover {incident.incident_id}: {incident.diagnosis}.",
+                    AgentSession(),
                 )
     finally:
         credential.close()
