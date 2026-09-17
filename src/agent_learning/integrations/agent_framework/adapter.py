@@ -45,7 +45,9 @@ from .state import (
 
 StateEncoder = Callable[[dict[str, Any]], Mapping[str, Any]]
 TargetResolver = Callable[[Mapping[str, Any]], str | None]
-DecisionFrameResolver = Callable[[Mapping[str, Any], Sequence[Action]], DecisionFrame]
+DecisionFrameResolver = Callable[
+    [Mapping[str, Mapping[str, Any]], Sequence[Action]], DecisionFrame
+]
 AgentMiddlewareMethod = Callable[
     [Any, AgentContext, Callable[[], Awaitable[None]]],
     Awaitable[None],
@@ -351,7 +353,6 @@ class AgentFrameworkLearningAdapter:
 
     async def _execute_learning_action(
         self,
-        decision_context: dict[str, Any],
         action_inputs: dict[str, dict[str, Any]],
         context: FunctionInvocationContext,
     ) -> Any:
@@ -381,7 +382,7 @@ class AgentFrameworkLearningAdapter:
                 raise RuntimeError("full decision authority has no frame resolver")
             decision = self.task_policy.decide(
                 self.decision_frame_resolver(
-                    decision_context,
+                    action_inputs,
                     self.task_policy.snapshot().actions,
                 )
             )
@@ -432,7 +433,6 @@ class AgentFrameworkLearningAdapter:
             pending = PendingDecision(
                 decision=decision,
                 action_id=action.id,
-                decision_context=dict(decision_context),
                 action_inputs={
                     name: dict(arguments)
                     for name, arguments in action_inputs.items()
@@ -445,7 +445,6 @@ class AgentFrameworkLearningAdapter:
         return await self._execute_decision(
             decision=decision,
             action=action,
-            decision_context=decision_context,
             action_inputs=action_inputs,
             user_input=user_input,
             context=context,
@@ -469,7 +468,6 @@ class AgentFrameworkLearningAdapter:
         return await self._execute_decision(
             decision=decision,
             action=action,
-            decision_context=pending.decision_context,
             action_inputs=pending.action_inputs,
             user_input=pending.user_input,
             context=context,
@@ -482,14 +480,15 @@ class AgentFrameworkLearningAdapter:
         *,
         decision: DecisionResult,
         action: Action,
-        decision_context: Mapping[str, Any],
         action_inputs: Mapping[str, Mapping[str, Any]],
         user_input: str,
         context: FunctionInvocationContext,
         autonomy: Mapping[str, Any] | None,
         feedback_status: Literal["accepted"] | None = None,
     ) -> dict[str, Any]:
-
+        selected_arguments = action_inputs.get(action.id)
+        if selected_arguments is None:
+            raise ValueError(f"missing arguments for selected action {action.id!r}")
         capture_context = self.capture.start(
             user_input,
             task_id=decision.task_id,
@@ -497,11 +496,11 @@ class AgentFrameworkLearningAdapter:
             action_type="tool",
             action_name=action.id,
             target=(
-                self.target_resolver(decision_context)
+                self.target_resolver(selected_arguments)
                 if self.target_resolver
                 else None
             ),
-            input_summary=str(decision_context),
+            input_summary=str(selected_arguments),
             expected_outcome=self.expected_outcome,
             policy_id=decision.policy_id,
             policy_version=decision.policy_version,
@@ -526,7 +525,6 @@ class AgentFrameworkLearningAdapter:
             action=action,
             action_tools=self.action_tools,
             action_inputs=action_inputs,
-            decision_context=decision_context,
             capture=self.capture,
             capture_context=capture_context,
             context=context,
@@ -557,7 +555,6 @@ class AgentFrameworkLearningAdapter:
             id=call_id,
             name=context.function.name,
             arguments={
-                "decision_context": pending.decision_context,
                 "action_inputs": pending.action_inputs,
             },
         )
@@ -591,7 +588,6 @@ class AgentFrameworkLearningAdapter:
             id=call_id,
             name=response.function_call.name,
             arguments={
-                "decision_context": pending.decision_context,
                 "action_inputs": pending.action_inputs,
             },
         )
@@ -667,7 +663,6 @@ class AgentFrameworkLearningAdapter:
                         PendingDecision(
                             decision=decision,
                             action_id=decision.proposed_action.id,
-                            decision_context=pending.decision_context,
                             action_inputs=pending.action_inputs,
                             user_input=pending.user_input,
                             autonomy=pending.autonomy,
@@ -680,11 +675,13 @@ class AgentFrameworkLearningAdapter:
                     action_type="tool",
                     action_name=pending.action_id,
                     target=(
-                        self.target_resolver(pending.decision_context)
+                        self.target_resolver(
+                            pending.action_inputs[pending.action_id]
+                        )
                         if self.target_resolver
                         else None
                     ),
-                    input_summary=str(pending.decision_context),
+                    input_summary=str(pending.action_inputs[pending.action_id]),
                     expected_outcome=self.expected_outcome,
                     policy_id=decision.policy_id,
                     policy_version=decision.policy_version,
@@ -726,7 +723,6 @@ class AgentFrameworkLearningAdapter:
             raise ValueError("approval response does not match the pending tool call")
         arguments = function_call.parse_arguments()
         expected_arguments = {
-            "decision_context": pending.decision_context,
             "action_inputs": pending.action_inputs,
         }
         if not isinstance(arguments, Mapping) or dict(arguments) != expected_arguments:

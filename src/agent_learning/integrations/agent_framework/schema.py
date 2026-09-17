@@ -52,7 +52,6 @@ def build_composite_schema(
     schema: dict[str, Any] = {
         "type": "object",
         "properties": {
-            "decision_context": {"type": "object"},
             "action_inputs": {
                 "type": "object",
                 "properties": action_properties,
@@ -60,7 +59,7 @@ def build_composite_schema(
                 "additionalProperties": False,
             },
         },
-        "required": ["decision_context", "action_inputs"],
+        "required": ["action_inputs"],
         "additionalProperties": False,
     }
     if definitions:

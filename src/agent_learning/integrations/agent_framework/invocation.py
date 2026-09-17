@@ -31,7 +31,6 @@ async def invoke_selected_action(
     action: Action,
     action_tools: Mapping[str, FunctionTool],
     action_inputs: Mapping[str, Mapping[str, Any]],
-    decision_context: Mapping[str, Any],
     capture: EpisodeCapture,
     capture_context: CaptureContext,
     context: FunctionInvocationContext,
@@ -85,7 +84,7 @@ async def invoke_selected_action(
         duration_ms=int((time.perf_counter() - started) * 1000),
     )
     extra_metadata = (
-        dict(episode_metadata_resolver(action.id, decision_context, result))
+        dict(episode_metadata_resolver(action.id, selected_arguments, result))
         if episode_metadata_resolver is not None
         else None
     )

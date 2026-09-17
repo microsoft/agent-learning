@@ -182,11 +182,17 @@ def history_confidence(sample_count: int) -> float:
 
 def build_decision_frame(
     catalog: IncidentCatalog,
-    decision_context: Mapping[str, Any],
+    action_inputs: Mapping[str, Mapping[str, Any]],
     actions: Sequence[Action],
 ) -> DecisionFrame:
     """Build a request-scoped frame from trusted current and historical evidence."""
-    incident = catalog.get(str(decision_context["incident_id"]))
+    incident_ids = {
+        str(arguments["incident_id"])
+        for arguments in action_inputs.values()
+    }
+    if len(incident_ids) != 1:
+        raise ValueError("candidate action inputs must reference one incident")
+    incident = catalog.get(incident_ids.pop())
     history = catalog.recovery_history
     actions_by_id = {action.id: action for action in actions}
     return DecisionFrame(
@@ -273,10 +279,10 @@ def build_decision_frame(
 def outcome_metadata(
     catalog: IncidentCatalog,
     action_id: str,
-    decision_context: Mapping[str, Any],
+    action_arguments: Mapping[str, Any],
     result: Any,
 ) -> Mapping[str, Any]:
-    incident = catalog.get(str(decision_context["incident_id"]))
+    incident = catalog.get(str(action_arguments["incident_id"]))
     restored = result.get("restored") if isinstance(result, dict) else False
     return {
         "task_completed": restored is True,
@@ -359,8 +365,8 @@ async def main() -> None:
         name="ReasonedIncidentAgent",
         instructions=(
             "Recover each incident by calling recover_service_incident once. Include the "
-            "incident_id in decision_context and provide that incident_id in the inputs "
-            "for both restart_service and failover_to_secondary. Application code owns "
+            "same incident_id in the inputs for both restart_service and "
+            "failover_to_secondary. Application code owns "
             "the evidence and safety checks. Follow the returned decision status and do "
             "not claim an action ran unless selected_action is set."
         ),

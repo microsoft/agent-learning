@@ -159,11 +159,11 @@ def parse_args() -> argparse.Namespace:
 def outcome_metadata(
     catalog: IncidentCatalog,
     _action_id: str,
-    decision_context: Mapping[str, Any],
+    action_arguments: Mapping[str, Any],
     result: Any,
 ) -> Mapping[str, Any]:
     """Prepare ground truth consumed by the in-process scorer adapters."""
-    incident = catalog.get(str(decision_context["incident_id"]))
+    incident = catalog.get(str(action_arguments["incident_id"]))
     recommendation = result.get("recommendation") if isinstance(result, dict) else None
     completed = recommendation == incident.expected_recommendation
     return {
@@ -305,8 +305,8 @@ async def main() -> None:
         instructions=(
             "Assess the incident and return a brief recommendation. You may consult "
             "incident_runbook normally. To perform an assessment, call "
-            "recommend_incident_response once. Include the incident_id in decision_context. "
-            "Include action_inputs for both cached_assessment and verified_assessment, "
+            "recommend_incident_response once. Include action_inputs for both "
+            "cached_assessment and verified_assessment, "
             "each with the incident_id."
         ),
         tools=[incident_runbook],

@@ -17,7 +17,6 @@ class PendingDecision:
 
     decision: DecisionResult
     action_id: str
-    decision_context: dict[str, Any]
     action_inputs: dict[str, dict[str, Any]]
     user_input: str
     autonomy: dict[str, Any] | None = None
@@ -29,10 +28,8 @@ class PendingDecision:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "version": 1,
             "decision": self.decision.to_dict(),
             "action_id": self.action_id,
-            "decision_context": self.decision_context,
             "action_inputs": self.action_inputs,
             "user_input": self.user_input,
             "autonomy": self.autonomy,
@@ -40,12 +37,9 @@ class PendingDecision:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> PendingDecision:
-        if data.get("version") != 1:
-            raise ValueError("unsupported pending decision state version")
         return cls(
             decision=DecisionResult.from_dict(data["decision"]),
             action_id=data["action_id"],
-            decision_context=dict(data["decision_context"]),
             action_inputs={
                 name: dict(arguments)
                 for name, arguments in data["action_inputs"].items()
