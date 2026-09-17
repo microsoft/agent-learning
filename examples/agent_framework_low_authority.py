@@ -33,7 +33,6 @@ from azure.identity import DefaultAzureCredential
 from agent_learning.config import LearnerConfig, ScoreRuntimeConfig, ShapingConfig
 from agent_learning.integrations.agent_framework import (
     AgentFrameworkLearningAdapter,
-    learning_action,
 )
 from agent_learning.learners import ReinforceLearner
 from agent_learning.policy import SoftmaxPolicy
@@ -89,7 +88,6 @@ class IncidentCatalog:
 
 
 def build_action_tools(catalog: IncidentCatalog) -> list[Any]:
-    @learning_action(task_id=TASK_ID)
     @tool(
         name="cached_assessment",
         description="Assess an incident quickly using potentially stale cached telemetry.",
@@ -109,7 +107,6 @@ def build_action_tools(catalog: IncidentCatalog) -> list[Any]:
             "cache_age_seconds": incident.cache_age_seconds,
         }
 
-    @learning_action(task_id=TASK_ID)
     @tool(
         name="verified_assessment",
         description="Assess an incident using current verified telemetry.",
@@ -282,6 +279,7 @@ async def main() -> None:
         store=store,
         agent_name="ToolDecisionAgent",
         rng=rng,
+        tool_name="recommend_incident_response",
     )
     policy = SoftmaxPolicy.from_snapshot(learning.task_policy.snapshot(), rng=rng)
     runner = LearningRunner(
@@ -307,13 +305,13 @@ async def main() -> None:
         instructions=(
             "Assess the incident and return a brief recommendation. You may consult "
             "incident_runbook normally. To perform an assessment, call "
-            "execute_learning_action once. Include the incident_id in decision_context. "
+            "recommend_incident_response once. Include the incident_id in decision_context. "
             "Include action_inputs for both cached_assessment and verified_assessment, "
             "each with the incident_id."
         ),
-        tools=[incident_runbook, *learning.tools],
-        middleware=learning.middleware,
+        tools=[incident_runbook],
     )
+    learning.register(agent)
 
     prompt = (
         "Assess incident {incident_id}. Current error rate is {error_rate:.0%}; "

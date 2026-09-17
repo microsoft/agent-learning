@@ -9,6 +9,7 @@ from typing import Any, Literal, cast
 
 from agent_framework import (
     SKIP_PARSING,
+    Agent,
     AgentContext,
     AgentResponse,
     Content,
@@ -61,6 +62,7 @@ function_middleware_method = cast(
     Callable[[FunctionMiddlewareMethod], FunctionMiddlewareMethod],
     function_middleware,
 )
+_REGISTERED_ADAPTER_ATTRIBUTE = "_agent_learning_adapter"
 
 
 class AgentFrameworkLearningAdapter:
@@ -81,8 +83,11 @@ class AgentFrameworkLearningAdapter:
         agent_name: str | None,
         autonomy_config: AutonomyConfig | None,
         rng: random.Random | None,
+        tool_name: str | None = None,
+        tool_description: str | None = None,
     ) -> None:
-        policy_kind = task_policy.snapshot().metadata.get("policy_kind")
+        policy_snapshot = task_policy.snapshot()
+        policy_kind = policy_snapshot.metadata.get("policy_kind")
         if state_encoder is not None:
             raise NotImplementedError(
                 "state_encoder is reserved for future contextual policy support"
@@ -118,13 +123,17 @@ class AgentFrameworkLearningAdapter:
         self.autonomy_config = autonomy_config
         self._rng = rng
         self._audit_rng = rng or random.Random()
-        # TODO give this a better agent-facing description:
         self._tools = (
             FunctionTool(
-                name="execute_learning_action",
+                name=(
+                    tool_name
+                    if tool_name is not None
+                    else policy_snapshot.task_id
+                ),
                 description=(
-                    "Resolve a policy-controlled decision and execute its authorized "
-                    "action when ready. Supply valid arguments for every candidate action."
+                    tool_description
+                    if tool_description is not None
+                    else intent_summary
                 ),
                 input_model=build_composite_schema(self.action_tools),
                 func=self._execute_learning_action,
@@ -150,6 +159,8 @@ class AgentFrameworkLearningAdapter:
         agent_name: str | None = None,
         autonomy_config: AutonomyConfig | None = None,
         rng: random.Random | None = None,
+        tool_name: str | None = None,
+        tool_description: str | None = None,
     ) -> AgentFrameworkLearningAdapter:
         """Build an integration from tagged MAF action tools."""
         if state_encoder is not None:
@@ -157,7 +168,7 @@ class AgentFrameworkLearningAdapter:
                 "state_encoder is reserved for future contextual policy support"
             )
         learning_store = store or get_default_store()
-        tools_by_name, actions = map_action_tools(action_tools, task_id=task_id)
+        tools_by_name, actions = map_action_tools(action_tools)
         active_snapshot = learning_store.get_active_policy(agent_id, task_id)
         requested_authority = (
             DecisionAuthority(decision_authority)
@@ -220,6 +231,8 @@ class AgentFrameworkLearningAdapter:
             agent_name=agent_name,
             autonomy_config=autonomy_config,
             rng=rng,
+            tool_name=tool_name,
+            tool_description=tool_description,
         )
 
     def update_policy(self, snapshot: PolicySnapshot) -> None:
@@ -261,6 +274,40 @@ class AgentFrameworkLearningAdapter:
     @property
     def middleware(self) -> list[Callable[..., Any]]:
         return [self.process_agent, self.process_function]
+
+    def register(self, agent: Agent) -> None:
+        """Register the learning tool and middleware on an agent."""
+        if not isinstance(agent, Agent):
+            agent_type = f"{type(agent).__module__}.{type(agent).__qualname__}"
+            raise TypeError(
+                "AgentFrameworkLearningAdapter requires agent_framework.Agent "
+                "or a subclass with the standard function-invocation pipeline; "
+                f"received {agent_type}. Managed-agent classes such as "
+                "GitHubCopilotAgent and ClaudeAgent are not supported."
+            )
+        registered_adapter = getattr(agent, _REGISTERED_ADAPTER_ATTRIBUTE, None)
+        if registered_adapter is not None:
+            # only one adapter per agent, otherwise session state and middlewares could conflict
+            raise ValueError(
+                "agent already has an AgentFrameworkLearningAdapter registered"
+            )
+
+        existing_tools = list(agent.default_options.get("tools", []))
+        learning_tool_names = {tool.name for tool in self.tools}
+        conflicting_names = sorted(
+            tool.name
+            for tool in existing_tools
+            if isinstance(tool, FunctionTool) and tool.name in learning_tool_names
+        )
+        if conflicting_names:
+            raise ValueError(
+                "agent tools conflict with AgentFrameworkLearningAdapter: "
+                + ", ".join(conflicting_names)
+            )
+
+        agent.default_options["tools"] = [*existing_tools, *self.tools]
+        agent.middleware = [*(agent.middleware or []), *self.middleware]
+        setattr(agent, _REGISTERED_ADAPTER_ATTRIBUTE, self)
 
     @function_middleware_method
     async def process_function(

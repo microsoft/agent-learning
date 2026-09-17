@@ -47,7 +47,6 @@ from agent_learning.decision import (
 )
 from agent_learning.integrations.agent_framework import (
     AgentFrameworkLearningAdapter,
-    learning_action,
 )
 from agent_learning.storage import InMemoryStore
 from agent_learning.training import LearningRunner
@@ -131,7 +130,6 @@ class IncidentCatalog:
 
 
 def build_action_tools(catalog: IncidentCatalog) -> list[FunctionTool]:
-    @learning_action(task_id=TASK_ID)
     @tool(
         name="restart_service",
         description="Restart the unhealthy service in its current region.",
@@ -146,7 +144,6 @@ def build_action_tools(catalog: IncidentCatalog) -> list[FunctionTool]:
             "restored": incident.restart_will_restore,
         }
 
-    @learning_action(task_id=TASK_ID)
     @tool(
         name="failover_to_secondary",
         description="Fail over the service to its configured secondary region.",
@@ -350,6 +347,7 @@ async def main() -> None:
         ),
         store=store,
         agent_name="ReasonedIncidentAgent",
+        tool_name="recover_service_incident",
     )
     agent = Agent(
         client=OpenAIChatClient(
@@ -360,15 +358,15 @@ async def main() -> None:
         ),
         name="ReasonedIncidentAgent",
         instructions=(
-            "Recover each incident by calling execute_learning_action once. Include the "
+            "Recover each incident by calling recover_service_incident once. Include the "
             "incident_id in decision_context and provide that incident_id in the inputs "
             "for both restart_service and failover_to_secondary. Application code owns "
             "the evidence and safety checks. Follow the returned decision status and do "
             "not claim an action ran unless selected_action is set."
         ),
-        tools=[incident_runbook, *learning.tools],
-        middleware=learning.middleware,
+        tools=[incident_runbook],
     )
+    learning.register(agent)
 
     try:
         async with agent:
