@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-learning"
-version = "0.8.3"
+version = "0.9.1"
 description = "Evidence-driven reasoned and learned decisions for AI agents with inspectable autonomy."
 readme = "PYPI.md"
 requires-python = ">=3.10"
@@ -54,6 +54,9 @@ slm = [
 llm = [
     "azure-ai-evaluation>=1.0.0",
     "azure-identity>=1.15",
+]
+spark = [
+    "pyspark>=3.5,<5",
 ]
 
 [project.scripts]

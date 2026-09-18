@@ -100,7 +100,7 @@ or install it with the automation script:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/microsoft/agent-learning/main/scripts/install-linux.sh -o /tmp/install-linux.sh
-bash /tmp/install-linux.sh --version 0.8.3 --install-dir /usr/local/bin
+bash /tmp/install-linux.sh --version 0.9.1 --install-dir /usr/local/bin
 ```
 
 The Linux installation guide covers Debian/Ubuntu, RHEL-compatible, and
@@ -145,6 +145,37 @@ Run validation inside the managed environment with `uv run`:
 uv run pytest
 uv run ruff check .
 ```
+
+### PySpark
+
+Install the optional Spark integration with the development dependencies:
+
+```shell
+uv sync --extra dev --extra spark
+```
+
+Provide episodes as JSON, so arbitrary nested metadata remains intact across
+schemas and worker processes:
+
+```python
+import json
+
+from agent_learning import Episode, score_episode_dataframe
+
+episode = Episode(
+    agent_id="spark-agent",
+    user_input="Answer the task",
+    assistant_output="Task completed",
+)
+episodes = spark.createDataFrame(
+    [(json.dumps(episode.to_dict()),)],
+    ["episode_json"],
+)
+scored = score_episode_dataframe(episodes)
+```
+•	See the [Microsoft Fabric notebook](examples/fabric/pyspark_episode_scoring.ipynb) for metric analysis and optional Lakehouse persistence.
+
+
 
 ## Quickstart: improve one recurring decision
 
