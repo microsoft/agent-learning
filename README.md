@@ -100,7 +100,7 @@ or install it with the automation script:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/microsoft/agent-learning/main/scripts/install-linux.sh -o /tmp/install-linux.sh
-bash /tmp/install-linux.sh --version 0.8.3 --install-dir /usr/local/bin
+bash /tmp/install-linux.sh --version 0.9.0 --install-dir /usr/local/bin
 ```
 
 The Linux installation guide covers Debian/Ubuntu, RHEL-compatible, and
@@ -273,6 +273,8 @@ agent-learn task-policy --agent-id <agent_id> --task-id <task_id>
 
 ## Documentation
 
+- [Audit and replay](docs/audit-replay.md): reconstruct a recorded native
+   update, inspect episode contributions, and run the offline operator demo.
 - [Agentic decision making](docs/decision-making.md): concepts, evidence,
    workflow, math, and deployment.
 - [Complexity-proportional autonomy](docs/autonomy-complexity.md): declared

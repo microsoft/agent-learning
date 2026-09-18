@@ -17,7 +17,7 @@ import pytest
 from agent_learning.config import LearnerConfig
 from agent_learning.learners import ReinforceLearner
 from agent_learning.policy import SoftmaxPolicy
-from agent_learning.types import Action, Episode, Reward, RewardSource
+from agent_learning.types import Action, ConsumedInput, Episode, Reward, RewardSource
 
 
 def _make_episode(agent_id: str, action_id: str, logprob: float = None) -> Episode:
@@ -48,6 +48,9 @@ def test_positive_reward_shifts_logit_up() -> None:
     after = policy.snapshot()
 
     assert result.episodes_used == 20
+    assert result.consumed_inputs == [
+        ConsumedInput(ep.id, reward.id) for ep, reward in zip(episodes, rewards)
+    ]
     assert after.logits["a"] > before.logits["a"]
     assert after.logits["b"] < before.logits["b"]
     assert after.version == before.version + 1
@@ -73,6 +76,7 @@ def test_no_aggregate_reward_yields_noop() -> None:
     ]
     result = learner.update(policy, [ep], rewards)
     assert result.episodes_used == 0
+    assert result.consumed_inputs == []
 
 
 def test_unknown_action_is_skipped() -> None:
@@ -91,6 +95,7 @@ def test_unknown_action_is_skipped() -> None:
     ]
     result = learner.update(policy, [ep], rewards)
     assert result.episodes_used == 0
+    assert result.consumed_inputs == []
 
 
 def test_most_recent_aggregate_reward_wins() -> None:
@@ -117,6 +122,7 @@ def test_most_recent_aggregate_reward_wins() -> None:
     result = learner.update(policy, [episode], rewards)
 
     assert result.mean_reward == 0.8
+    assert result.consumed_inputs == [ConsumedInput(episode.id, rewards[1].id)]
     assert policy.snapshot().logits["a"] > 0.0
 
 
@@ -136,4 +142,64 @@ def test_invalid_aggregate_reward_is_rejected_without_policy_update(value: float
     with pytest.raises(ValueError, match=r"finite and within \[-1, 1\]"):
         learner.update(policy, [episode], [reward])
 
+    assert policy.snapshot() == before
+
+
+def test_receipt_preserves_consumption_order_and_repeated_inputs() -> None:
+    policy = SoftmaxPolicy.from_actions([Action(id="a"), Action(id="b")])
+    first = Episode(id="first", action_id="a")
+    second = Episode(id="second", action_id="b")
+    unknown = Episode(id="unknown", action_id="outside")
+    missing_action = Episode(id="missing-action")
+    unrewarded = Episode(id="unrewarded", action_id="a")
+    rewards = [
+        Reward(id=f"reward-{ep.id}", episode_id=ep.id, source=RewardSource.AGGREGATE, value=0.5)
+        for ep in (first, second, unknown, missing_action)
+    ]
+
+    result = ReinforceLearner().update(
+        policy,
+        iter([second, unknown, missing_action, unrewarded, first, second]),
+        iter(rewards),
+    )
+
+    assert result.episodes_used == 3
+    assert result.consumed_inputs == [
+        ConsumedInput("second", "reward-second"),
+        ConsumedInput("first", "reward-first"),
+        ConsumedInput("second", "reward-second"),
+    ]
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_equal_reward_timestamps_record_first_encountered_reward(reverse: bool) -> None:
+    policy = SoftmaxPolicy.from_actions([Action(id="a"), Action(id="b")])
+    episode = Episode(id="episode", action_id="a")
+    rewards = [
+        Reward(
+            id="positive", episode_id=episode.id, source=RewardSource.AGGREGATE,
+            value=0.8, created_at="2026-09-15T00:00:00+00:00",
+        ),
+        Reward(
+            id="negative", episode_id=episode.id, source=RewardSource.AGGREGATE,
+            value=-0.8, created_at="2026-09-15T00:00:00+00:00",
+        ),
+    ]
+    if reverse:
+        rewards.reverse()
+
+    result = ReinforceLearner().update(policy, [episode], rewards)
+
+    assert result.mean_reward == rewards[0].value
+    assert result.consumed_inputs == [ConsumedInput(episode.id, rewards[0].id)]
+
+
+def test_empty_batch_has_empty_receipt_and_leaves_snapshot_unchanged() -> None:
+    policy = SoftmaxPolicy.from_actions([Action(id="a"), Action(id="b")])
+    before = policy.snapshot()
+
+    result = ReinforceLearner().update(policy, [], [])
+
+    assert result.consumed_inputs == []
+    assert result.episodes_used == 0
     assert policy.snapshot() == before

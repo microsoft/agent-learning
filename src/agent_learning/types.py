@@ -434,9 +434,31 @@ class PolicySnapshot:
         )
 
 
+@dataclass(frozen=True)
+class ConsumedInput:
+    """An episode and the exact aggregate reward consumed for its update."""
+
+    episode_id: str
+    reward_id: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {"episode_id": self.episode_id, "reward_id": self.reward_id}
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ConsumedInput:
+        return cls(episode_id=data["episode_id"], reward_id=data["reward_id"])
+
+
 @dataclass
 class TrainingRun:
-    """Record of a native learner training run."""
+    """Record of a learner training run.
+
+    ``policy_id`` identifies the input snapshot and ``episode_ids`` contains
+    the queried batch. ``consumed_inputs`` records the actual update inputs
+    in processing order: None means unavailable, while [] means none used.
+    ``output_policy_id`` identifies the persisted result, which can be the
+    input snapshot again for a no-op.
+    """
 
     id: str = field(default_factory=_new_id)
     agent_id: str = "default"
@@ -452,6 +474,8 @@ class TrainingRun:
     metadata: Dict[str, Any] = field(default_factory=dict)
     created_at: str = field(default_factory=_utcnow_iso)
     task_id: str = "default"
+    output_policy_id: str | None = None
+    consumed_inputs: list[ConsumedInput] | None = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -469,10 +493,19 @@ class TrainingRun:
             "completed_at": self.completed_at,
             "metadata": self.metadata,
             "created_at": self.created_at,
+            "output_policy_id": self.output_policy_id,
+            "consumed_inputs": (
+                [item.to_dict() for item in self.consumed_inputs]
+                if self.consumed_inputs is not None
+                else None
+            ),
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "TrainingRun":
+        consumed_inputs = data.get("consumed_inputs")
+        if consumed_inputs is not None and not isinstance(consumed_inputs, list):
+            raise TypeError("consumed_inputs must be a JSON array or null")
         return cls(
             id=data["id"],
             agent_id=data.get("agent_id", "default"),
@@ -488,6 +521,12 @@ class TrainingRun:
             completed_at=data.get("completed_at"),
             metadata=data.get("metadata", {}),
             created_at=data.get("created_at", _utcnow_iso()),
+            output_policy_id=data.get("output_policy_id"),
+            consumed_inputs=(
+                [ConsumedInput.from_dict(item) for item in consumed_inputs]
+                if consumed_inputs is not None
+                else None
+            ),
         )
 
 
@@ -495,6 +534,7 @@ __all__ = [
     "Action",
     "AgentSummary",
     "AgentTaskSummary",
+    "ConsumedInput",
     "Episode",
     "MetricName",
     "MetricResult",

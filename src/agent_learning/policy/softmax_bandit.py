@@ -87,6 +87,11 @@ class SoftmaxPolicy(Policy):
     # Policy interface
     # ------------------------------------------------------------------
 
+    @property
+    def max_logit_abs(self) -> float:
+        """Return the effective clipping limit used by this policy."""
+        return self._max_logit_abs
+
     def actions(self) -> Sequence[Action]:
         return tuple(self._snapshot.actions)
 

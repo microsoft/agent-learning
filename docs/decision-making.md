@@ -857,6 +857,68 @@ run REINFORCE. `agent-learn train --decision-only` rejects the policy because a
 Bayesian argmax has no softmax behavior propensity and the policy logits do not
 control full-authority selection.
 
+### Training-run lineage
+
+`LearningRunner` records the inputs to each update in its `TrainingRun`.
+The CLI's `train` response includes the same serialized run. The existing
+`policy_id` is the **input snapshot ID**, and `episode_ids` remains the entire
+queried batch, including episodes the learner skipped.
+
+Successful runs also record `output_policy_id` and, when supplied by the
+learner, `consumed_inputs`: ordered `{episode_id, reward_id}` pairs for the
+aggregate rewards actually used. The built-in `ReinforceLearner` returns
+these pairs after reward selection and episode filtering, preserving order
+and repeated inputs. Equal reward timestamps retain the first encountered
+reward; later rescoring does not change a previously recorded reference.
+`null` means no receipt was supplied, while `[]` means no inputs were used.
+A successful no-op keeps the original snapshot ID and version.
+
+For the exact built-in `ReinforceLearner` and `SoftmaxPolicy` combination,
+the run's `hyperparameters` records the applied configuration:
+
+```json
+{
+  "learner": {
+    "learning_rate": 0.05,
+    "baseline_decay": 0.9,
+    "entropy_bonus": 0.01,
+    "importance_clip": 5.0
+  },
+  "policy": {
+    "max_logit_abs": 10.0
+  }
+}
+```
+
+The values come from the actual learner and policy immediately before the
+update, not from an ignored constructor argument or later environment
+defaults. `SoftmaxPolicy.max_logit_abs` exposes the policy's effective limit;
+the similarly named `LearnerConfig` field does not configure that policy.
+The run records `metadata.lineage_version: 1`,
+`metadata.replay_implementation: "reinforce_softmax_v1"`, and SDK, Python,
+and NumPy versions in `metadata.runtime_versions`.
+
+Custom learners and subclasses remain supported for training, but do not
+automatically receive the native replay marker or inferred configuration.
+Old runs still load with missing lineage fields set to `null`. A marker
+describes the recorded format and implementation, not a successful audit:
+failed runs or missing referenced records cannot establish replayability.
+
+Persist the input snapshot before training and retain referenced records.
+When rescoring, append a new reward ID instead of overwriting an existing
+one. Stores allow same-ID upserts, so these references are **not immutable
+or tamper-proof evidence**. The selected aggregate reward's recorded metric
+contributions and penalties describe its composition; current raw metric
+rows are not necessarily the original scoring event.
+
+Use the SDK's `audit_run` operation or the operator script described in
+[Audit and replay](audit-replay.md) to reconcile a recorded native update
+without changing the store. There is no new `agent-learn` audit subcommand.
+`metrics.logit_deltas` remains the proposed
+update before policy clipping and may differ from the actual snapshot
+change. This information explains the small policy's update, not the
+foundation model's internal reasoning.
+
 ## The math in one minute
 
 For action logits `z`, stable softmax creates positive probabilities that sum

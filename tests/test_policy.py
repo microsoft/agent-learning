@@ -47,4 +47,16 @@ def test_logit_clipping() -> None:
     actions = [Action(id="a")]
     policy = SoftmaxPolicy.from_actions(actions, agent_id="dq", max_logit_abs=2.0)
     policy.apply_update({"a": 100.0}, baseline=0.0, episodes_seen=1)
+    assert policy.max_logit_abs == 2.0
     assert policy.snapshot().logits["a"] == 2.0
+
+
+def test_restored_policy_exposes_effective_clipping_limit() -> None:
+    original = SoftmaxPolicy.from_actions([Action(id="a")], max_logit_abs=2.0)
+    restored = SoftmaxPolicy.from_snapshot(original.snapshot(), max_logit_abs=0.25)
+
+    assert original.max_logit_abs == 2.0
+    assert restored.max_logit_abs == 0.25
+    assert SoftmaxPolicy.max_logit_abs.fset is None
+    restored.apply_update({"a": 100.0}, baseline=0.0, episodes_seen=1)
+    assert restored.snapshot().logits["a"] == 0.25

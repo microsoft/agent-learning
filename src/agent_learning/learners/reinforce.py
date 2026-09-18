@@ -24,7 +24,7 @@ from typing import Dict, Iterable, List, Optional
 from ..config import LearnerConfig
 from ..policy.base import Policy
 from ..policy.softmax_bandit import SoftmaxPolicy
-from ..types import Episode, Reward, RewardSource
+from ..types import ConsumedInput, Episode, Reward, RewardSource
 from .base import Learner, LearnerResult
 
 
@@ -67,6 +67,7 @@ class ReinforceLearner(Learner):
         action_index = {aid: idx for idx, aid in enumerate(action_ids)}
 
         deltas: Dict[str, float] = {aid: 0.0 for aid in action_ids}
+        consumed_inputs: list[ConsumedInput] = []
         used = 0
         reward_sum = 0.0
         entropy = -sum(p * math.log(max(p, 1e-12)) for p in probs_now)
@@ -98,6 +99,7 @@ class ReinforceLearner(Learner):
 
             used += 1
             reward_sum += reward_value
+            consumed_inputs.append(ConsumedInput(episode_id=episode.id, reward_id=reward.id))
 
         if used == 0:
             return LearnerResult(
@@ -107,6 +109,7 @@ class ReinforceLearner(Learner):
                 baseline_after=baseline_before,
                 logit_deltas={aid: 0.0 for aid in action_ids},
                 extra={"reason": "no actionable episodes"},
+                consumed_inputs=consumed_inputs,
             )
 
         # Average gradients across the batch and scale by learning rate
@@ -131,6 +134,7 @@ class ReinforceLearner(Learner):
             baseline_after=baseline_after,
             logit_deltas=deltas,
             extra={"entropy": entropy},
+            consumed_inputs=consumed_inputs,
         )
 
     # ------------------------------------------------------------------

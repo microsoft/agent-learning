@@ -16,15 +16,20 @@ of :meth:`run_offline_batch` is one training step.
 from __future__ import annotations
 
 import logging
+import platform
 from datetime import datetime, timezone
 from typing import Dict, Iterable, List, Optional
 
+import numpy as np
+
+from .._version import __version__
 from ..config import LearnerConfig, ScoreConfig, ScoreRuntimeConfig, ShapingConfig
 from ..learners.base import Learner, LearnerResult
 from ..learners.reinforce import ReinforceLearner
 from ..metrics.base import MetricEvaluator
 from ..metrics.registry import default_metrics, evaluate_all
 from ..policy.base import Policy
+from ..policy.softmax_bandit import SoftmaxPolicy
 from ..rewards.shaping import RewardShaper, shape_episode_reward
 from ..rewards.writer import RewardWriter
 from ..storage.base import LearningStore
@@ -115,6 +120,7 @@ class LearningRunner:
             )
             rewards = self._collect_rewards(agent_id, episodes, score_missing=score_missing)
 
+            self._record_replay_configuration(run)
             result = self._learner.update(self._policy, episodes, rewards)
             policy_snapshot = self._policy.snapshot()
             self._store.store_policy(policy_snapshot)
@@ -122,6 +128,10 @@ class LearningRunner:
             run.status = TrainingStatus.SUCCEEDED
             run.completed_at = datetime.now(timezone.utc).isoformat()
             run.episode_ids = [ep.id for ep in episodes]
+            run.output_policy_id = policy_snapshot.id
+            run.consumed_inputs = (
+                list(result.consumed_inputs) if result.consumed_inputs is not None else None
+            )
             run.metrics = _summarise_result(result)
             run.metadata.update(
                 {
@@ -142,6 +152,32 @@ class LearningRunner:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _record_replay_configuration(self, run: TrainingRun) -> None:
+        # Subclasses may change update semantics even when they inherit config.
+        if type(self._learner) is not ReinforceLearner or type(self._policy) is not SoftmaxPolicy:
+            return
+        config = self._learner.config
+        run.hyperparameters = {
+            "learner": {
+                "learning_rate": config.learning_rate,
+                "baseline_decay": config.baseline_decay,
+                "entropy_bonus": config.entropy_bonus,
+                "importance_clip": config.importance_clip,
+            },
+            "policy": {"max_logit_abs": self._policy.max_logit_abs},
+        }
+        run.metadata.update(
+            {
+                "lineage_version": 1,
+                "replay_implementation": "reinforce_softmax_v1",
+                "runtime_versions": {
+                    "agent_learning": __version__,
+                    "python": platform.python_version(),
+                    "numpy": np.__version__,
+                },
+            }
+        )
 
     def has_usable_reward(self, episode: Episode) -> bool:
         """Return whether an episode has an aggregate backed by valid metrics."""
