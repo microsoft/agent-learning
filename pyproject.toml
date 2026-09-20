@@ -46,7 +46,11 @@ nlp = [
     "joblib>=1.3",
 ]
 examples = [
+    "agent-framework-openai>=1.0.0",
     "pyyaml>=6.0",
+]
+agent-framework = [
+    "agent-framework-core>=1.17,<2",
 ]
 slm = [
     "onnxruntime-genai>=0.5",
