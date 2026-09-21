@@ -118,6 +118,7 @@ from .storage import (
     LocalFileStore,
     get_default_store,
 )
+from .spark import SparkEpisodeScorer, score_episode_dataframe
 from .training import LearningRunner
 from .types import (
     Action,
@@ -193,6 +194,7 @@ __all__ = [
     "ScoreConfig",
     "ShapingConfig",
     "SoftmaxPolicy",
+    "SparkEpisodeScorer",
     "TaskAdherenceMetric",
     "TaskCompletionMetric",
     "TaskPolicy",
@@ -208,6 +210,7 @@ __all__ = [
     "evaluate_all",
     "get_capture",
     "get_default_store",
+    "score_episode_dataframe",
     "shape_episode_reward",
     "wilson_lower_bound",
 ]
