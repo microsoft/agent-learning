@@ -356,9 +356,10 @@ class NlpTextScoreConfig:
     Tier 2 wraps a TF-IDF vectorizer + scikit-learn logistic
     regression around the response text. The fitted vectorizer and
     classifier are persisted to ``{snapshot_dir}/{name}.nlp_text.joblib``
-    with a sibling JSON header at ``{name}.nlp_text.json``. When no
-    snapshot is present the scorers fall back to a rule-engine signal
-    only (adherence, completion) or the pass threshold (intent).
+    with a sibling JSON header at ``{name}.nlp_text.json`` that records
+    the joblib blob hash. When no snapshot is present the scorers fall
+    back to a rule-engine signal only (adherence, completion) or the
+    pass threshold (intent).
 
     Requires the ``[nlp]`` extra (``pip install
     agent-learning[nlp]``).
