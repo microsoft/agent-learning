@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import importlib
-import os
+import json
 import sys
 from typing import List
 
@@ -212,9 +212,12 @@ def test_intent_snapshot_roundtrip(tmp_path) -> None:
     blob_path = tmp_path / "intent.nlp_text.joblib"
     assert header_path.is_file()
     assert blob_path.is_file()
+    header = json.loads(header_path.read_text(encoding="utf-8"))
+    assert header["snapshot_hash"] == nlp_text_base._sha256_file(str(blob_path))
 
     loaded = NlpTextIntentScorer.load_or_default(str(tmp_path), pass_threshold=0.5)
     assert loaded.fitted is True
+    assert loaded.snapshot_hash == header["snapshot_hash"]
     score_orig = scorer.score(query="weather tomorrow", response="sunny and 72 degrees")
     score_loaded = loaded.score(query="weather tomorrow", response="sunny and 72 degrees")
     assert score_orig.normalized == pytest.approx(score_loaded.normalized, abs=1e-9)
@@ -225,6 +228,54 @@ def test_unfitted_snapshot_has_no_blob(tmp_path) -> None:
     scorer.save(str(tmp_path))
     assert (tmp_path / "intent.nlp_text.json").is_file()
     assert not (tmp_path / "intent.nlp_text.joblib").exists()
+
+
+def test_fitted_snapshot_without_hash_is_rejected_before_joblib_load(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    header_path = tmp_path / "intent.nlp_text.json"
+    blob_path = tmp_path / "intent.nlp_text.joblib"
+    header_path.write_text(
+        json.dumps({"name": "intent", "fitted": True}),
+        encoding="utf-8",
+    )
+    blob_path.write_bytes(b"not a trusted joblib blob")
+
+    monkeypatch.setattr(
+        nlp_text_base,
+        "_require_joblib",
+        lambda: pytest.fail("joblib.load should not run before hash verification"),
+    )
+
+    with pytest.raises(ValueError, match="missing snapshot_hash"):
+        NlpTextIntentScorer.load_or_default(str(tmp_path), pass_threshold=0.5)
+
+
+def test_fitted_snapshot_hash_mismatch_is_rejected_before_joblib_load(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    header_path = tmp_path / "intent.nlp_text.json"
+    blob_path = tmp_path / "intent.nlp_text.joblib"
+    header_path.write_text(
+        json.dumps(
+            {
+                "name": "intent",
+                "fitted": True,
+                "snapshot_hash": "0" * 64,
+            }
+        ),
+        encoding="utf-8",
+    )
+    blob_path.write_bytes(b"not a trusted joblib blob")
+
+    monkeypatch.setattr(
+        nlp_text_base,
+        "_require_joblib",
+        lambda: pytest.fail("joblib.load should not run before hash verification"),
+    )
+
+    with pytest.raises(ValueError, match="hash mismatch"):
+        NlpTextIntentScorer.load_or_default(str(tmp_path), pass_threshold=0.5)
 
 
 # ----------------------------------------------------------- factory routing

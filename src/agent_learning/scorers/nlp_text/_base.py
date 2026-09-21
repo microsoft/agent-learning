@@ -8,6 +8,7 @@ package stays importable without the ``[nlp]`` extra installed.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from dataclasses import dataclass, field
@@ -46,6 +47,14 @@ def _join_text(*parts: Optional[str]) -> str:
     return " [SEP] ".join(cleaned)
 
 
+def _sha256_file(path: str) -> str:
+    hasher = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
 @dataclass
 class _NlpTextScorerBase:
     """Base class for the three Tier 2 NLP text scorers.
@@ -64,6 +73,7 @@ class _NlpTextScorerBase:
     min_df: int = 1
     vectorizer: Any = None  # sklearn TfidfVectorizer or None
     classifier: Any = None  # sklearn LogisticRegression or None
+    snapshot_hash: Optional[str] = field(default=None, init=False)
 
     # ----- inputs -----
     def _pair_text(self, *, query: Optional[str], response: str) -> str:
@@ -174,13 +184,13 @@ class _NlpTextScorerBase:
             "C": float(self.C),
             "min_df": int(self.min_df),
             "fitted": self.fitted,
+            "snapshot_hash": self.snapshot_hash if self.fitted else None,
         }
 
     def save(self, snapshot_dir: str) -> str:
         os.makedirs(snapshot_dir, exist_ok=True)
         header_path = os.path.join(snapshot_dir, f"{self.name}.nlp_text.json")
-        with open(header_path, "w", encoding="utf-8") as fh:
-            json.dump(self.to_snapshot(), fh)
+        self.snapshot_hash = None
         if self.fitted:
             joblib = _require_joblib()
             blob_path = os.path.join(
@@ -193,6 +203,9 @@ class _NlpTextScorerBase:
                 },
                 blob_path,
             )
+            self.snapshot_hash = _sha256_file(blob_path)
+        with open(header_path, "w", encoding="utf-8") as fh:
+            json.dump(self.to_snapshot(), fh)
         return header_path
 
     @classmethod
@@ -224,10 +237,21 @@ class _NlpTextScorerBase:
         instance.C = float(header.get("C", instance.C))
         instance.min_df = int(header.get("min_df", instance.min_df))
         if header.get("fitted") and os.path.isfile(blob_path):
+            expected_hash = header.get("snapshot_hash")
+            if not isinstance(expected_hash, str) or not expected_hash:
+                raise ValueError(
+                    f"NLP text snapshot {header_path!r} is missing snapshot_hash"
+                )
+            actual_hash = _sha256_file(blob_path)
+            if actual_hash != expected_hash:
+                raise ValueError(
+                    f"NLP text snapshot hash mismatch for {blob_path!r}"
+                )
             joblib = _require_joblib()
             blob = joblib.load(blob_path)
             instance.vectorizer = blob["vectorizer"]
             instance.classifier = blob["classifier"]
+            instance.snapshot_hash = actual_hash
         return instance
 
 
