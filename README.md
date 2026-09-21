@@ -288,3 +288,5 @@ agent-learn task-policy --agent-id <agent_id> --task-id <task_id>
    REINFORCE.
 - [Tiered scoring design](docs/design.md): local and Azure-backed outcome
    scoring.
+- [Cost model and break-even analysis](docs/cost-model.md): configurable
+   evaluator, compute, storage, and rollout costs with reproducible examples.

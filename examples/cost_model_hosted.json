@@ -1,0 +1,51 @@
+{
+  "currency": "USD",
+  "period_days": 30,
+  "episodes": 10000,
+  "assumptions": [
+    "Illustrative scenario only: all prices are invented inputs, not provider quotes or benchmark measurements.",
+    "A common workload volume and period are used; equal task quality is not established by this calculation.",
+    "Policy learning uses three hosted judge calls on every episode; fine-tuning uses the same judges on a 10 percent evaluation subset. Equal prices do not imply equal evaluation coverage or quality.",
+    "The same upstream serving costs are included once per approach through shared: 100 per period plus 0.002 per episode.",
+    "Four policy update/rollout cycles and one fine-tuning/rollout cycle are scheduled even at zero volume; their compute budgets stay fixed in the volume sweep.",
+    "Each approach retains 2 GB of existing data and averages 0.00002 GB of new retained data per episode over the period; GB-month means 30 days.",
+    "CPU is modeled at 0.02 seconds per episode at 0.36 per hour for each approach. Cycle compute is additional work, not those same CPU seconds.",
+    "Taxes, network transfer, retries, human review, and setup labor are omitted; add them to the appropriate fields before a purchasing decision."
+  ],
+  "shared": {
+    "fixed": 100,
+    "per_episode": 0.002
+  },
+  "policy_learning": {
+    "evaluation_fraction": 1,
+    "judge_calls_per_evaluated_episode": 3,
+    "judge_cost_per_call": 0.004,
+    "cpu_seconds_per_episode": 0.02,
+    "cpu_cost_per_hour": 0.36,
+    "writes_per_episode": 8,
+    "cost_per_million_writes": 1,
+    "average_retained_gb": 2,
+    "average_retained_gb_per_episode": 0.00002,
+    "storage_cost_per_gb_month": 0.25,
+    "cycles_per_period": 4,
+    "compute_cost_per_cycle": 0.5,
+    "rollout_cost_per_cycle": 2,
+    "fixed_cost_per_period": 10
+  },
+  "fine_tuning": {
+    "evaluation_fraction": 0.1,
+    "judge_calls_per_evaluated_episode": 3,
+    "judge_cost_per_call": 0.004,
+    "cpu_seconds_per_episode": 0.02,
+    "cpu_cost_per_hour": 0.36,
+    "writes_per_episode": 8,
+    "cost_per_million_writes": 1,
+    "average_retained_gb": 2,
+    "average_retained_gb_per_episode": 0.00002,
+    "storage_cost_per_gb_month": 0.25,
+    "cycles_per_period": 1,
+    "compute_cost_per_cycle": 200,
+    "rollout_cost_per_cycle": 20,
+    "fixed_cost_per_period": 10
+  }
+}
